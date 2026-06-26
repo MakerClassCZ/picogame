@@ -1,0 +1,283 @@
+# Quest -- step 8: a quest, a goal, and a win state (capstone).
+#
+# What you learn: tying the systems into an actual game. The NPC gives an objective
+# (collect every coin); once you have them all, talking again OPENS the door (we
+# rewrite those tiles from "door" to "path", so collision lets you through); stepping
+# on the shrine tile wins. A small quest-stage variable drives the dialog text and
+# the door. This is the whole loop: talk -> collect -> unlock -> reach the goal.
+#
+# New vs step 7: a quest stage, objective-driven dialog, opening the door by editing
+# tiles, a goal tile + win state.
+#
+# BIG PICTURE: you've now hand-built an RPG -- map, camera, collision, animation,
+# items, NPC, combat, quest. You DON'T have to keep hand-coding maps like this: the
+# editor (editor/) lets you paint the map, place the hero/NPC/coins, and FLAG tiles
+# (solid/coin/goal) visually, then the picogame_scene loader builds the scene for
+# you -- the exact things this file does by hand become data. See tutorials/README.md
+# and examples/picogame_platformer_scene.py for a game whose level is loaded that way.
+#
+# Run:  python3 sim/run.py tutorials/03-quest/step8_quest.py --shot /tmp/q8.png
+
+import array
+import board
+import terminalio
+import picogame as pg
+import picogame_game
+import picogame_input
+import picogame_clock
+import picogame_anim
+import picogame_shapes as shp
+import picogame_ui as ui
+
+W, H = 320, 240
+TILE = 16
+SPEED = 2
+MAP = [
+    "##############################",
+    "#.....:......................#",
+    "#.....:........*.............#",
+    "#..##.:.............~~~~~~...#",
+    "#..##.:.............~~~~~~...#",
+    "#.....N.............~~~~~~...#",
+    "#.....:.......E.....~~~~~~...#",
+    "#.....:......................#",
+    "#.....:.....*.........*......#",
+    "#.....:......................#",
+    "#:::::::P:::::::::*::::::::::#",
+    "#.....:...................*..#",
+    "#.....:.............E........#",
+    "#.....:...WWWWWWW............#",
+    "#.....:...W.....W......##....#",
+    "#.....:.*.W..G..W......##....#",
+    "#.....:...W.....W........E...#",
+    "#.....:...WWWDWWW............#",
+    "#.....:......................#",
+    "##############################",
+]
+MCOLS, MROWS = 30, 20
+CH2TILE = {".": 1, "P": 1, "N": 1, "*": 1, "E": 1, ":": 2, "~": 3, "#": 4,
+           "W": 5, "D": 6, "G": 7}
+TILE_RGB = [(40, 120, 50), (180, 160, 110), (40, 90, 200), (20, 80, 30),
+            (120, 120, 130), (150, 90, 40), (240, 210, 60)]
+SOLID = (3, 4, 5, 6)
+DOWN, UP, LEFT, RIGHT = 0, 1, 2, 3
+DIR = {DOWN: (0, 1), UP: (0, -1), LEFT: (-1, 0), RIGHT: (1, 0)}
+FACE_NAME = ("down", "up", "left", "right")
+BG = pg.rgb565(0, 0, 0)
+WHITE = pg.rgb565(255, 255, 255)
+NAVY = pg.rgb565(10, 10, 40)
+
+scene, bufA, bufB = picogame_game.setup(background=BG)
+btn = picogame_input.Buttons()
+clock = picogame_clock.Clock(30)
+
+tileset = shp.tileset_colors(TILE, TILE, [pg.rgb565(*c) for c in TILE_RGB])
+world = pg.Tilemap(tileset, MCOLS, MROWS)
+START = (TILE, TILE)
+npc_x, npc_y = TILE, TILE
+coin_spots, enemy_spots, door_tiles = [], [], []
+for tile_y in range(MROWS):
+    for tile_x in range(MCOLS):
+        ch = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
+        world.tile(tile_x, tile_y, CH2TILE.get(ch, 1))
+        if ch == "P":
+            START = (tile_x * TILE, tile_y * TILE)
+        elif ch == "N":
+            npc_x, npc_y = tile_x * TILE, tile_y * TILE
+        elif ch == "*":
+            coin_spots.append((tile_x * TILE, tile_y * TILE))
+        elif ch == "E":
+            enemy_spots.append((tile_x * TILE, tile_y * TILE))
+        elif ch == "D":
+            door_tiles.append((tile_x, tile_y))
+scene.add(world)
+
+coin_bm = shp.circle(8, pg.rgb565(245, 215, 60))
+coins = [pg.Sprite(coin_bm, x + 4, y + 4) for (x, y) in coin_spots]
+for c in coins:
+    scene.add(c)
+slime_bm = shp.circle(14, pg.rgb565(120, 200, 80))
+enemies = [pg.Sprite(slime_bm, x + 1, y + 1) for (x, y) in enemy_spots]
+for e in enemies:
+    scene.add(e)
+npc = pg.Sprite(shp.rect(TILE, TILE, pg.rgb565(230, 200, 60)), npc_x, npc_y)
+scene.add(npc)
+
+
+def hero_bitmap():
+    pal = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(210, 80, 60),
+                            pg.rgb565(255, 225, 170), pg.rgb565(120, 40, 30)])
+    stride = TILE * 8
+    data = bytearray(stride * TILE)
+    for f in range(4):
+        for s in range(2):
+            fr = f * 2 + s
+            for y in range(s, TILE):
+                yy = y - s
+                for x in range(TILE):
+                    face = ((f == 0 and yy >= TILE - 4) or (f == 1 and yy < 4) or
+                            (f == 2 and x < 4) or (f == 3 and x >= TILE - 4))
+                    data[y * stride + fr * TILE + x] = 2 if face else 1
+            lx = 4 if s == 0 else 6
+            for x in (lx, TILE - 1 - lx):
+                data[(TILE - 1) * stride + fr * TILE + x] = 3
+    return pg.Bitmap(data, TILE, TILE, format=pg.PAL8, palette=pal, frames=8,
+                     stride=stride, transparent=0)
+
+
+hero = pg.Sprite(hero_bitmap(), START[0], START[1], frame=0)
+walk = picogame_anim.AnimatedSprite(hero, {
+    "down": ([0, 1], 8, True), "up": ([2, 3], 8, True),
+    "left": ([4, 5], 8, True), "right": ([6, 7], 8, True)})
+scene.add(hero)
+hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, WHITE, BG)
+dlg = ui.TextBox(pg, terminalio.FONT, 8, H - 64, W - 16, 58, WHITE, NAVY, maxlines=4)
+
+facing = DOWN
+got = 0
+hp = 6
+inv = 0
+stage = 0                                     # 0 not started, 1 collecting, 2 door open
+state = "over"
+frame = 0
+NCOINS = len(coins)
+overlay_shown = False                         # draw dialog/win modal once, not every frame
+
+
+def solid_at(pixel_x, pixel_y):
+    tile_x, tile_y = pixel_x // TILE, pixel_y // TILE
+    if tile_x < 0 or tile_x >= MCOLS or tile_y < 0 or tile_y >= MROWS:
+        return True
+    return world.tile(tile_x, tile_y) in SOLID
+
+
+def can_walk(pixel_x, pixel_y):
+    return not (solid_at(pixel_x + 2, pixel_y + 2) or solid_at(pixel_x + TILE - 3, pixel_y + 2) or
+                solid_at(pixel_x + 2, pixel_y + TILE - 3) or solid_at(pixel_x + TILE - 3, pixel_y + TILE - 3))
+
+
+def near(a, bx, by, d=TILE):
+    return abs(a.x - bx) < d and abs(a.y - by) < d
+
+
+def follow():
+    ox = max(W - MCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
+    oy = max(H - MROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
+    scene.set_view(int(ox), int(oy))
+
+
+def dialog_lines():
+    if stage == 0:
+        return ["Villager:", "Bring me all %d coins and" % NCOINS,
+                "I'll open the shrine door.", "(press A)"]
+    if stage == 1 and got < NCOINS:
+        return ["Villager:", "You have %d of %d coins." % (got, NCOINS),
+                "Keep looking!", "(press A)"]
+    return ["Villager:", "The door is open.",
+            "Seek the shrine within.", "(press A)"]
+
+
+def open_door():
+    for (tile_x, tile_y) in door_tiles:
+        world.tile(tile_x, tile_y, 2)                 # door -> path (no longer SOLID)
+    scene.invalidate()
+
+
+follow()
+dt = 1 / 30
+while True:
+    btn.poll()
+    frame += 1
+
+    if state == "win":
+        if not overlay_shown:                 # draw ONCE -> no per-frame flicker
+            scene.refresh()
+            dlg.draw(board.DISPLAY, bufA, ["You reached the shrine!", "", "QUEST COMPLETE", "(press A)"])
+            overlay_shown = True
+        if btn.just_pressed(btn.A):
+            state = "over"; scene.invalidate()
+        clock.tick()
+        continue
+
+    if state == "dialog":
+        if not overlay_shown:                 # draw ONCE -> no per-frame flicker
+            scene.refresh()
+            dlg.draw(board.DISPLAY, bufA, dialog_lines())
+            overlay_shown = True
+        if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
+            if stage == 0:
+                stage = 1
+            elif stage == 1 and got >= NCOINS:
+                stage = 2
+                open_door()
+            state = "over"; scene.invalidate()
+        clock.tick()
+        continue
+
+    delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
+    delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
+    if delta_x:
+        facing = RIGHT if delta_x > 0 else LEFT
+    elif delta_y:
+        facing = DOWN if delta_y > 0 else UP
+    moved = False
+    if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
+        hero.move(hero.x + delta_x * SPEED, hero.y); moved = True
+    if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
+        hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
+    if moved:
+        follow(); walk.play(FACE_NAME[facing]); walk.tick(dt)
+    else:
+        hero.frame = facing * 2
+
+    if btn.just_pressed(btn.B):
+        ddx, ddy = DIR[facing]
+        ax, ay = hero.x + ddx * TILE, hero.y + ddy * TILE
+        for e in enemies:
+            if e.visible and abs(e.x - ax) < TILE and abs(e.y - ay) < TILE:
+                e.visible = False
+
+    if frame % 2 == 0:
+        for e in enemies:
+            if not e.visible:
+                continue
+            sx = (hero.x > e.x) - (hero.x < e.x)
+            sy = (hero.y > e.y) - (hero.y < e.y)
+            if sx and can_walk(e.x + sx, e.y):
+                e.move(e.x + sx, e.y)
+            if sy and can_walk(e.x, e.y + sy):
+                e.move(e.x, e.y + sy)
+
+    if inv > 0:
+        inv -= 1
+    else:
+        for e in enemies:
+            if e.visible and near(e, hero.x, hero.y, 13):
+                hp -= 1
+                inv = 40
+                if hp <= 0:
+                    hp = 6
+                    hero.move(START[0], START[1]); follow()
+                break
+
+    for c in coins:
+        if c.visible and abs(hero.x - c.x) < 12 and abs(hero.y - c.y) < 12:
+            c.visible = False; got += 1
+
+    # reach the shrine (goal tile) once the door is open
+    if stage >= 2:
+        ctx = (hero.x + TILE // 2) // TILE
+        cty = (hero.y + TILE // 2) // TILE
+        if world.tile(ctx, cty) == 7:
+            state = "win"; overlay_shown = False
+
+    if near(hero, npc.x, npc.y):
+        hud.set("HP %d  COINS %d/%d  A:TALK" % (hp, got, NCOINS))
+        if btn.just_pressed(btn.A):
+            state = "dialog"; overlay_shown = False
+    else:
+        obj = "FIND THE COINS" if stage < 1 or got < NCOINS else ("DOOR OPEN!" if stage >= 2 else "RETURN TO NPC")
+        hud.set("HP %d  COINS %d/%d  %s" % (hp, got, NCOINS, obj))
+
+    scene.refresh()
+    dt = clock.tick()
