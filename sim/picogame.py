@@ -479,15 +479,39 @@ def _scale_wire(wire, num, den):
     return ((out >> 8) | (out << 8)) & 0xFFFF
 
 
+class _U16Buf:
+    """A 16-bit-unit view over a raw 2-byte-LE bytearray, so a sim Canvas can SHARE the
+    exact backing buffer of a Bitmap (which reads RGB565 as 2-byte LE). Mirrors device
+    semantics where Canvas(buffer=) and Bitmap(buf) alias the same memory."""
+    __slots__ = ("ba",)
+
+    def __init__(self, ba):
+        self.ba = ba
+
+    def __len__(self):
+        return len(self.ba) // 2
+
+    def __getitem__(self, i):
+        return self.ba[2 * i] | (self.ba[2 * i + 1] << 8)
+
+    def __setitem__(self, i, v):
+        self.ba[2 * i] = v & 0xFF
+        self.ba[2 * i + 1] = (v >> 8) & 0xFF
+
+
 class Canvas:
     def __init__(self, width, height, *, transparent=None, buffer=None):
-        # `buffer` (external arena slice) is honoured on device for RAM; the sim has
-        # plenty of RAM so it just allocates its own list and ignores it.
+        # On device `buffer` (an arena slice / shared band buffer) is drawn into directly so the
+        # Canvas can alias another object's memory (e.g. a Bitmap fed to pg.render). The sim mirrors
+        # that aliasing via _U16Buf when a real bytes-like buffer is passed; otherwise it allocates.
         self.w = width
         self.h = height
         self.transparent = transparent
         self.has_transparent = transparent is not None
-        self.data = [0] * (width * height)
+        if isinstance(buffer, (bytearray, memoryview)):
+            self.data = _U16Buf(buffer)
+        else:
+            self.data = [0] * (width * height)
         self.x = 0
         self.y = 0
 
@@ -517,6 +541,30 @@ class Canvas:
             base = yy * self.w
             for xx in range(max(0, x), min(self.w, x + w)):
                 self.data[base + xx] = color
+
+    def text(self, x, y, s, fg, font, bg=None):
+        # Sim mirror of the firmware Canvas.text(): composite glyphs straight into the surface.
+        # The device does this in C with no Python glyph cache; here we reuse the sim's glyph
+        # rasterizer (RAM is free in the sim) - the OUTPUT pixels are identical either way.
+        import picogame_font as _pf
+        fw, fh = font.get_bounding_box()[:2]
+        for ch in s:
+            rows = _pf._glyph_rows(font, ord(ch), fw, fh)
+            for gy in range(fh):
+                cy = y + gy
+                if not (0 <= cy < self.h):
+                    continue
+                r = rows[gy]
+                base = cy * self.w
+                for gx in range(fw):
+                    cx = x + gx
+                    if not (0 <= cx < self.w):
+                        continue
+                    if r[gx]:
+                        self.data[base + cx] = fg
+                    elif bg is not None:
+                        self.data[base + cx] = bg
+            x += fw
 
     def blit(self, bm, x, y, frame=0, flip_x=False, flip_y=False):
         fw, fh = bm.width, bm.height
@@ -656,13 +704,18 @@ class StripDraw:
     is repainted every frame: use it for animated / scanline content (pseudo-3D,
     gradients, procedural backgrounds), not static art. Mirrors the firmware type."""
 
-    def __init__(self, callback, x=0, y=0, width=0, height=0):
+    def __init__(self, callback, x=0, y=0, width=0, height=0, *, always_dirty=True):
         self.callback = callback
         self.x = x
         self.y = y
         self.w = width
         self.h = height
+        self.always_dirty = always_dirty   # device-only effect (the sim has no dirty-rect; it full-repaints)
+        self.pending = True
         self._view = Canvas(1, 1)        # reused; data/w/h repointed per strip
+
+    def invalidate(self):
+        self.pending = True
 
     # read/write rect size mirroring the firmware properties (internals use w/h)
     @property
@@ -684,12 +737,15 @@ class StripDraw:
     def _draw(self, vx, vy, clip):
         fb = _host.fb
         cx0, cy0, cx1, cy1 = clip
-        rx, ry = self.x + vx, self.y + vy
-        x_lo, x_hi = max(rx, cx0, 0), min(rx + self.w, cx1, W)
+        # Match the FIRMWARE exactly: the view spans the WHOLE region (clip) width and vx is the region
+        # origin (not the layer's x). The layer's rect only gates which ROWS are drawn (its y-range).
+        # So a callback must draw at ABSOLUTE screen coords minus (vx, vy), and fill only its own rect
+        # (a `view.clear()` fills the whole region width). Mirrors v->w = region_w in the C blitter.
+        ry = self.y + vy
         y_lo, y_hi = max(ry, cy0, 0), min(ry + self.h, cy1, H)
-        if x_lo >= x_hi or y_lo >= y_hi:
+        if cx0 >= cx1 or y_lo >= y_hi:
             return
-        rw = x_hi - x_lo
+        rw = cx1 - cx0
         view = self._view
         view.w = rw
         view.has_transparent = False
@@ -702,14 +758,14 @@ class StripDraw:
             # seed the view from fb, let the callback draw over it, copy back.
             data = [0] * (rw * sh)
             for ly in range(sh):
-                drow = (sy + ly) * W + x_lo
+                drow = (sy + ly) * W + cx0
                 srow = ly * rw
                 for lx in range(rw):
                     data[srow + lx] = fb[drow + lx]
             view.data = data
-            self.callback(view, x_lo, sy, rw, sh)
+            self.callback(view, cx0, sy, rw, sh)
             for ly in range(sh):
-                drow = (sy + ly) * W + x_lo
+                drow = (sy + ly) * W + cx0
                 srow = ly * rw
                 for lx in range(rw):
                     fb[drow + lx] = data[srow + lx]
@@ -823,8 +879,10 @@ def render(display, items, buffer, x0, y0, x1, y1, *, background=0):
         for x in range(cx0, cx1):
             fb[drow + x] = background
     clip = (cx0, cy0, cx1, cy1)
+    # Mirror the firmware: immediate render handles ALL layer kinds, not just Sprites - so a StripDraw
+    # composited via view.text() is a 0-RAM immediate HUD / text screen (no retained buffer).
     for it in items:
-        _draw_sprite(it, 0, 0, clip)
+        _draw_item(it, _kind(it), 0, 0, clip)
     _host.present()
 
 
