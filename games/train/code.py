@@ -120,8 +120,8 @@ pw_pos = 0
 
 def show_info():
     # current level code shown for the player to note; "A:CODE" hints that A opens the code editor
-    info.set_text(info_lbl, "LEVEL %02d/%d   SCORE %04d   %s   A:CODE" % (level, L.LEVNUM, score, L.PASSWORDS[level]))
-    info.redraw()
+    info_lbl.set("LEVEL %02d/%d   SCORE %04d   %s   A:CODE" % (level, L.LEVNUM, score, L.PASSWORDS[level]))
+    info.draw()
 
 
 def clear_board():                                   # blank board behind a menu/code screen
@@ -275,8 +275,8 @@ def pw_code():
 def pw_render():
     # the editable code lives in the HUD bar (the PicoLibSDK info row); [.] marks the active letter
     parts = [("[%s]" if i == pw_pos else " %s ") % chr(65 + pw_slots[i]) for i in range(5)]
-    info.set_text(info_lbl, "CODE " + "".join(parts) + " A:OK B:ESC")
-    info.redraw()
+    info_lbl.set("CODE " + "".join(parts) + " A:OK B:ESC")
+    info.draw()
 
 
 def go_pwentry():                                    # A during play -> edit a level code in the HUD bar
@@ -294,8 +294,8 @@ def pw_confirm():
         if L.PASSWORDS[lev] == word:
             start_level(lev, fresh=True)
             return
-    info.set_text(info_lbl, "WRONG CODE      B:ESC")  # invalid -> stay; an arrow resumes editing
-    info.redraw()
+    info_lbl.set("WRONG CODE      B:ESC")  # invalid -> stay; an arrow resumes editing
+    info.draw()
 
 
 # --- main loop -------------------------------------------------------------

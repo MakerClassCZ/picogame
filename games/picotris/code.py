@@ -1,4 +1,4 @@
-# Picotris - a Tilemap + PLAY-AREA showcase. The well is a Tilemap in a RESERVED centre
+#Picotris on picogame - a Tilemap + PLAY-AREA showcase. The well is a Tilemap in a RESERVED centre
 # column (Scene left=/right=), so the scene paints ONLY that column; the side panels (score/lines/
 # level + next-piece) are static chrome drawn once, never recomputed per frame. Dirty-rect means only
 # the cells that actually change repaint. 7-bag randomiser, ghost piece, next preview, line-clear
@@ -105,7 +105,7 @@ left_panel.label(terminalio.FONT, 18, 14, VALUE, "PICOTRIS")
 left_panel.label(terminalio.FONT, 8, H - 54, LABEL, "< >  move")
 left_panel.label(terminalio.FONT, 8, H - 40, LABEL, "A   rotate")
 left_panel.label(terminalio.FONT, 8, H - 26, LABEL, "v   drop")
-left_panel.redraw()
+left_panel.draw()
 
 right_panel = ui.HudBar(pg, board.DISPLAY, bufA, RX, 0, SIDE, H, PANEL)
 right_panel.label(terminalio.FONT, RX + 10, 10, LABEL, "SCORE")
@@ -142,10 +142,10 @@ def valid(cl):
 
 
 def refresh_hud():
-    right_panel.set_text(score_lbl, "%d" % score)      # set_text re-renders only on a real change
-    right_panel.set_text(lines_lbl, "%d" % lines)
-    right_panel.set_text(level_lbl, "%d" % level)
-    right_panel.redraw()
+    score_lbl.set("%d" % score)      # set_text re-renders only on a real change
+    lines_lbl.set("%d" % lines)
+    level_lbl.set("%d" % level)
+    right_panel.draw()
 
 
 def spawn():
@@ -156,7 +156,7 @@ def spawn():
     cur["y"] = -1
     nxt = bag.next()
     next_spr.bitmap = NEXT_BMP[nxt]                     # swap the preview (pre-built, no alloc)
-    right_panel.redraw()
+    right_panel.draw()
     if not valid(cells(cur["name"], 0, 3, -1)):         # board full = game over -> fresh game, score reset
         for r in range(ROWS):
             for c in range(COLS):

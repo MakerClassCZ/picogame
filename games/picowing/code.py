@@ -161,12 +161,12 @@ life_icons = [hud.add(pg.Sprite(LIFE_ICON, 230 + i * 12, 4)) for i in range(3)]
 bomb_icons = [hud.add(pg.Sprite(BOMB_ICON, 276 + i * 14, 5)) for i in range(3)]   # max 3 bombs
 # Gun-heat gauge: 5 segments in the gap between SCORE and the CHAIN readout (set in hud_refresh).
 heat_segs = [hud.add(pg.Sprite(HEAT_G, 82 + i * 12, 6)) for i in range(5)]
-hud.redraw()
+hud.draw()
 
 # --- centre message (title / game-over overlay) ---
 msg = ui.SceneLabel(scene, pg, terminalio.FONT, 0, 0, TEXT, SKY)
 # Size the banner's buffer + cache its glyphs up front, on the clean heap (the longest line we show).
-msg.prewarm("GAME OVER  99999   BEST 99999   A")
+msg.reserve(len("GAME OVER  99999   BEST 99999   A"))
 
 # --- game state ---
 G = {"state": "title", "score": 0, "best": 0, "lives": 3, "bombs": 2,
@@ -210,8 +210,8 @@ def new_game():
 
 
 def hud_refresh():
-    hud.set_text(l_score, "SCORE %05d" % G["score"])
-    hud.set_text(l_chain, ("x%d  CHAIN %d" % (G["mult"], G["chain"])) if G["chain"] else "")
+    l_score.set("SCORE %05d" % G["score"])
+    l_chain.set(("x%d  CHAIN %d" % (G["mult"], G["chain"])) if G["chain"] else "")
     lv, bo = G["lives"], G["bombs"]
     for i, s in enumerate(life_icons):                 # N icons visible = the count
         s.visible = i < lv
@@ -228,7 +228,7 @@ def hud_refresh():
         s.visible = vis
         if vis:
             s.bitmap = col
-    hud.redraw()
+    hud.draw()
 
 
 def player_hit():
@@ -382,7 +382,7 @@ def update_play():
 # --- main loop -------------------------------------------------------------
 show_title()
 hud_refresh()
-print("Pico Wing - D-pad move, hold A fire, B bomb. A to start.")
+print("PICO WING - D-pad move, hold A fire, B bomb. A to start.")
 last_hud = None
 while True:
     btn.poll()

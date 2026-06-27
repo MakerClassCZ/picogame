@@ -188,7 +188,7 @@ deliver_flash = fx.Fade(scene, W, H, color=WHITE)
 gc.collect()
 TXT_START, TXT_NEXT, TXT_OVER = "SQUEST   A: START", "NEXT LEVEL!   A", "GAME OVER   A: PLAY"
 banner = ui.SceneLabel(scene, pg, terminalio.FONT, 0, H // 2 - 6, pg.rgb565(255, 235, 110), pg.rgb565(0, 12, 42))
-banner.prewarm(TXT_OVER)                              # size the buffer once on the clean heap
+banner.reserve(len(TXT_OVER))                              # size the buffer once on the clean heap
 
 
 def show_banner(text):
