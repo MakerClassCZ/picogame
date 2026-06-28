@@ -4,7 +4,7 @@
 # (a Kenney "Tiny Dungeon" stone-brick tile) recoloured into the four classic
 # brick-row colours -- so you get a textured, colourful Arkanoid wall instead of flat
 # rectangles. CC0 lets you modify art freely; the recolour (a per-pixel multiply that
-# keeps the mortar/shading) is done offline. Bricks are 16x16 so BW/BH become 16 (the
+# keeps the mortar/shading) is done offline. Bricks are 16x16 so BRICK_W/BRICK_H become 16 (the
 # only other change). The ball/paddle stay as the step-9 shapes. Tileset built by
 # tools/png2picogame; source + recolour note in assets/kenney/. See tutorials/ASSETS.md.
 #
@@ -23,12 +23,12 @@ import art_bricks                             # <-- generated from CC0 PNGs
 W, H = 320, 240
 PADDLE_W, PADDLE_H = 44, 8
 BALL = 6
-BW, BH = 16, 16                               # <-- was 32,16 : recoloured brick tiles are 16x16
-COLS, ROWS = W // BW, 6
+BRICK_W, BRICK_H = 16, 16                               # <-- was 32,16 : recoloured brick tiles are 16x16
+COLS, ROWS = W // BRICK_W, 6
 BRICK_Y = 28
-BG = pg.rgb565(8, 10, 24)
+BACKGROUND = pg.rgb565(8, 10, 24)
 
-scene, bufA, bufB = picogame_game.setup(background=BG)
+scene, _, _ = picogame_game.setup(background=BACKGROUND)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(40)
 
@@ -44,11 +44,11 @@ except Exception:
 def paddle_art(w, h):
     """A 2-colour paddle bitmap: blue body + a lighter highlight on the top row.
     This is what 'real sprite art' is -- a PAL8 bitmap with more than one colour."""
-    pal = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(70, 110, 210), pg.rgb565(150, 190, 255)])
+    palette = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(70, 110, 210), pg.rgb565(150, 190, 255)])
     data = bytearray(b"\x01" * (w * h))      # index 1 = body
     for x in range(w):
         data[x] = 2                          # index 2 = highlight on the top row
-    return pg.Bitmap(data, w, h, format=pg.PAL8, palette=pal, frames=1, stride=w, transparent=0)
+    return pg.Bitmap(data, w, h, format=pg.PAL8, palette=palette, frames=1, stride=w, transparent=0)
 
 
 brick_colors = [pg.rgb565(220, 70, 70), pg.rgb565(230, 150, 50),
@@ -75,7 +75,7 @@ scene.add(bricks)
 scene.add(particles)
 scene.add(paddle)
 scene.add(ball)
-hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 2, pg.rgb565(255, 255, 255), BG)
+hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 2, pg.rgb565(255, 255, 255), BACKGROUND)
 
 velocity_x, velocity_y = 2.4, -2.6
 score = 0
@@ -109,7 +109,7 @@ while True:
         velocity_x += (ball.x + BALL / 2 - (paddle.x + PADDLE_W / 2)) * 0.06
 
     center_x, center_y = ball.x + BALL // 2, ball.y + BALL // 2
-    tile_x, tile_y = center_x // BW, (center_y - BRICK_Y) // BH
+    tile_x, tile_y = center_x // BRICK_W, (center_y - BRICK_Y) // BRICK_H
     if 0 <= tile_x < COLS and 0 <= tile_y < ROWS:
         cell = bricks.tile(tile_x, tile_y)
         if cell:
@@ -117,7 +117,7 @@ while True:
             bricks_left -= 1
             score += 10
             velocity_y = -velocity_y
-            particles.emit(tile_x * BW + BW // 2, BRICK_Y + tile_y * BH + BH // 2,
+            particles.emit(tile_x * BRICK_W + BRICK_W // 2, BRICK_Y + tile_y * BRICK_H + BRICK_H // 2,
                            14, 3, 22, brick_colors[cell - 1])
             if audio:
                 audio.sfx(blip)

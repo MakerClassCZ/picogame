@@ -19,18 +19,18 @@ import picogame_shapes as shp
 W, H = 320, 240
 PADDLE_W, PADDLE_H = 44, 8
 BALL = 6
-BW, BH = 32, 16                              # brick (tile) size
-COLS, ROWS = W // BW, 6                       # 10 x 6 wall
+BRICK_W, BRICK_H = 32, 16                              # brick (tile) size
+COLS, ROWS = W // BRICK_W, 6                       # 10 x 6 wall
 BRICK_Y = 28                                  # wall top (leaves a HUD strip)
 
-scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(8, 10, 24))
+scene, _, _ = picogame_game.setup(background=pg.rgb565(8, 10, 24))
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(40)
 
 # tileset: value 0 empty, 1..4 = four brick colours
 brick_colors = [pg.rgb565(220, 70, 70), pg.rgb565(230, 150, 50),
                 pg.rgb565(70, 200, 90), pg.rgb565(80, 150, 230)]
-bricks = pg.Tilemap(shp.tileset_colors(BW, BH, brick_colors), COLS, ROWS)
+bricks = pg.Tilemap(shp.tileset_colors(BRICK_W, BRICK_H, brick_colors), COLS, ROWS)
 bricks.move(0, BRICK_Y)
 
 
@@ -82,8 +82,8 @@ while True:
 
     # brick hit: the tile under the ball's centre
     center_x, center_y = ball.x + BALL // 2, ball.y + BALL // 2
-    tile_x = center_x // BW
-    tile_y = (center_y - BRICK_Y) // BH
+    tile_x = center_x // BRICK_W
+    tile_y = (center_y - BRICK_Y) // BRICK_H
     if 0 <= tile_x < COLS and 0 <= tile_y < ROWS and bricks.tile(tile_x, tile_y):
         bricks.tile(tile_x, tile_y, 0)               # clear the brick
         bricks_left -= 1

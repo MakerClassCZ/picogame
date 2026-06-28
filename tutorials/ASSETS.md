@@ -58,6 +58,34 @@ RGBA with a transparent background). Animation **Frame Tags** can drive frame ra
 - **itch.io** (CC0 filter), **OpenGameArt** (filter CC0). Avoid CC-BY-SA / GPL art.
 - See the project memory note "picogame art sources" for the full rundown.
 
+## Ship assets as .mpy (faster load, less RAM)
+A baked-asset module is just Python, so you can precompile it to `.mpy` bytecode exactly like the
+helper libs — the device skips parsing the source, so it loads faster and uses less RAM (the same
+win `tools/build_mpy.sh` gives the libs). How:
+```
+mpy-cross your_assets.py -o your_assets.mpy
+```
+then copy the `.mpy` to `CIRCUITPY/lib/`. The mpy-cross build **must match the board's CircuitPython
+version** (see `tools/build_mpy.sh` for the version it uses). Gotcha: a stale `.mpy` **shadows the
+`.py`** at import, so re-generate it after any edit — otherwise the device keeps loading the old art.
+
+## One file with all your assets
+For a real game, keep all your baked bitmaps and palettes in a **single module** (e.g. `assets.py`)
+that the game imports once, rather than scattering them across many tiny files — fewer imports, one
+place to manage, and one `.mpy` to ship.
+- `tools/pack_assets.py` does exactly this in one command: point it at a PNG glob (or a folder) and it
+  packs them all into a single module with **one shared palette** reused by every bitmap (the RAM win),
+  each exposed as a ready-to-use named `Bitmap`. Add `--mpy` to also ship the bytecode.
+  ```bash
+  python3 tools/pack_assets.py art/*.png -o assets.py --mpy   # then: import assets; pg.Sprite(assets.ship)
+  ```
+  (If the combined colours overflow 255 it falls back to per-asset palettes, and any image with >255 of
+  its own colours is emitted as RGB565 — same auto behaviour as `png2picogame`.)
+- `tools/png2picogame.py` converts a single PNG into a bitmap module — use it when you want just one
+  image (it also has `--frames`, `--tile`, `--rle`, dithering, dedup).
+- For a whole tile/scene-based level, `tools/scene_build.py` bakes the assets **and** the layout into
+  one `SCENE` file that `picogame_scene.load()` reads — one file for the entire level.
+
 ## Licensing / credits
 All bundled art is **CC0** (public domain, no attribution required). The source PNGs we used
 live in `assets/kenney/` with `assets/kenney/CREDITS.txt`. Even for CC0 it's good manners to

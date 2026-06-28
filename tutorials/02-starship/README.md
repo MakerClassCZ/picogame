@@ -31,7 +31,7 @@ pre-allocates N hidden sprites once; `spawn()` reveals a free one, `free()` hide
 `sprite.visible` *is* the alive flag. Each bullet keeps its velocity + remaining life in
 `sprite.data`, its position in `fx`/`fy`. A cooldown caps the fire rate; `just_pressed(B)`
 fires on a fresh press. **You see:** a stream of bullets that expire. **Try it:** change the
-pool size or `fire_cd`.
+pool size or `fire_cooldown`.
 
 ### step 4 — `step4_rocks.py` · a second pool + waves
 Reuse the pool pattern for enemies. Rocks come in 3 sizes; we keep the size in
@@ -44,7 +44,7 @@ change the wave count or rock speed.
 ideal for round things. A bullet that hits a rock frees both; a big/medium rock **splits**
 into two smaller ones flying apart. A rock reaching the ship costs a life, grants brief
 invulnerability (i-frames, shown by blinking `ship.visible`), and respawns. **You see:**
-you can shoot rocks apart and get hit. **Try it:** change `ROCK_R` or the split velocities.
+you can shoot rocks apart and get hit. **Try it:** change `ROCK_RADIUS` or the split velocities.
 
 ### step 6 — `step6_waves.py` · score + progression
 Smaller rocks score more. A `SceneLabel` shows score + ships. When `rocks.count() == 0` the

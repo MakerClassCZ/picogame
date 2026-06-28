@@ -21,25 +21,25 @@ import picogame_shapes as shp
 import picogame_pool
 
 W, H = 320, 240
-BG = pg.rgb565(0, 0, 8)
-NF = 16
+BACKGROUND = pg.rgb565(0, 0, 8)
+FRAMES = 16
 
-scene, bufA, bufB = picogame_game.setup(background=BG)
+scene, _, _ = picogame_game.setup(background=BACKGROUND)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
-ship_bm = shp.poly_frames(18, [(0, -8), (6, 7), (0, 4), (-6, 7)], NF, pg.rgb565(200, 220, 255))
-DIRS = [(math.sin(f * 2 * math.pi / NF), -math.cos(f * 2 * math.pi / NF)) for f in range(NF)]
-bullet_bm = shp.circle(4, pg.rgb565(255, 255, 120))
+ship_bitmap = shp.poly_frames(18, [(0, -8), (6, 7), (0, 4), (-6, 7)], FRAMES, pg.rgb565(200, 220, 255))
+DIRS = [(math.sin(frame * 2 * math.pi / FRAMES), -math.cos(frame * 2 * math.pi / FRAMES)) for frame in range(FRAMES)]
+bullet_bitmap = shp.circle(4, pg.rgb565(255, 255, 120))
 
-ship = pg.Sprite(ship_bm, W // 2, H // 2)
+ship = pg.Sprite(ship_bitmap, W // 2, H // 2)
 ship.anchor = (0.5, 0.5)
-bullets = picogame_pool.Pool(scene, bullet_bm, 6, anchor=(0.5, 0.5))   # NEW: 6-bullet pool
+bullets = picogame_pool.Pool(scene, bullet_bitmap, 6, anchor=(0.5, 0.5))   # NEW: 6-bullet pool
 scene.add(ship)                              # add ship AFTER the pool so it draws on top
 
 angle = 0
 velocity_x = velocity_y = 0.0
-fire_cd = 0
+fire_cooldown = 0
 
 
 def wrap(x, y):
@@ -48,11 +48,11 @@ def wrap(x, y):
 
 while True:
     btn.poll()
-    fire_cd -= 1
+    fire_cooldown -= 1
     if btn.is_pressed(btn.LEFT):
-        angle = (angle - 1) % NF
+        angle = (angle - 1) % FRAMES
     if btn.is_pressed(btn.RIGHT):
-        angle = (angle + 1) % NF
+        angle = (angle + 1) % FRAMES
     delta_x, delta_y = DIRS[angle]
     if btn.is_pressed(btn.UP):
         velocity_x += delta_x * 0.25
@@ -65,22 +65,22 @@ while True:
     ship.frame = angle
 
     # fire: a fresh B press, if the cooldown has elapsed and a slot is free
-    if btn.just_pressed(btn.B) and fire_cd <= 0:
-        b = bullets.spawn()
-        if b:
-            b.data = {"vx": delta_x * 7, "vy": delta_y * 7, "life": 30}
-            b.move(ship.x, ship.y)
-            fire_cd = 6
+    if btn.just_pressed(btn.B) and fire_cooldown <= 0:
+        bullet = bullets.spawn()
+        if bullet:
+            bullet.data = {"velocity_x": delta_x * 7, "velocity_y": delta_y * 7, "life": 30}
+            bullet.move(ship.x, ship.y)
+            fire_cooldown = 6
 
     # advance live bullets; retire them when their life runs out
-    for b in bullets.items:
-        if not b.visible:
+    for bullet in bullets.items:
+        if not bullet.visible:
             continue
-        b.data["life"] -= 1
-        if b.data["life"] <= 0:
-            bullets.free(b)
+        bullet.data["life"] -= 1
+        if bullet.data["life"] <= 0:
+            bullets.free(bullet)
             continue
-        b.fx, b.fy = wrap(b.fx + b.data["vx"], b.fy + b.data["vy"])
+        bullet.fx, bullet.fy = wrap(bullet.fx + bullet.data["velocity_x"], bullet.fy + bullet.data["velocity_y"])
 
     scene.refresh()
     clock.tick()

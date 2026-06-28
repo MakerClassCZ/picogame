@@ -19,7 +19,7 @@ W, H = 320, 240
 PADDLE_W, PADDLE_H = 44, 8
 SPEED = 5
 
-scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(8, 10, 24))
+scene, _, _ = picogame_game.setup(background=pg.rgb565(8, 10, 24))
 btn = picogame_input.Buttons()              # NEW: the buttons
 clock = picogame_clock.Clock(40)
 

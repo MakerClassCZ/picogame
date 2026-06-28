@@ -19,7 +19,7 @@ W, H = 320, 240
 PADDLE_W, PADDLE_H = 44, 8
 
 # setup() takes over the display and gives us a Scene + its two strip buffers.
-scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(8, 10, 24))
+scene, _, _ = picogame_game.setup(background=pg.rgb565(8, 10, 24))
 clock = picogame_clock.Clock(40)            # cap the loop to 40 FPS
 
 # A "paddle" is just a Sprite whose bitmap is a solid rectangle. shp.rect(w,h,color)

@@ -45,7 +45,7 @@ All the helpers live in `lib/` (pure Python, work on device and in the simulator
 |--------|------|
 | `picogame_game.setup()` | take over the display, make a Scene + strip buffers |
 | `picogame` (C module) | `Sprite`, `Bitmap`, `Tilemap`, `Particles`, `Canvas`, `Scene`, `collide`, `rgb565` |
-| `picogame_input` | buttons → bitmask, `pressed` / `just_pressed` |
+| `picogame_input` | buttons → bitmask, `is_pressed` / `just_pressed` |
 | `picogame_clock` | frame-rate cap + `dt`; a fixed-timestep accumulator |
 | `picogame_shapes` | generate solid/round/polygon bitmaps (rectangles, balls, ships) |
 | `picogame_pool` | a fixed-size sprite pool for spawners (bullets, enemies) |

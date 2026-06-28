@@ -18,9 +18,9 @@ import picogame_clock
 import picogame_shapes as shp
 
 W, H = 320, 240
-BG = pg.rgb565(0, 0, 8)
+BACKGROUND = pg.rgb565(0, 0, 8)
 
-scene, bufA, bufB = picogame_game.setup(background=BG)
+scene, _, _ = picogame_game.setup(background=BACKGROUND)
 clock = picogame_clock.Clock(30)
 
 SHIP_MASK = [

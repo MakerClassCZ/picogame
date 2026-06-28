@@ -22,12 +22,12 @@ import picogame_ui as ui
 W, H = 320, 240
 PADDLE_W, PADDLE_H = 44, 8
 BALL = 6
-BW, BH = 32, 16
-COLS, ROWS = W // BW, 6
+BRICK_W, BRICK_H = 32, 16
+COLS, ROWS = W // BRICK_W, 6
 BRICK_Y = 28
-BG = pg.rgb565(8, 10, 24)
+BACKGROUND = pg.rgb565(8, 10, 24)
 
-scene, bufA, bufB = picogame_game.setup(background=BG)
+scene, _, _ = picogame_game.setup(background=BACKGROUND)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(40)
 
@@ -42,7 +42,7 @@ except Exception:
 
 brick_colors = [pg.rgb565(220, 70, 70), pg.rgb565(230, 150, 50),
                 pg.rgb565(70, 200, 90), pg.rgb565(80, 150, 230)]
-brick_ts = shp.tileset_colors(BW, BH, brick_colors)
+brick_ts = shp.tileset_colors(BRICK_W, BRICK_H, brick_colors)
 bricks = pg.Tilemap(brick_ts, COLS, ROWS)
 bricks.move(0, BRICK_Y)
 
@@ -64,7 +64,7 @@ scene.add(bricks)
 scene.add(particles)                         # behind paddle+ball
 scene.add(paddle)
 scene.add(ball)
-hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 2, pg.rgb565(255, 255, 255), BG)
+hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 2, pg.rgb565(255, 255, 255), BACKGROUND)
 
 velocity_x, velocity_y = 2.4, -2.6
 score = 0
@@ -98,7 +98,7 @@ while True:
         velocity_x += (ball.x + BALL / 2 - (paddle.x + PADDLE_W / 2)) * 0.06
 
     center_x, center_y = ball.x + BALL // 2, ball.y + BALL // 2
-    tile_x, tile_y = center_x // BW, (center_y - BRICK_Y) // BH
+    tile_x, tile_y = center_x // BRICK_W, (center_y - BRICK_Y) // BRICK_H
     if 0 <= tile_x < COLS and 0 <= tile_y < ROWS:
         cell = bricks.tile(tile_x, tile_y)
         if cell:
@@ -107,9 +107,9 @@ while True:
             score += 10
             velocity_y = -velocity_y
             # burst in the brick's colour at the brick's centre
-            bx_px = tile_x * BW + BW // 2
-            by_px = BRICK_Y + tile_y * BH + BH // 2
-            particles.emit(bx_px, by_px, 14, 3, 22, brick_colors[cell - 1])
+            brick_x = tile_x * BRICK_W + BRICK_W // 2
+            brick_y = BRICK_Y + tile_y * BRICK_H + BRICK_H // 2
+            particles.emit(brick_x, brick_y, 14, 3, 22, brick_colors[cell - 1])
             if audio:
                 audio.sfx(blip)
             if bricks_left == 0:

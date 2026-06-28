@@ -1,13 +1,12 @@
-# Bounce -- step 3: a ball with momentum (sub-pixel movement).
+# Bounce -- step 3: a ball with velocity (whole-pixel movement).
 #
-# What you learn: velocity + sub-pixel position. A Sprite stores its position as
-# fixed-point, exposed as sprite.fx / sprite.fy (floats). Add a velocity to fx/fy
-# every frame and the ball drifts smoothly -- even at speeds below 1 px/frame,
-# which plain integer x/y could not represent. sprite.x / sprite.y are the rounded
-# pixel coordinates the engine draws at.
+# What you learn: velocity. Velocity is just how many pixels a thing moves each
+# frame: velocity_x across, velocity_y down. Add the velocity to the ball's
+# position every frame and it travels in a straight line. Here we move in WHOLE
+# pixels -- integer velocity, integer position -- which is all this step needs.
 #
-# New vs step 2: sprite.fx/.fy (sub-pixel position), a velocity (vx, vy). The ball
-# flies off-screen for now -- step 4 makes it bounce.
+# New vs step 2: a velocity (velocity_x, velocity_y) added to ball.x / ball.y each
+# frame. The ball flies off-screen for now -- step 4 makes it bounce.
 #
 # Run:  python3 sim/run.py tutorials/01-bounce/step3_ball.py --shot /tmp/s3.png
 
@@ -21,7 +20,7 @@ W, H = 320, 240
 PADDLE_W, PADDLE_H = 44, 8
 BALL = 6
 
-scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(8, 10, 24))
+scene, _, _ = picogame_game.setup(background=pg.rgb565(8, 10, 24))
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(40)
 
@@ -31,7 +30,7 @@ ball = pg.Sprite(shp.rect(BALL, BALL, pg.rgb565(255, 240, 120)), W // 2, H // 2)
 scene.add(paddle)
 scene.add(ball)
 
-velocity_x, velocity_y = 2.4, -2.6                          # NEW: the ball's velocity (px per frame)
+velocity_x, velocity_y = 3, -3              # NEW: whole pixels moved per frame
 
 while True:
     btn.poll()
@@ -39,9 +38,8 @@ while True:
     if delta_x:
         paddle.move(max(0, min(W - PADDLE_W, paddle.x + delta_x * 5)), paddle.y)
 
-    # integrate velocity into the ball's sub-pixel position
-    ball.fx += velocity_x
-    ball.fy += velocity_y
+    # move the ball by its velocity (whole pixels)
+    ball.move(ball.x + velocity_x, ball.y + velocity_y)
 
     scene.refresh()
     clock.tick()

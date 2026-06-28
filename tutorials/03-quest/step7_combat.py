@@ -2,11 +2,11 @@
 #
 # What you learn: simple chasing AI, taking damage, and attacking. Slimes step
 # toward the hero (slower than you, and they respect walls via can_walk). Touching
-# one costs HP and grants brief invulnerability (i-frames) so one touch doesn't
+# one costs HP and starts a brief "can't be hurt again" cooldown (hurt_cooldown) so one touch doesn't
 # drain you instantly. Press B to swing: we defeat any slime in the tile just ahead
 # of the way you're facing. HP shows in the HUD; reaching 0 sends you back to start.
 #
-# New vs step 6: enemy sprites with chase AI, player HP + i-frames + knock-back,
+# New vs step 6: enemy sprites with chase AI, player HP + a brief hurt cooldown + knock-back,
 # a B attack in the facing direction. (A still talks to the NPC.)
 #
 # Run:  python3 sim/run.py tutorials/03-quest/step7_combat.py --hold B --shot /tmp/q7.png
@@ -47,8 +47,8 @@ MAP = [
     "#.....:......................#",
     "##############################",
 ]
-MCOLS, MROWS = 30, 20
-CH2TILE = {".": 1, "P": 1, "N": 1, "*": 1, "E": 1, ":": 2, "~": 3, "#": 4,
+MAPCOLS, MAPROWS = 30, 20
+CHAR2TILE = {".": 1, "P": 1, "N": 1, "*": 1, "E": 1, ":": 2, "~": 3, "#": 4,
            "W": 5, "D": 6, "G": 7}
 TILE_RGB = [(40, 120, 50), (180, 160, 110), (40, 90, 200), (20, 80, 30),
             (120, 120, 130), (150, 90, 40), (240, 210, 60)]
@@ -56,47 +56,47 @@ SOLID = (3, 4, 5, 6)
 DOWN, UP, LEFT, RIGHT = 0, 1, 2, 3
 DIR = {DOWN: (0, 1), UP: (0, -1), LEFT: (-1, 0), RIGHT: (1, 0)}
 FACE_NAME = ("down", "up", "left", "right")
-BG = pg.rgb565(0, 0, 0)
+BACKGROUND = pg.rgb565(0, 0, 0)
 WHITE = pg.rgb565(255, 255, 255)
 NAVY = pg.rgb565(10, 10, 40)
 
-scene, bufA, bufB = picogame_game.setup(background=BG)
+scene, buffer_a, buffer_b = picogame_game.setup(background=BACKGROUND)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
-tileset = shp.tileset_colors(TILE, TILE, [pg.rgb565(*c) for c in TILE_RGB])
-world = pg.Tilemap(tileset, MCOLS, MROWS)
+tileset = shp.tileset_colors(TILE, TILE, [pg.rgb565(*color) for color in TILE_RGB])
+world = pg.Tilemap(tileset, MAPCOLS, MAPROWS)
 START = (TILE, TILE)
 npc_x, npc_y = TILE, TILE
 coin_spots, enemy_spots = [], []
-for tile_y in range(MROWS):
-    for tile_x in range(MCOLS):
-        ch = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
-        world.tile(tile_x, tile_y, CH2TILE.get(ch, 1))
-        if ch == "P":
+for tile_y in range(MAPROWS):
+    for tile_x in range(MAPCOLS):
+        char = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
+        world.tile(tile_x, tile_y, CHAR2TILE.get(char, 1))
+        if char == "P":
             START = (tile_x * TILE, tile_y * TILE)
-        elif ch == "N":
+        elif char == "N":
             npc_x, npc_y = tile_x * TILE, tile_y * TILE
-        elif ch == "*":
+        elif char == "*":
             coin_spots.append((tile_x * TILE, tile_y * TILE))
-        elif ch == "E":
+        elif char == "E":
             enemy_spots.append((tile_x * TILE, tile_y * TILE))
 scene.add(world)
 
-coin_bm = shp.circle(8, pg.rgb565(245, 215, 60))
-coins = [pg.Sprite(coin_bm, x + 4, y + 4) for (x, y) in coin_spots]
-for c in coins:
-    scene.add(c)
-slime_bm = shp.circle(14, pg.rgb565(120, 200, 80))
-enemies = [pg.Sprite(slime_bm, x + 1, y + 1) for (x, y) in enemy_spots]
-for e in enemies:
-    scene.add(e)
+coin_bitmap = shp.circle(8, pg.rgb565(245, 215, 60))
+coins = [pg.Sprite(coin_bitmap, x + 4, y + 4) for (x, y) in coin_spots]
+for coin in coins:
+    scene.add(coin)
+slime_bitmap = shp.circle(14, pg.rgb565(120, 200, 80))
+enemies = [pg.Sprite(slime_bitmap, x + 1, y + 1) for (x, y) in enemy_spots]
+for enemy in enemies:
+    scene.add(enemy)
 npc = pg.Sprite(shp.rect(TILE, TILE, pg.rgb565(230, 200, 60)), npc_x, npc_y)
 scene.add(npc)
 
 
 def hero_bitmap():
-    pal = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(210, 80, 60),
+    palette = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(210, 80, 60),
                             pg.rgb565(255, 225, 170), pg.rgb565(120, 40, 30)])
     stride = TILE * 8
     data = bytearray(stride * TILE)
@@ -112,7 +112,7 @@ def hero_bitmap():
             lx = 4 if s == 0 else 6
             for x in (lx, TILE - 1 - lx):
                 data[(TILE - 1) * stride + fr * TILE + x] = 3
-    return pg.Bitmap(data, TILE, TILE, format=pg.PAL8, palette=pal, frames=8,
+    return pg.Bitmap(data, TILE, TILE, format=pg.PAL8, palette=palette, frames=8,
                      stride=stride, transparent=0)
 
 
@@ -121,14 +121,14 @@ walk = picogame_anim.AnimatedSprite(hero, {
     "down": ([0, 1], 8, True), "up": ([2, 3], 8, True),
     "left": ([4, 5], 8, True), "right": ([6, 7], 8, True)})
 scene.add(hero)
-hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, WHITE, BG)
-dlg = ui.TextBox(pg, terminalio.FONT, 8, H - 60, W - 16, 54, WHITE, NAVY, maxlines=4)
+hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, WHITE, BACKGROUND)
+dialog = ui.TextBox(pg, terminalio.FONT, 8, H - 60, W - 16, 54, WHITE, NAVY, maxlines=4)
 LINES = ["Villager:", "Slimes ahead! Press B to", "swing at them.", "(press A)"]
 
 facing = DOWN
-got = 0
+coins_collected = 0
 hp = 6
-inv = 0
+hurt_cooldown = 0
 state = "over"
 frame = 0
 dlg_shown = False                             # draw the modal once, not every frame
@@ -136,7 +136,7 @@ dlg_shown = False                             # draw the modal once, not every f
 
 def solid_at(pixel_x, pixel_y):
     tile_x, tile_y = pixel_x // TILE, pixel_y // TILE
-    if tile_x < 0 or tile_x >= MCOLS or tile_y < 0 or tile_y >= MROWS:
+    if tile_x < 0 or tile_x >= MAPCOLS or tile_y < 0 or tile_y >= MAPROWS:
         return True
     return world.tile(tile_x, tile_y) in SOLID
 
@@ -151,8 +151,8 @@ def near(a, bx, by, d=TILE):
 
 
 def follow():
-    ox = max(W - MCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
-    oy = max(H - MROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
+    ox = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
+    oy = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
     scene.set_view(int(ox), int(oy))
 
 
@@ -165,7 +165,7 @@ while True:
     if state == "dialog":
         if not dlg_shown:                     # draw ONCE -> no per-frame flicker
             scene.refresh()
-            dlg.draw(board.DISPLAY, bufA, LINES)
+            dialog.draw(board.DISPLAY, buffer_a, LINES)
             dlg_shown = True
         if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
             state = "over"; scene.invalidate()
@@ -192,46 +192,46 @@ while True:
     if btn.just_pressed(btn.B):
         ddx, ddy = DIR[facing]
         ax, ay = hero.x + ddx * TILE, hero.y + ddy * TILE
-        for e in enemies:
-            if e.visible and abs(e.x - ax) < TILE and abs(e.y - ay) < TILE:
-                e.visible = False
+        for enemy in enemies:
+            if enemy.visible and abs(enemy.x - ax) < TILE and abs(enemy.y - ay) < TILE:
+                enemy.visible = False
 
     # slimes chase (slower: move every other frame) and respect walls
     if frame % 2 == 0:
-        for e in enemies:
-            if not e.visible:
+        for enemy in enemies:
+            if not enemy.visible:
                 continue
-            sx = (hero.x > e.x) - (hero.x < e.x)
-            sy = (hero.y > e.y) - (hero.y < e.y)
-            if sx and can_walk(e.x + sx, e.y):
-                e.move(e.x + sx, e.y)
-            if sy and can_walk(e.x, e.y + sy):
-                e.move(e.x, e.y + sy)
+            sx = (hero.x > enemy.x) - (hero.x < enemy.x)
+            sy = (hero.y > enemy.y) - (hero.y < enemy.y)
+            if sx and can_walk(enemy.x + sx, enemy.y):
+                enemy.move(enemy.x + sx, enemy.y)
+            if sy and can_walk(enemy.x, enemy.y + sy):
+                enemy.move(enemy.x, enemy.y + sy)
 
-    # take damage on contact (unless in i-frames)
-    if inv > 0:
-        inv -= 1
+    # take damage on contact (unless the cooldown from the last hit is still running)
+    if hurt_cooldown > 0:
+        hurt_cooldown -= 1                 # count the "safe" frames down
     else:
-        for e in enemies:
-            if e.visible and near(e, hero.x, hero.y, 13):
+        for enemy in enemies:
+            if enemy.visible and near(enemy, hero.x, hero.y, 13):
                 hp -= 1
-                inv = 40
+                hurt_cooldown = 40        # 40 frames where another touch can't hurt you
                 if hp <= 0:                   # down -> back to start, full HP
                     hp = 6
                     hero.move(START[0], START[1])
                     follow()
                 break
 
-    for c in coins:
-        if c.visible and abs(hero.x - c.x) < 12 and abs(hero.y - c.y) < 12:
-            c.visible = False; got += 1
+    for coin in coins:
+        if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
+            coin.visible = False; coins_collected += 1
 
     if near(hero, npc.x, npc.y):
-        hud.set("HP %d  COINS %d/%d  A:TALK B:SWING" % (hp, got, len(coins)))
+        hud.set("HP %d  COINS %d/%d  A:TALK B:SWING" % (hp, coins_collected, len(coins)))
         if btn.just_pressed(btn.A):
             state = "dialog"; dlg_shown = False
     else:
-        hud.set("HP %d  COINS %d/%d" % (hp, got, len(coins)))
+        hud.set("HP %d  COINS %d/%d" % (hp, coins_collected, len(coins)))
 
     scene.refresh()
     dt = clock.tick()

@@ -42,32 +42,32 @@ MAP = [
     "#.....:......................#",
     "##############################",
 ]
-MCOLS, MROWS = 30, 20
-CH2TILE = {".": 1, "P": 1, "N": 1, "*": 1, "E": 1, ":": 2, "~": 3, "#": 4,
+MAPCOLS, MAPROWS = 30, 20
+CHAR2TILE = {".": 1, "P": 1, "N": 1, "*": 1, "E": 1, ":": 2, "~": 3, "#": 4,
            "W": 5, "D": 6, "G": 7}
 TILE_RGB = [(40, 120, 50), (180, 160, 110), (40, 90, 200), (20, 80, 30),
             (120, 120, 130), (150, 90, 40), (240, 210, 60)]
 SOLID = (3, 4, 5, 6)                          # water, tree, wall, door block movement
 DOWN, UP, LEFT, RIGHT = 0, 1, 2, 3
 
-scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(0, 0, 0))
+scene, _, _ = picogame_game.setup(background=pg.rgb565(0, 0, 0))
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
-tileset = shp.tileset_colors(TILE, TILE, [pg.rgb565(*c) for c in TILE_RGB])
-world = pg.Tilemap(tileset, MCOLS, MROWS)
+tileset = shp.tileset_colors(TILE, TILE, [pg.rgb565(*color) for color in TILE_RGB])
+world = pg.Tilemap(tileset, MAPCOLS, MAPROWS)
 hero_x, hero_y = TILE, TILE
-for tile_y in range(MROWS):
-    for tile_x in range(MCOLS):
-        ch = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
-        world.tile(tile_x, tile_y, CH2TILE.get(ch, 1))
-        if ch == "P":
+for tile_y in range(MAPROWS):
+    for tile_x in range(MAPCOLS):
+        char = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
+        world.tile(tile_x, tile_y, CHAR2TILE.get(char, 1))
+        if char == "P":
             hero_x, hero_y = tile_x * TILE, tile_y * TILE
 scene.add(world)
 
 
 def hero_bitmap():
-    pal = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(210, 80, 60), pg.rgb565(255, 225, 170)])
+    palette = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(210, 80, 60), pg.rgb565(255, 225, 170)])
     stride = TILE * 4
     data = bytearray(stride * TILE)
     for f in range(4):
@@ -76,7 +76,7 @@ def hero_bitmap():
                 face = ((f == 0 and y >= TILE - 4) or (f == 1 and y < 4) or
                         (f == 2 and x < 4) or (f == 3 and x >= TILE - 4))
                 data[y * stride + f * TILE + x] = 2 if face else 1
-    return pg.Bitmap(data, TILE, TILE, format=pg.PAL8, palette=pal, frames=4, stride=stride)
+    return pg.Bitmap(data, TILE, TILE, format=pg.PAL8, palette=palette, frames=4, stride=stride)
 
 
 hero = pg.Sprite(hero_bitmap(), hero_x, hero_y, frame=DOWN)
@@ -85,7 +85,7 @@ scene.add(hero)
 
 def solid_at(pixel_x, pixel_y):
     tile_x, tile_y = pixel_x // TILE, pixel_y // TILE
-    if tile_x < 0 or tile_x >= MCOLS or tile_y < 0 or tile_y >= MROWS:
+    if tile_x < 0 or tile_x >= MAPCOLS or tile_y < 0 or tile_y >= MAPROWS:
         return True
     return world.tile(tile_x, tile_y) in SOLID
 
@@ -97,8 +97,8 @@ def can_walk(pixel_x, pixel_y):
 
 
 def follow():
-    ox = max(W - MCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
-    oy = max(H - MROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
+    ox = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
+    oy = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
     scene.set_view(int(ox), int(oy))
 
 
