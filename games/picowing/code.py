@@ -157,8 +157,9 @@ hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, INK)
 l_score = hud.label(terminalio.FONT, 4, 4, TEXT, "SCORE 00000")
 l_chain = hud.label(terminalio.FONT, 150, 4, C(250, 220, 120), "x99  CHAIN 999")
 # Lives + bombs shown as ICON sprites: the number VISIBLE = the count (toggled in hud_refresh).
-life_icons = [hud.add(pg.Sprite(LIFE_ICON, 230 + i * 12, 4)) for i in range(3)]
-bomb_icons = [hud.add(pg.Sprite(BOMB_ICON, 276 + i * 14, 5)) for i in range(3)]   # max 3 bombs
+# right-anchored from W so they stay on-screen on narrow (240) and wide (320) displays
+life_icons = [hud.add(pg.Sprite(LIFE_ICON, W - 90 + i * 12, 4)) for i in range(3)]
+bomb_icons = [hud.add(pg.Sprite(BOMB_ICON, W - 44 + i * 14, 5)) for i in range(3)]   # max 3 bombs
 # Gun-heat gauge: 5 segments in the gap between SCORE and the CHAIN readout (set in hud_refresh).
 heat_segs = [hud.add(pg.Sprite(HEAT_G, 82 + i * 12, 6)) for i in range(5)]
 hud.draw()

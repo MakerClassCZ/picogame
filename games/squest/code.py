@@ -80,7 +80,7 @@ scene, _, _ = picogame_game.setup(background=BG)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
-W, H = 320, 240
+W, H = board.DISPLAY.width, board.DISPLAY.height   # size-independent: lay out from the real display
 HUD_H = 26
 SURFACE_Y = HUD_H + 6            # sub at/above this depth = surfacing
 SURFACE_TOP = SURFACE_Y - 8      # the sub breaches only a few px above the waterline when surfacing
@@ -156,7 +156,9 @@ shaker = fx.Shake(scene, max_offset=5, decay=0.06)
 death_fade = fx.Fade(scene, W, H, color=pg.rgb565(0, 8, 36))   # neutral dark dip on death (smoother than invert)
 
 # --- HUD: oxygen bar (Canvas) + score digits + diver/life icons ---
-hud = pg.Canvas(258, 14, transparent=KEY)   # only the pips+bar band, not the full 320x26 (saves ~9 KB)
+HUD_W = W - 52                               # oxygen band ends just before the right-anchored score
+OXB_W = HUD_W - 86                           # oxygen-bar width (from x84), derived from W -> responsive
+hud = pg.Canvas(HUD_W, 14, transparent=KEY)  # only the pips+bar band, not the full WxBAR (saves ~9 KB)
 hud.move(0, 5)
 scene.add(hud)
 DIG_W = 10
@@ -261,7 +263,7 @@ def draw_score():
 
 
 def ox_barwidth():
-    return int(170 * max(0.0, min(1.0, (state["ox"] - 60) / 30.0)))
+    return int((OXB_W - 2) * max(0.0, min(1.0, (state["ox"] - 60) / 30.0)))
 
 
 def draw_oxygen():
@@ -270,7 +272,7 @@ def draw_oxygen():
     for i in range(6):                               # 6 rescue pips: bright = carried, dim = still needed
         x = 4 + i * 9
         hud.fill_rect(x, 2, 7, 9, pg.rgb565(0, 210, 248) if i < d else pg.rgb565(35, 55, 85))
-    hud.fill_rect(84, 3, 172, 10, pg.rgb565(40, 80, 120))
+    hud.fill_rect(84, 3, OXB_W, 10, pg.rgb565(40, 80, 120))
     col = pg.rgb565(0, 220, 120) if state["ox"] > 70 else pg.rgb565(230, 120, 40)
     hud.fill_rect(85, 4, ox_barwidth(), 8, col)
 

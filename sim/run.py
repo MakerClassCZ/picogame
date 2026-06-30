@@ -4,7 +4,7 @@
 #   python sim/run.py examples/picogame_pacman.py                 # headless, ~120 frames
 #   python sim/run.py examples/picogame_pacman.py --shot out.png  # + save a screenshot
 #   python sim/run.py examples/picogame_arkanoid.py --backend pygame   # live window
-#   python sim/run.py examples/picogame_lastwing.py --profile          # cProfile + allocation report
+#   python sim/run.py examples/picogame_picowing.py --profile          # cProfile + allocation report
 #
 # Resolves imports: sim/ provides `picogame` + the CircuitPython stubs, lib/ the
 # picogame_* helpers, and the game's own dir its assets (we chdir there so relative

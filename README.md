@@ -25,11 +25,14 @@ engine and build for it. The engine itself and the helper library live in their 
 | [`examples/`](examples/) | minimal examples of the engine features |
 | [`tutorials/`](tutorials/) | three guided, build-it-yourself tutorials |
 | [`sim/`](sim/) | the desktop simulator (try/develop games on your PC) |
+| [`lib/`](lib/) | the `picogame_*` helper modules — a mirror of [picogame-libs](https://github.com/MakerClassCZ/picogame-libs) |
 | [`tools/`](tools/) | asset converters and build helpers |
 
-> The Python code here imports the `picogame_*` helper modules. To run anything (in the
-> simulator or on device) those helpers must be available as a **`lib/`** folder - get them
-> from **[picogame-libs](https://github.com/MakerClassCZ/picogame-libs)**.
+> The `picogame_*` helper modules this code imports are bundled in **`lib/`** — a generated mirror of
+> **[picogame-libs](https://github.com/MakerClassCZ/picogame-libs)** (the single source of truth, with its
+> own changelog and `circup` install). **A clone is self-contained** — you don't fetch them separately.
+> See [`lib/README.md`](lib/README.md). On a device, `circup install` from picogame-libs gives you
+> versioning; the bundled `lib/` is for the simulator and a zero-setup copy.
 
 ---
 
@@ -126,7 +129,7 @@ This repo is the games-and-learning side of picogame. The rest:
 
 | Repository | What it is |
 |---|---|
-| **[picogame-libs](https://github.com/MakerClassCZ/picogame-libs)** | the `picogame_*` Python helper library - input, HUD/UI, clock, juice effects, sprite pools, audio, save, and more. These are the `lib/` modules every game here imports. |
+| **[picogame-libs](https://github.com/MakerClassCZ/picogame-libs)** | the `picogame_*` Python helper library - input, HUD/UI, clock, juice effects, sprite pools, audio, save, and more. These are the `lib/` modules every game here imports — **mirrored into this repo's `lib/`** so a clone is self-contained. |
 | **[circuitpython](https://github.com/MakerClassCZ/circuitpython)** | the CircuitPython firmware fork that carries the **native C engine** (the `picogame` module). Build and flash this to run games on the device. |
 | **[picogame-stage](https://github.com/MakerClassCZ/picogame-stage)** | a compatibility layer to run existing `ugame`/`stage` games on the picogame engine. |
 
