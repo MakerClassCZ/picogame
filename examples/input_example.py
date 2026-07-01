@@ -95,7 +95,7 @@ def draw_panel(v, vx, vy, vw, vh):
         v.rect(bx - vx, by - vy, S, S, BORDER)
 
 
-scene.add(pg.StripDraw(draw_panel, 0, 0, W, H))
+scene.add(pg.StripDraw(draw_panel, 0, 0, W, H, always_dirty=False))  # repaint only when input changes
 
 # --- static text: button labels centred on each square + the detection report on top ---
 import terminalio
@@ -141,10 +141,13 @@ _label_sprite("mapped: %s" % (" ".join(mapped) if mapped else "NONE"), W / 2, 44
 # --- loop ---
 import picogame_clock
 clock = picogame_clock.Clock(30)
+prev = -1
 while True:
-    btn.poll()
-    state = btn.is_pressed(btn.ALL)
+    state = btn.poll()            # poll() returns the full pressed bitmask (is_pressed() is a bool predicate)
     if audio and btn.just_pressed(btn.ALL):
         audio.sfx(beep)
+    if state != prev:             # only repaint the panel when a button changed -> idle is ~free
+        prev = state
+        scene.invalidate()
     scene.refresh()
     clock.tick()
