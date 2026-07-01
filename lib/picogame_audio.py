@@ -7,6 +7,7 @@
 # (sample_rate / channel_count / bits_per_sample / samples_signed). The defaults
 # below (22050 Hz, mono, 16-bit signed) match typical ugame .wav assets.
 
+import os
 import board
 import audiopwmio
 import audiocore
@@ -16,7 +17,26 @@ import audiomixer
 class Audio:
     def __init__(self, pin=None, voices=4, sample_rate=22050, channels=1,
                  bits=16, signed=True):
-        self.out = audiopwmio.PWMAudioOut(pin if pin is not None else board.AUDIO)
+        # Boards name the PWM speaker pin inconsistently: AUDIO (PicoPad/PicoSystem) is rare; SPEAKER
+        # is by far the most common, BUZZER next. Try them in turn so Audio() "just works" across
+        # boards without the game passing a pin. (I2S-only boards have no single PWM pin -> pass one.)
+        if pin is None:
+            name = os.getenv("PICOGAME_AUDIO")            # custom board: settings.toml names the pin
+            if name:
+                pin = getattr(board, name, None)
+                if pin is None:
+                    try:
+                        import microcontroller
+                        pin = getattr(microcontroller.pin, name, None)
+                    except ImportError:
+                        pass
+            if pin is None:                                # else the common board pin names
+                pin = (getattr(board, "AUDIO", None) or getattr(board, "SPEAKER", None)
+                       or getattr(board, "BUZZER", None))
+            if pin is None:
+                raise ValueError("no PWM audio pin (set PICOGAME_AUDIO in settings.toml, or the board "
+                                 "has no AUDIO/SPEAKER/BUZZER); or pass one: picogame_audio.Audio(board.GP15)")
+        self.out = audiopwmio.PWMAudioOut(pin)
         self.mixer = audiomixer.Mixer(
             voice_count=voices, sample_rate=sample_rate, channel_count=channels,
             bits_per_sample=bits, samples_signed=signed)

@@ -9,6 +9,20 @@ import array
 
 import picogame as pg
 
+# The panel's RESTING colour-inversion state (True if its init sends INVON, like the PicoPad).
+# InvertFlash defaults to this when its `normal` arg is left None, so the hardware hit-flash is
+# correct on any board. The display can't report this (busdisplay has no invert read-back), so it
+# follows PICOGAME_INVERT from settings.toml when set (a custom board's config), else True (PicoPad).
+def _panel_inverted_default():
+    import os
+    v = os.getenv("PICOGAME_INVERT")
+    if v is None:
+        return True                                  # PicoPad and most ST7789 boards send INVON
+    return (v != 0) if isinstance(v, int) else v.strip().lower() not in ("", "0", "false", "no")
+
+
+PANEL_INVERTED = _panel_inverted_default()
+
 # 4x4 ordered (Bayer) dither matrix, thresholds 0..15.
 _BAYER = (
     (0, 8, 2, 10),
@@ -348,15 +362,16 @@ class InvertFlash:
         ...each frame:  flash.tick()
     """
 
-    def __init__(self, display, frames=3, normal=True):
+    def __init__(self, display, frames=3, normal=None):
         # `normal` = the invert value of the panel's RESTING (correct-looking) state. Many ST7789
         # boards (incl. the PicoPad) send INVON in their init, so their normal state is invert=True;
         # the flash must flip to the OPPOSITE and restore to `normal` (NOT hardcode True/False, which
         # left the PicoPad stuck inverted - pulse() set INVON=normal=no flash, then "revert" set
-        # INVOFF=inverted-and-stuck). Pass normal=False for a panel whose init does not send INVON.
+        # INVOFF=inverted-and-stuck). Left None it follows `picogame_fx.PANEL_INVERTED` (default True =
+        # PicoPad); a custom-board launcher sets that from its INVERT, so games need not pass `normal`.
         self.display = display
         self.frames = frames
-        self.normal = normal
+        self.normal = PANEL_INVERTED if normal is None else normal
         self.t = 0
 
     def pulse(self, frames=None):
