@@ -97,7 +97,11 @@ def build_display():
 
 
 try:
-    build_display()                # lands in board.DISPLAY slot 0; persists into code.py
-    print("boot.py: display ready")
+    if build_display() is None:    # lands in board.DISPLAY slot 0; persists into code.py
+        print("boot.py: PICOGAME_DISPLAY not set in settings.toml -- no display built. "
+              "code.py will raise 'expected a Display' until you configure it.")
+    else:
+        print("boot.py: display ready")
 except Exception as e:             # noqa: BLE001 - never brick boot; code.py reports the problem
-    print("boot.py: display setup failed:", e)
+    print("boot.py: display setup FAILED -- check settings.toml "
+          "(PICOGAME_DISPLAY / PICOGAME_PINS / PICOGAME_SIZE):", e)
