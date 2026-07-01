@@ -1,0 +1,22 @@
+# Rename to settings.toml on your CIRCUITPY drive.
+# ONE config, read by both custom-board paths (firmware_boot/ and launcher/) and by the game.
+# ─────────────────────────────────────────────────────────────────────────────────────────
+
+# ── Display ──────────────────────────────────────────────────────────────────
+PICOGAME_DISPLAY = "st7789"        # "st7789" or "ili9341"
+PICOGAME_PINS    = "SCK=GP18 MOSI=GP19 DC=GP17 CS=GP21 RST=GP20 BL=GP16"
+PICOGAME_SIZE    = "320x240"       # WIDTH x HEIGHT; WIDTH > HEIGHT = landscape
+PICOGAME_FLIP    = ""              # "", "h", "v", "hv" — image sideways / upside down? toggle
+PICOGAME_INVERT  = 0               # colours look like a photo-negative? set 1
+PICOGAME_BGR     = 0               # red and blue swapped? set 1
+PICOGAME_BAUD    = 24000000        # lower (e.g. 12000000) if you see noise on long breadboard wires
+
+# ── Buttons (active-low: button to GND) ──────────────────────────────────────
+PICOGAME_BUTTONS = "UP=GP4 DOWN=GP5 LEFT=GP3 RIGHT=GP2 A=GP7 B=GP6 X=GP9 Y=GP8"
+
+# ── Audio (optional) ─────────────────────────────────────────────────────────
+PICOGAME_AUDIO   = "GP15"          # PWM speaker pin; omit the line if you have no speaker
+
+# ── launcher/ path ONLY ──────────────────────────────────────────────────────
+# (firmware_boot/ ignores this — there your game is code.py)
+PICOGAME_GAME    = "game"          # the game module the launcher runs (game.py)
