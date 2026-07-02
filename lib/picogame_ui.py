@@ -262,7 +262,9 @@ class TextBox:
     def draw(self, display, buffer, lines, force=False):
         # Skip when unchanged (callers often redraw a static box every frame). force=True repaints
         # even if unchanged (the screen under us was wiped, e.g. a full-screen pg.render).
-        if not force and list(lines) == self._drawn:
+        # Compare element-wise (not `list(lines) == self._drawn`) so the common unchanged frame
+        # allocates NO throwaway list; the retained copy on change is unavoidable.
+        if not force and self._drawn is not None and _seq_eq(lines, self._drawn):
             return
         self._lines = [_txt(x) for x in lines[:self.maxlines]]
         self._drawn = list(lines)
@@ -275,6 +277,17 @@ class TextBox:
             self._lines[i] = str(text)
         self._drawn = None
         self._render(display, buffer)
+
+
+def _seq_eq(a, b):
+    """Element-wise sequence compare WITHOUT allocating a copy (unlike `list(a) == b`), so a
+    per-frame draw of an unchanged text box makes no throwaway list on the hot idle path."""
+    if len(a) != len(b):
+        return False
+    for i in range(len(a)):
+        if a[i] != b[i]:
+            return False
+    return True
 
 
 def _menu_step(btn, sel, top, rows, n, paged):
@@ -329,7 +342,8 @@ class Menu:
         w = width if width else max(60, 11 * max((len(s) for s in self.items), default=4) + 16)
         self.box = TextBox(pg, font, x, y, w, 10 + n * LINE_H, fg, bg, maxlines=n)
         self._title_rows = 1 if title else 0
-        self._drawn = None         # (sel, top) last drawn - detects move vs. scroll vs. idle
+        self._dsel = -1            # last-drawn sel/top (two ints, not a per-frame tuple) - detects
+        self._dtop = -1            # move vs. scroll vs. idle; -1 sentinel forces the first paint
 
     def tick(self, btn):
         self.sel, self.top, a = _menu_step(btn, self.sel, self.top, self.rows, len(self.items), self.paged)
@@ -347,9 +361,8 @@ class Menu:
         # menu was wiped (e.g. a full-screen pg.render), since the incremental paths assume the
         # menu's pixels are still on screen.
         if force:
-            self._drawn = None
-        key = (self.sel, self.top)
-        if key == self._drawn:
+            self._dsel = -1                           # sentinel never matches a real sel -> repaint
+        if self.sel == self._dsel and self.top == self._dtop:
             return
         # Always repaint the whole box on a change: it's a buffer-less StripDraw composited in C in
         # ONE pg.render (no per-row pop-in / flash), so the old incremental 2-row path isn't needed.
@@ -357,7 +370,8 @@ class Menu:
         for i in range(self.top, min(self.top + self.rows, len(self.items))):
             lines.append(self._row_text(i))
         self.box.draw(display, buffer, lines, force=force)
-        self._drawn = key
+        self._dsel = self.sel
+        self._dtop = self.top
 
 
 class SceneMenu:

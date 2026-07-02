@@ -46,10 +46,13 @@ class Shake:
         self.max = max_offset
         self.decay = decay
         self.trauma = 0.0
-        self._r = seed & 0x7FFFFFFF
+        self._r = seed & 0xFFFF
 
-    def _rnd(self):                                  # tiny LCG -> -1.0 .. +1.0
-        self._r = (self._r * 1103515245 + 12345) & 0x7FFFFFFF
+    def _rnd(self):                                  # tiny 16-bit LCG -> -1.0 .. +1.0
+        # 16-bit state + a multiplier under 2^14 keep every intermediate below MicroPython's
+        # 31-bit small-int limit, so a per-frame shake allocates NO transient big-ints (a>0
+        # is ==1 mod 4 and c odd -> full 65536 period; quality is plenty for screen jitter).
+        self._r = (self._r * 12345 + 12345) & 0xFFFF
         return (self._r % 2001 - 1000) / 1000.0
 
     def add(self, amount):
@@ -58,12 +61,14 @@ class Shake:
 
     def tick(self, cam_x=0, cam_y=0):
         """Apply shake on top of (cam_x, cam_y). Returns True while still shaking."""
+        if self.trauma <= 0.0:                       # idle: track the camera, but skip the RNG
+            self.scene.set_view(cam_x, cam_y)         # (no per-frame _rnd() calls when not shaking)
+            return False
         sh = self.trauma * self.trauma
         ox = int(self.max * sh * self._rnd())
         oy = int(self.max * sh * self._rnd())
         self.scene.set_view(cam_x + ox, cam_y + oy)
-        if self.trauma > 0.0:
-            self.trauma = max(0.0, self.trauma - self.decay)
+        self.trauma = max(0.0, self.trauma - self.decay)
         return self.trauma > 0.0
 
 
