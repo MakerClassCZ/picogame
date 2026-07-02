@@ -38,8 +38,8 @@ right_panel.label(terminalio.FONT, W - SIDE + 8, 10, WHITE, "NEXT")
 # A real sprite in the reserved region: proves the border holds graphics the scene
 # never recomputes, not just text. The panel paints it once on redraw().
 right_panel.add(pg.Sprite(shp.rect(24, 24, pg.rgb565(240, 200, 60)), W - SIDE + 8, 28))
-left_panel.redraw()
-right_panel.redraw()
+left_panel.draw()
+right_panel.draw()
 
 x, y, vx, vy = float(W // 2), 40.0, 1.8, 2.4
 score = 0
@@ -51,8 +51,8 @@ while True:
     if x < SIDE + 10 or x > W - SIDE - 10:       # bounce inside the column walls
         vx = -vx
         score += 1
-        left_panel.set_text(score_lbl, "%05d" % score)   # panels update only on change
-        left_panel.redraw()
+        score_lbl.set("%05d" % score)   # panels update only on change
+        left_panel.draw()
     if y < 10 or y > H - 10:
         vy = -vy
     block.fx = x

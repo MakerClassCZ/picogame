@@ -212,6 +212,6 @@ while True:
     hi = FX_MODES[fxi][0]
     if hi != last_hud:
         last_hud = hi
-        hud.set_text(hud_l, "X:%s  A flash  B shake  Y fade" % hi)
-        hud.redraw()
+        hud_l.set("X:%s  A flash  B shake  Y fade" % hi)
+        hud.draw()
     clock.tick()

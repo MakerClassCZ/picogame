@@ -70,7 +70,7 @@ fader = fx.Fade(scene, W, H)                     # black dither fade overlay
 # --- HUD ---
 hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, pg.rgb565(10, 12, 24))
 hud_l = hud.label(terminalio.FONT, 4, 3, INK, "SCORE 0   LIVES 3")
-hud.redraw()
+hud.draw()
 
 rng = picogame_rand.Rand(0x2545)               # seeded = deterministic sim replays
 
@@ -124,8 +124,8 @@ while True:
         gi = (score, lives, True)
         if gi != last_hud:
             last_hud = gi
-            hud.set_text(hud_l, "GAME OVER  %d   A=RETRY" % score)
-            hud.redraw()
+            hud_l.set("GAME OVER  %d   A=RETRY" % score)
+            hud.draw()
         clock.tick()
         continue
 
@@ -197,6 +197,6 @@ while True:
     hi = (score, lives, False)
     if hi != last_hud:
         last_hud = hi
-        hud.set_text(hud_l, "SCORE %d   LIVES %d" % (score, lives))
-        hud.redraw()
+        hud_l.set("SCORE %d   LIVES %d" % (score, lives))
+        hud.draw()
     clock.tick()

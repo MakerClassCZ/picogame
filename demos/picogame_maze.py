@@ -116,7 +116,7 @@ def new_level():
 
 
 new_level()
-hud.redraw()
+hud.draw()
 print("Maze - arrows move, A reveals the door. Find the exit.")
 
 move_cd = 0
@@ -141,8 +141,8 @@ while True:
         px, py = nx, ny
         if (px, py) == (dx, dy):                 # reached the exit -> next level
             level += 1
-            hud.set_text(title, "MAZE  LVL %d" % level)
-            hud.redraw()
+            title.set("MAZE  LVL %d" % level)
+            hud.draw()
             new_level()
         else:
             reveal(px, py)
