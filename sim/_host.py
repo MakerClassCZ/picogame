@@ -118,12 +118,14 @@ def _present_pygame():
 def setup_keymap():
     """Map keyboard -> PicoPad SW_* pins (call after pygame init)."""
     import pygame
+    # Move with the arrows OR WASD; face buttons on the F/G (A/B) + R/T (X/Y) cluster right of WASD,
+    # plus the Ctrl/Space thumb keys, and Q/E as the second X/Y. NO Shift (5x = Windows Sticky Keys).
     _KEYMAP.update({
         pygame.K_UP: "SW_UP", pygame.K_DOWN: "SW_DOWN",
         pygame.K_LEFT: "SW_LEFT", pygame.K_RIGHT: "SW_RIGHT",
-        # A = Ctrl (or Z), B = Space (or X). Layout-independent + comfortable on a Czech QWERTZ
-        # keyboard. NO Shift (pressing it 5x triggers Windows Sticky Keys).
-        pygame.K_z: "SW_A", pygame.K_LCTRL: "SW_A", pygame.K_RCTRL: "SW_A",
-        pygame.K_x: "SW_B", pygame.K_SPACE: "SW_B",
-        pygame.K_a: "SW_X", pygame.K_s: "SW_Y",
+        pygame.K_w: "SW_UP", pygame.K_s: "SW_DOWN", pygame.K_a: "SW_LEFT", pygame.K_d: "SW_RIGHT",
+        pygame.K_f: "SW_A", pygame.K_LCTRL: "SW_A", pygame.K_RCTRL: "SW_A",
+        pygame.K_g: "SW_B", pygame.K_SPACE: "SW_B",
+        pygame.K_r: "SW_X", pygame.K_q: "SW_X",
+        pygame.K_t: "SW_Y", pygame.K_e: "SW_Y",
     })

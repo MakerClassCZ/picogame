@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # Run a picogame game/demo on the desktop simulator.
 #
-#   python sim/run.py examples/picogame_pacman.py                 # headless, ~120 frames
-#   python sim/run.py examples/picogame_pacman.py --shot out.png  # + save a screenshot
-#   python sim/run.py examples/picogame_arkanoid.py --backend pygame   # live window
-#   python sim/run.py examples/picogame_picowing.py --profile          # cProfile + allocation report
+#   python sim/run.py examples/picogame_arkanoid.py               # live window (needs pygame)
+#   python sim/run.py examples/picogame_pacman.py --shot out.png  # headless + save a screenshot
+#   python sim/run.py examples/picogame_pacman.py --backend pil   # force headless
+#   python sim/run.py examples/picogame_picowing.py --profile     # cProfile + allocation report
 #
 # Resolves imports: sim/ provides `picogame` + the CircuitPython stubs, lib/ the
 # picogame_* helpers, and the game's own dir its assets (we chdir there so relative
@@ -85,7 +85,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("game")
     ap.add_argument("--frames", type=int, default=150)
-    ap.add_argument("--backend", choices=("pil", "pygame"), default="pil")
+    ap.add_argument("--backend", choices=("pil", "pygame"), default=None,
+                    help="pygame = live window, pil = headless. Default: a live window if pygame is "
+                         "installed, else headless (screenshot / CI runs use pil).")
     ap.add_argument("--shot", default=None)
     ap.add_argument("--shot-at", type=int, default=None)
     ap.add_argument("--hold", default=None,
@@ -95,6 +97,19 @@ def main():
                     help="headless run under cProfile + tracemalloc; print a perf report "
                          "(call counts, time [sim-skewed], per-frame game/lib allocation)")
     args = ap.parse_args()
+
+    # Backend default: a human running `run.py game.py` wants to SEE it, so open a live pygame window
+    # when pygame is available. A screenshot/profile run (or a box without pygame) stays headless (pil).
+    if args.backend is None:
+        if args.shot or args.shot_at or args.profile:
+            args.backend = "pil"
+        else:
+            try:
+                import pygame  # noqa: F401
+                args.backend = "pygame"
+            except ImportError:
+                args.backend = "pil"
+                print("[sim] pygame not installed -- running headless. `pip install pygame` for a live window.")
 
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
@@ -112,6 +127,8 @@ def main():
                     shot=args.shot, shot_at=args.shot_at)
     if args.backend == "pygame":
         _host.setup_keymap()
+        print("[sim] controls: arrows / WASD = move,  F / Ctrl = A,  G / Space = B,  "
+              "R / Q = X,  T / E = Y,  close the window to quit")
     if args.hold:                      # hold buttons for the whole run (input testing)
         for name in args.hold.split(","):
             _host.pressed_pins.add("SW_" + name.strip().upper())
