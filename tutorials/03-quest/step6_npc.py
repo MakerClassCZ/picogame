@@ -1,14 +1,24 @@
-# Quest -- step 6: an NPC you can talk to.
+# Quest -- step 6: an NPC you can talk to (and a State object to tidy up).
 #
-# What you learn: interaction + a simple state machine for dialog. An NPC is a
-# sprite; when the hero stands next to it and presses A we switch to a "dialog"
-# state: the world keeps drawing underneath, and picogame_ui.TextBox draws a
-# multi-line message box on top (a screen-space overlay, drawn after scene.refresh).
-# While in dialog we DON'T process movement -- the game is paused on the box until
-# you press a button to dismiss it.
+# What you learn: interaction + a simple state machine for dialog, AND how to keep
+# the growing pile of game variables under control. An NPC is a sprite; when the hero
+# stands next to it and presses A we switch to a DIALOG mode: the world keeps drawing
+# underneath, and picogame_ui.TextBox draws a multi-line message box on top (a
+# screen-space overlay, drawn after scene.refresh). While in dialog we DON'T process
+# movement -- the game is paused on the box until you press a button to dismiss it.
 #
-# New vs step 5: an NPC sprite, an over/dialog state, picogame_ui.TextBox, freezing
-# the world during dialog, an adjacency "PRESS A" prompt.
+# State object: the loose module variables have been piling up (facing, coins, a
+# mode, a "dialog shown" flag...) and the next steps add HP, a cooldown, a quest
+# stage. Instead of a scatter of globals (and a `global` in every function that
+# touches them), we group them in ONE `class State` and make `st = State()`. Now it's
+# `st.coins`, `st.mode`, with no `global` needed. Objects that never get REASSIGNED
+# (the hero Sprite, the world Tilemap, the labels) stay plain module-level names;
+# State holds only the mutable scalars. The game mode is a named INT constant
+# (EXPLORE / DIALOG) rather than a magic string, so a branch reads `st.mode ==
+# DIALOG`.
+#
+# New vs step 5: an NPC sprite, a State object, a mode machine (EXPLORE/DIALOG),
+# picogame_ui.TextBox, freezing the world during dialog, an adjacency "PRESS A" prompt.
 #
 # Run:  python3 sim/run.py tutorials/03-quest/step6_npc.py --shot /tmp/q6.png
 
@@ -56,6 +66,7 @@ TILE_RGB = [(40, 120, 50), (180, 160, 110), (40, 90, 200), (20, 80, 30),
 SOLID = (3, 4, 5, 6)
 DOWN, UP, LEFT, RIGHT = 0, 1, 2, 3
 FACE_NAME = ("down", "up", "left", "right")
+EXPLORE, DIALOG = 0, 1                        # game modes (int constants, not strings)
 BACKGROUND = pg.rgb565(0, 0, 0)
 WHITE = pg.rgb565(255, 255, 255)
 NAVY = pg.rgb565(10, 10, 40)
@@ -119,10 +130,17 @@ hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, WHITE, BACKGROUND)
 dialog = ui.TextBox(pg, terminalio.FONT, 8, H - 60, W - 16, 54, WHITE, NAVY, maxlines=4)
 LINES = ["Villager:", "Beware the slimes in the", "tall grass, traveller.", "(press A)"]
 
-facing = DOWN
-coins_collected = 0
-state = "over"
-dlg_shown = False                             # draw the modal once, not every frame
+
+class State:
+    """All the mutable game variables in one place (was a pile of module globals)."""
+    def __init__(self):
+        self.facing = DOWN
+        self.coins = 0
+        self.mode = EXPLORE               # EXPLORE = walking around, DIALOG = talking
+        self.dlg_shown = False            # draw the modal once, not every frame
+
+
+st = State()
 
 
 def solid_at(pixel_x, pixel_y):
@@ -142,9 +160,9 @@ def near_npc():
 
 
 def follow():
-    ox = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
-    oy = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
-    scene.set_view(int(ox), int(oy))
+    offset_x = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
+    offset_y = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
+    scene.set_view(int(offset_x), int(offset_y))
 
 
 follow()
@@ -152,13 +170,13 @@ dt = 1 / 30
 while True:
     btn.poll()
 
-    if state == "dialog":
-        if not dlg_shown:                     # draw ONCE -> no per-frame flicker
+    if st.mode == DIALOG:
+        if not st.dlg_shown:                  # draw ONCE -> no per-frame flicker
             scene.refresh()                   # world frozen under the box
             dialog.draw(board.DISPLAY, buffer_a, LINES)
-            dlg_shown = True
+            st.dlg_shown = True
         if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
-            state = "over"
+            st.mode = EXPLORE
             scene.invalidate()                # repaint over the box next frame
         clock.tick()
         continue
@@ -166,9 +184,9 @@ while True:
     delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
     delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
     if delta_x:
-        facing = RIGHT if delta_x > 0 else LEFT
+        st.facing = RIGHT if delta_x > 0 else LEFT
     elif delta_y:
-        facing = DOWN if delta_y > 0 else UP
+        st.facing = DOWN if delta_y > 0 else UP
 
     moved = False
     if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
@@ -177,21 +195,21 @@ while True:
         hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
     if moved:
         follow()
-        walk.play(FACE_NAME[facing]); walk.tick(dt)
+        walk.play(FACE_NAME[st.facing]); walk.tick(dt)
     else:
-        hero.frame = facing * 2
+        hero.frame = st.facing * 2
 
     for coin in coins:
         if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
             coin.visible = False
-            coins_collected += 1
+            st.coins += 1
 
     if near_npc():
-        hud.set("COINS %d/%d   A: TALK" % (coins_collected, len(coins)))
+        hud.set("COINS %d/%d   A: TALK" % (st.coins, len(coins)))
         if btn.just_pressed(btn.A):
-            state = "dialog"; dlg_shown = False
+            st.mode = DIALOG; st.dlg_shown = False
     else:
-        hud.set("COINS %d/%d" % (coins_collected, len(coins)))
+        hud.set("COINS %d/%d" % (st.coins, len(coins)))
 
     scene.refresh()
     dt = clock.tick()

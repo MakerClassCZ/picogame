@@ -6,8 +6,12 @@
 # drain you instantly. Press B to swing: we defeat any slime in the tile just ahead
 # of the way you're facing. HP shows in the HUD; reaching 0 sends you back to start.
 #
+# The State object from step 6 keeps paying off: HP, the hurt cooldown and a frame
+# counter just become more `st.` fields -- no new globals, no `global` soup.
+#
 # New vs step 6: enemy sprites with chase AI, player HP + a brief hurt cooldown + knock-back,
-# a B attack in the facing direction. (A still talks to the NPC.)
+# a white hit-flash (sprite.flash) on damage, a B attack in the facing direction. (A still
+# talks to the NPC.)
 #
 # Run:  python3 sim/run.py tutorials/03-quest/step7_combat.py --hold B --shot /tmp/q7.png
 
@@ -56,6 +60,7 @@ SOLID = (3, 4, 5, 6)
 DOWN, UP, LEFT, RIGHT = 0, 1, 2, 3
 DIR = {DOWN: (0, 1), UP: (0, -1), LEFT: (-1, 0), RIGHT: (1, 0)}
 FACE_NAME = ("down", "up", "left", "right")
+EXPLORE, DIALOG = 0, 1                        # game modes (int constants, not strings)
 BACKGROUND = pg.rgb565(0, 0, 0)
 WHITE = pg.rgb565(255, 255, 255)
 NAVY = pg.rgb565(10, 10, 40)
@@ -125,13 +130,20 @@ hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, WHITE, BACKGROUND)
 dialog = ui.TextBox(pg, terminalio.FONT, 8, H - 60, W - 16, 54, WHITE, NAVY, maxlines=4)
 LINES = ["Villager:", "Slimes ahead! Press B to", "swing at them.", "(press A)"]
 
-facing = DOWN
-coins_collected = 0
-hp = 6
-hurt_cooldown = 0
-state = "over"
-frame = 0
-dlg_shown = False                             # draw the modal once, not every frame
+
+class State:
+    """All the mutable game variables in one place (grows as the game does)."""
+    def __init__(self):
+        self.facing = DOWN
+        self.coins = 0
+        self.hp = 6
+        self.hurt_cooldown = 0            # frames of mercy after a hit (i-frames)
+        self.mode = EXPLORE              # EXPLORE = walking around, DIALOG = talking
+        self.frame = 0                   # frame counter (slimes chase every other frame)
+        self.dlg_shown = False           # draw the modal once, not every frame
+
+
+st = State()
 
 
 def solid_at(pixel_x, pixel_y):
@@ -151,53 +163,53 @@ def near(a, bx, by, d=TILE):
 
 
 def follow():
-    ox = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
-    oy = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
-    scene.set_view(int(ox), int(oy))
+    offset_x = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
+    offset_y = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
+    scene.set_view(int(offset_x), int(offset_y))
 
 
 follow()
 dt = 1 / 30
 while True:
     btn.poll()
-    frame += 1
+    st.frame += 1
 
-    if state == "dialog":
-        if not dlg_shown:                     # draw ONCE -> no per-frame flicker
+    if st.mode == DIALOG:
+        if not st.dlg_shown:                  # draw ONCE -> no per-frame flicker
             scene.refresh()
             dialog.draw(board.DISPLAY, buffer_a, LINES)
-            dlg_shown = True
+            st.dlg_shown = True
         if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
-            state = "over"; scene.invalidate()
+            st.mode = EXPLORE; scene.invalidate()
         clock.tick()
         continue
 
     delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
     delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
     if delta_x:
-        facing = RIGHT if delta_x > 0 else LEFT
+        st.facing = RIGHT if delta_x > 0 else LEFT
     elif delta_y:
-        facing = DOWN if delta_y > 0 else UP
+        st.facing = DOWN if delta_y > 0 else UP
     moved = False
     if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
         hero.move(hero.x + delta_x * SPEED, hero.y); moved = True
     if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
         hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
     if moved:
-        follow(); walk.play(FACE_NAME[facing]); walk.tick(dt)
+        follow(); walk.play(FACE_NAME[st.facing]); walk.tick(dt)
     else:
-        hero.frame = facing * 2
+        hero.frame = st.facing * 2
 
     # attack: defeat a slime in the tile ahead of the facing
     if btn.just_pressed(btn.B):
-        ddx, ddy = DIR[facing]
+        ddx, ddy = DIR[st.facing]
         ax, ay = hero.x + ddx * TILE, hero.y + ddy * TILE
         for enemy in enemies:
             if enemy.visible and abs(enemy.x - ax) < TILE and abs(enemy.y - ay) < TILE:
                 enemy.visible = False
 
     # slimes chase (slower: move every other frame) and respect walls
-    if frame % 2 == 0:
+    if st.frame % 2 == 0:
         for enemy in enemies:
             if not enemy.visible:
                 continue
@@ -209,29 +221,32 @@ while True:
                 enemy.move(enemy.x, enemy.y + sy)
 
     # take damage on contact (unless the cooldown from the last hit is still running)
-    if hurt_cooldown > 0:
-        hurt_cooldown -= 1                 # count the "safe" frames down
+    if st.hurt_cooldown > 0:
+        st.hurt_cooldown -= 1              # count the "safe" frames down
+        if st.hurt_cooldown == 37:        # ...and end the hit-flash after 3 frames
+            hero.flash = None
     else:
         for enemy in enemies:
             if enemy.visible and near(enemy, hero.x, hero.y, 13):
-                hp -= 1
-                hurt_cooldown = 40        # 40 frames where another touch can't hurt you
-                if hp <= 0:                   # down -> back to start, full HP
-                    hp = 6
+                st.hp -= 1
+                st.hurt_cooldown = 40     # 40 frames where another touch can't hurt you
+                hero.flash = WHITE        # white blit-flash for 3 frames: "I got hit"
+                if st.hp <= 0:                # down -> back to start, full HP
+                    st.hp = 6
                     hero.move(START[0], START[1])
                     follow()
                 break
 
     for coin in coins:
         if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
-            coin.visible = False; coins_collected += 1
+            coin.visible = False; st.coins += 1
 
     if near(hero, npc.x, npc.y):
-        hud.set("HP %d  COINS %d/%d  A:TALK B:SWING" % (hp, coins_collected, len(coins)))
+        hud.set("HP %d  COINS %d/%d  A:TALK B:SWING" % (st.hp, st.coins, len(coins)))
         if btn.just_pressed(btn.A):
-            state = "dialog"; dlg_shown = False
+            st.mode = DIALOG; st.dlg_shown = False
     else:
-        hud.set("HP %d  COINS %d/%d" % (hp, coins_collected, len(coins)))
+        hud.set("HP %d  COINS %d/%d" % (st.hp, st.coins, len(coins)))
 
     scene.refresh()
     dt = clock.tick()

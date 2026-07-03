@@ -38,9 +38,10 @@ try:
     import picogame_audio
     audio = picogame_audio.Audio()
     blip = picogame_audio.tone(660, 35)
+    lose = picogame_audio.tone(150, 160)         # low tone when a ball is missed
 except Exception:
     audio = None
-    blip = None
+    blip = lose = None
 
 
 def paddle_art(w, h):
@@ -129,6 +130,8 @@ while True:
 
     if ball.fy > H:
         lives -= 1
+        if audio:
+            audio.sfx(lose)                      # low tone on a missed ball
         if lives <= 0:
             lives = 3
             score = 0

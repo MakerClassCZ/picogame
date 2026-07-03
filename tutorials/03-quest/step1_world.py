@@ -6,7 +6,7 @@
 # light combat. Do 01-bounce and 02-starship first.
 #
 # What you learn here: a Tilemap can be a whole WORLD (30x20 tiles = 480x320 px,
-# bigger than the 320x240 screen). scene.set_view(ox, oy) chooses which part of the
+# bigger than the 320x240 screen). scene.set_view(offset_x, offset_y) chooses which part of the
 # world is on screen -- that's the camera. We centre it on the hero. The hero lives
 # in WORLD coordinates; the view offset decides where that lands on screen.
 #
@@ -92,9 +92,9 @@ scene.add(hero)
 
 def follow():
     # centre the camera on the hero, clamped so we never show past the world edges
-    ox = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
-    oy = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
-    scene.set_view(int(ox), int(oy))
+    offset_x = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
+    offset_y = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
+    scene.set_view(int(offset_x), int(offset_y))
 
 
 follow()

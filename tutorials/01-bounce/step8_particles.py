@@ -7,7 +7,8 @@
 # beep with no .wav file -- a tiny blip on each hit. (Audio is wrapped in try/except
 # so it degrades gracefully where there's no audio output, e.g. the simulator.)
 #
-# New vs step 7: pg.Particles (emit/tick), picogame_audio.tone() + Audio().sfx().
+# New vs step 7: pg.Particles (emit/tick), picogame_audio.tone() + Audio().sfx()
+# (a blip on each hit and a low tone when you miss the ball).
 #
 # Run:  python3 sim/run.py tutorials/01-bounce/step8_particles.py --shot /tmp/s8.png
 
@@ -36,9 +37,10 @@ try:
     import picogame_audio
     audio = picogame_audio.Audio()
     blip = picogame_audio.tone(660, 35)
+    lose = picogame_audio.tone(150, 160)         # low tone when a ball is missed
 except Exception:
     audio = None
-    blip = None
+    blip = lose = None
 
 brick_colors = [pg.rgb565(220, 70, 70), pg.rgb565(230, 150, 50),
                 pg.rgb565(70, 200, 90), pg.rgb565(80, 150, 230)]
@@ -118,6 +120,8 @@ while True:
 
     if ball.fy > H:
         lives -= 1
+        if audio:
+            audio.sfx(lose)                      # low tone on a missed ball
         if lives <= 0:
             lives = 3
             score = 0

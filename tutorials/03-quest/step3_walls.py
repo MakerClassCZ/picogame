@@ -97,9 +97,9 @@ def can_walk(pixel_x, pixel_y):
 
 
 def follow():
-    ox = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
-    oy = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
-    scene.set_view(int(ox), int(oy))
+    offset_x = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
+    offset_y = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
+    scene.set_view(int(offset_x), int(offset_y))
 
 
 follow()

@@ -17,7 +17,7 @@ may screenshot without its text even though it renders fine on device and in the
 ### step 1 — `step1_world.py` · a world bigger than the screen
 An ASCII map becomes a `Tilemap` (30×20 tiles = 480×320 px, larger than the 320×240
 screen). `shp.tileset_colors` builds the tileset (grass/path/water/tree/wall/door/goal).
-`scene.set_view(ox, oy)` chooses the visible window — that's the camera. The hero lives in
+`scene.set_view(offset_x, offset_y)` chooses the visible window — that's the camera. The hero lives in
 **world** coordinates; the view offset decides where it lands on screen. **You see:** a
 patch of world with the hero centred. **Try it:** edit the `MAP` strings.
 

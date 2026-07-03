@@ -4,7 +4,7 @@
 # Kenney "Tiny Dungeon" (CC0): our tile values now draw real tiles (floor / floor /
 # lava / barrel / brick wall / door / chest), so a "dungeon" falls out of the same
 # map. The hero, slime and coins are Tiny Dungeon sprites. Everything else -- camera,
-# collision, combat, dialog, quest -- is byte-for-byte step 8.
+# collision, combat, dialog, quest, the State object -- is byte-for-byte step 8.
 #
 # Note: these sprites are single-frame, so the hero shows no walk/facing animation
 # (frame index just clamps). To keep the walk cycle, author a sheet in the 8-frame
@@ -62,6 +62,7 @@ SOLID = (3, 4, 5, 6)
 DOWN, UP, LEFT, RIGHT = 0, 1, 2, 3
 DIR = {DOWN: (0, 1), UP: (0, -1), LEFT: (-1, 0), RIGHT: (1, 0)}
 FACE_NAME = ("down", "up", "left", "right")
+EXPLORE, DIALOG, WON = 0, 1, 2                # game modes (int constants, not strings)
 BG = pg.rgb565(0, 0, 0)
 WHITE = pg.rgb565(255, 255, 255)
 NAVY = pg.rgb565(10, 10, 40)
@@ -131,16 +132,23 @@ walk = picogame_anim.AnimatedSprite(hero, {
 scene.add(hero)
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, WHITE, BG)
 dlg = ui.TextBox(pg, terminalio.FONT, 8, H - 64, W - 16, 58, WHITE, NAVY, maxlines=4)
-
-facing = DOWN
-got = 0
-hp = 6
-hurt_cooldown = 0
-stage = 0                                     # 0 not started, 1 collecting, 2 door open
-state = "over"
-frame = 0
 NUMCOINS = len(coins)
-overlay_shown = False                         # draw dialog/win modal once, not every frame
+
+
+class State:
+    """The whole game's mutable state -- one object, passed where a function needs it."""
+    def __init__(self):
+        self.facing = DOWN
+        self.got = 0                     # coins collected
+        self.hp = 6
+        self.hurt_cooldown = 0
+        self.stage = 0                   # 0 not started, 1 collecting, 2 door open
+        self.mode = EXPLORE             # EXPLORE / DIALOG / WON
+        self.frame = 0
+        self.overlay_shown = False       # draw dialog/win modal once, not every frame
+
+
+st = State()
 
 
 def solid_at(pixel_x, pixel_y):
@@ -160,17 +168,17 @@ def near(a, bx, by, d=TILE):
 
 
 def follow():
-    ox = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
-    oy = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
-    scene.set_view(int(ox), int(oy))
+    offset_x = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
+    offset_y = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
+    scene.set_view(int(offset_x), int(offset_y))
 
 
-def dialog_lines():
-    if stage == 0:
+def dialog_lines(st):
+    if st.stage == 0:
         return ["Villager:", "Bring me all %d coins and" % NUMCOINS,
                 "I'll open the shrine door.", "(press A)"]
-    if stage == 1 and got < NUMCOINS:
-        return ["Villager:", "You have %d of %d coins." % (got, NUMCOINS),
+    if st.stage == 1 and st.got < NUMCOINS:
+        return ["Villager:", "You have %d of %d coins." % (st.got, NUMCOINS),
                 "Keep looking!", "(press A)"]
     return ["Villager:", "The door is open.",
             "Seek the shrine within.", "(press A)"]
@@ -186,57 +194,57 @@ follow()
 dt = 1 / 30
 while True:
     btn.poll()
-    frame += 1
+    st.frame += 1
 
-    if state == "win":
-        if not overlay_shown:                 # draw ONCE -> no per-frame flicker
+    if st.mode == WON:
+        if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
             scene.refresh()
             dlg.draw(board.DISPLAY, buffer_a, ["You reached the shrine!", "", "QUEST COMPLETE", "(press A)"])
-            overlay_shown = True
+            st.overlay_shown = True
         if btn.just_pressed(btn.A):
-            state = "over"; scene.invalidate()
+            st.mode = EXPLORE; scene.invalidate()
         clock.tick()
         continue
 
-    if state == "dialog":
-        if not overlay_shown:                 # draw ONCE -> no per-frame flicker
+    if st.mode == DIALOG:
+        if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
             scene.refresh()
-            dlg.draw(board.DISPLAY, buffer_a, dialog_lines())
-            overlay_shown = True
+            dlg.draw(board.DISPLAY, buffer_a, dialog_lines(st))
+            st.overlay_shown = True
         if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
-            if stage == 0:
-                stage = 1
-            elif stage == 1 and got >= NUMCOINS:
-                stage = 2
+            if st.stage == 0:
+                st.stage = 1
+            elif st.stage == 1 and st.got >= NUMCOINS:
+                st.stage = 2
                 open_door()
-            state = "over"; scene.invalidate()
+            st.mode = EXPLORE; scene.invalidate()
         clock.tick()
         continue
 
     delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
     delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
     if delta_x:
-        facing = RIGHT if delta_x > 0 else LEFT
+        st.facing = RIGHT if delta_x > 0 else LEFT
     elif delta_y:
-        facing = DOWN if delta_y > 0 else UP
+        st.facing = DOWN if delta_y > 0 else UP
     moved = False
     if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
         hero.move(hero.x + delta_x * SPEED, hero.y); moved = True
     if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
         hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
     if moved:
-        follow(); walk.play(FACE_NAME[facing]); walk.tick(dt)
+        follow(); walk.play(FACE_NAME[st.facing]); walk.tick(dt)
     else:
-        hero.frame = facing * 2
+        hero.frame = st.facing * 2
 
     if btn.just_pressed(btn.B):
-        ddx, ddy = DIR[facing]
+        ddx, ddy = DIR[st.facing]
         ax, ay = hero.x + ddx * TILE, hero.y + ddy * TILE
         for e in enemies:
             if e.visible and abs(e.x - ax) < TILE and abs(e.y - ay) < TILE:
                 e.visible = False
 
-    if frame % 2 == 0:
+    if st.frame % 2 == 0:
         for e in enemies:
             if not e.visible:
                 continue
@@ -247,36 +255,36 @@ while True:
             if sy and can_walk(e.x, e.y + sy):
                 e.move(e.x, e.y + sy)
 
-    if hurt_cooldown > 0:
-        hurt_cooldown -= 1
+    if st.hurt_cooldown > 0:
+        st.hurt_cooldown -= 1
     else:
         for e in enemies:
             if e.visible and near(e, hero.x, hero.y, 13):
-                hp -= 1
-                hurt_cooldown = 40
-                if hp <= 0:
-                    hp = 6
+                st.hp -= 1
+                st.hurt_cooldown = 40
+                if st.hp <= 0:
+                    st.hp = 6
                     hero.move(START[0], START[1]); follow()
                 break
 
     for c in coins:
         if c.visible and abs(hero.x - c.x) < 12 and abs(hero.y - c.y) < 12:
-            c.visible = False; got += 1
+            c.visible = False; st.got += 1
 
     # reach the shrine (goal tile) once the door is open
-    if stage >= 2:
+    if st.stage >= 2:
         ctx = (hero.x + TILE // 2) // TILE
         cty = (hero.y + TILE // 2) // TILE
         if world.tile(ctx, cty) == 7:
-            state = "win"; overlay_shown = False
+            st.mode = WON; st.overlay_shown = False
 
     if near(hero, npc.x, npc.y):
-        hud.set("HP %d  COINS %d/%d  A:TALK" % (hp, got, NUMCOINS))
+        hud.set("HP %d  COINS %d/%d  A:TALK" % (st.hp, st.got, NUMCOINS))
         if btn.just_pressed(btn.A):
-            state = "dialog"; overlay_shown = False
+            st.mode = DIALOG; st.overlay_shown = False
     else:
-        obj = "FIND THE COINS" if stage < 1 or got < NUMCOINS else ("DOOR OPEN!" if stage >= 2 else "RETURN TO NPC")
-        hud.set("HP %d  COINS %d/%d  %s" % (hp, got, NUMCOINS, obj))
+        obj = "FIND THE COINS" if st.stage < 1 or st.got < NUMCOINS else ("DOOR OPEN!" if st.stage >= 2 else "RETURN TO NPC")
+        hud.set("HP %d  COINS %d/%d  %s" % (st.hp, st.got, NUMCOINS, obj))
 
     scene.refresh()
     dt = clock.tick()

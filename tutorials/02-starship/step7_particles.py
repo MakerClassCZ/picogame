@@ -59,7 +59,7 @@ angle = 0
 velocity_x = velocity_y = 0.0
 fire_cooldown = 0
 lives = 3
-inv = 60
+invincible = 60
 wave = 3
 score = 0
 frame = 0
@@ -87,10 +87,10 @@ def new_wave(count):
 
 
 def respawn():
-    global velocity_x, velocity_y, inv
+    global velocity_x, velocity_y, invincible
     ship.fx, ship.fy = float(W // 2), float(H // 2)
     velocity_x = velocity_y = 0.0
-    inv = 90
+    invincible = 90
 
 
 new_wave(wave)
@@ -98,8 +98,8 @@ while True:
     btn.poll()
     frame += 1
     fire_cooldown -= 1
-    if inv > 0:
-        inv -= 1
+    if invincible > 0:
+        invincible -= 1
 
     if btn.is_pressed(btn.LEFT):
         angle = (angle - 1) % FRAMES
@@ -116,7 +116,7 @@ while True:
     velocity_x *= 0.99; velocity_y *= 0.99
     ship.fx, ship.fy = wrap(ship.fx + velocity_x, ship.fy + velocity_y)
     ship.frame = angle
-    ship.visible = (inv <= 0) or (frame & 1)
+    ship.visible = (invincible <= 0) or (frame & 1)
 
     if btn.just_pressed(btn.B) and fire_cooldown <= 0:
         bullet = bullets.spawn()
@@ -156,7 +156,7 @@ while True:
                         spawn_rock(size + 1, rock.fx, rock.fy,
                                    rock.data["velocity_x"] + sign * 0.8, rock.data["velocity_y"] - sign * 0.8)
                 break
-        if inv <= 0 and rock.visible and ship.near(rock, radius + 6):
+        if invincible <= 0 and rock.visible and ship.near(rock, radius + 6):
             lives -= 1
             sparks.emit(ship.x, ship.y, 24, 4, 30, pg.rgb565(120, 200, 255))
             respawn()
