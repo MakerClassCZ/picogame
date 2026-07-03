@@ -41,10 +41,16 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
     if strip_h is None:
         strip_h = getattr(pg, "STRIP_H", 8)   # board compile-time default (CIRCUITPY_PICOGAME_STRIP_H; 8 DMA/24 not)
     display = display if display is not None else board.DISPLAY
-    display.auto_refresh = False
+    # A framebuffer render target (picogame.Framebuffer, on scanout-buffer platforms like the WASM
+    # playground / FruitJam) has no auto_refresh / root_group; a BusDisplay does. Set them only
+    # where present so setup() works with either target. (A real display still gets both.)
+    try:
+        display.auto_refresh = False
+    except (AttributeError, TypeError):
+        pass
     try:
         display.root_group = None
-    except Exception:
+    except (AttributeError, TypeError):
         pass
     w = display.width
     buf_a = bytearray(w * strip_h * 2)

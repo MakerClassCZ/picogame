@@ -118,10 +118,16 @@ def load_bank(pg, bank):
 
 def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
     display = display if display is not None else board.DISPLAY
-    display.auto_refresh = False
+    # A framebuffer render target (picogame.Framebuffer, on scanout-buffer platforms like the
+    # WASM playground / FruitJam) has no auto_refresh / root_group; a BusDisplay does. Set them
+    # only where present so load() works with either target. (A real display still gets both.)
+    try:
+        display.auto_refresh = False
+    except (AttributeError, TypeError):
+        pass
     try:
         display.root_group = None
-    except Exception:
+    except (AttributeError, TypeError):
         pass
     if strip_h is None:
         strip_h = getattr(pg, "STRIP_H", 8)   # board default (8 DMA / 24 not)
