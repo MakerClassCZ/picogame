@@ -1,4 +1,4 @@
-#Picotris on picogame - a Tilemap + PLAY-AREA showcase. The well is a Tilemap in a RESERVED centre
+# Picotris on picogame - a Tilemap + PLAY-AREA showcase. The well is a Tilemap in a RESERVED centre
 # column (Scene left=/right=), so the scene paints ONLY that column; the side panels (score/lines/
 # level + next-piece) are static chrome drawn once, never recomputed per frame. Dirty-rect means only
 # the cells that actually change repaint. 7-bag randomiser, ghost piece, next preview, line-clear
@@ -86,18 +86,12 @@ well = pg.Tilemap(tileset, COLS, ROWS)
 well.move(SIDE, PY)
 scene.add(well)
 
-# next-piece preview: one pre-built 32x32 mini-bitmap per shape (no per-spawn allocation), swapped in.
-NTILE, NGRID = 8, 4
-NEXT_BMP = {}
-for nm, (col, rots) in SHAPES.items():
-    nstride = NTILE * NGRID
-    nd = bytearray(nstride * NTILE * NGRID)
-    for (cx, cy) in rots[0]:
-        for yy in range(NTILE):
-            for xx in range(NTILE):
-                edge = (xx == 0 or yy == 0 or xx == NTILE - 1 or yy == NTILE - 1)
-                nd[(cy * NTILE + yy) * nstride + cx * NTILE + xx] = 8 if edge else col
-    NEXT_BMP[nm] = pg.Bitmap(nd, nstride, NTILE * NGRID, format=pg.PAL8, palette=pal, transparent=0)
+# next-piece preview: 4 mini cells that SHARE the main `tileset` (0 extra bitmaps). Each cell is a
+# HudBar icon sprite showing the piece's colour via its .frame; set_next() positions the 4 visible
+# cells (one per block of the shape's spawn rotation) and hides any unused slots.
+NGRID = 4                                              # a 4x4 box holds any spawn rotation
+NPX = TILE                                             # mini cell = one tileset frame (12px)
+next_cells = [pg.Sprite(tileset, 0, 0, visible=False) for _ in range(4)]
 
 # --- side panels: static chrome the scene never repaints (one redraw; updated only on change) ---
 left_panel = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, SIDE, H, PANEL)
@@ -109,13 +103,28 @@ left_panel.draw()
 
 right_panel = ui.HudBar(pg, board.DISPLAY, bufA, RX, 0, SIDE, H, PANEL)
 right_panel.label(terminalio.FONT, RX + 10, 10, LABEL, "SCORE")
-score_lbl = right_panel.label(terminalio.FONT, RX + 10, 24, VALUE, "0000000")   # widest -> sized once
+# HudBar labels are buffer-less (just hold a string); "0" is only a placeholder refresh_hud() overwrites.
+score_lbl = right_panel.label(terminalio.FONT, RX + 10, 24, VALUE, "0")
 right_panel.label(terminalio.FONT, RX + 10, 48, LABEL, "LINES")
-lines_lbl = right_panel.label(terminalio.FONT, RX + 10, 62, VALUE, "0000")
+lines_lbl = right_panel.label(terminalio.FONT, RX + 10, 62, VALUE, "0")
 right_panel.label(terminalio.FONT, RX + 10, 86, LABEL, "LEVEL")
-level_lbl = right_panel.label(terminalio.FONT, RX + 10, 100, VALUE, "00")
+level_lbl = right_panel.label(terminalio.FONT, RX + 10, 100, VALUE, "0")
 right_panel.label(terminalio.FONT, RX + 10, 126, LABEL, "NEXT")
-next_spr = right_panel.add(pg.Sprite(NEXT_BMP["T"], RX + (SIDE - NTILE * NGRID) // 2, 142))
+NEXT_OX = RX + (SIDE - NPX * NGRID) // 2                # top-left of the 4x4 preview box
+NEXT_OY = 142
+for _c in next_cells:
+    right_panel.add(_c)                                # blitted into the band at its own x/y + frame
+
+
+def set_next(name):
+    col, rots = SHAPES[name]
+    cells0 = rots[0]
+    for i in range(4):
+        cx, cy = cells0[i]
+        s = next_cells[i]
+        s.frame = col                                  # solid colour tile from the shared tileset
+        s.move(NEXT_OX + cx * NPX, NEXT_OY + cy * NPX)
+        s.visible = True
 
 # --- game state ---
 grid = [[0] * COLS for _ in range(ROWS)]               # locked blocks (0 empty, 1..7 colour)
@@ -132,8 +141,12 @@ def cells(name, rot, ox, oy):
     return [(ox + cx, oy + cy) for (cx, cy) in rots[rot % len(rots)]]
 
 
-def valid(cl):
-    for (x, y) in cl:
+def fits(name, rot, ox, oy):
+    # Allocation-free collision test: walk the 4 SHAPE offsets inline, no list/tuple built per query.
+    rots = SHAPES[name][1]
+    for (cx, cy) in rots[rot % len(rots)]:
+        x = ox + cx
+        y = oy + cy
         if x < 0 or x >= COLS or y >= ROWS:
             return False
         if y >= 0 and grid[y][x]:
@@ -142,7 +155,7 @@ def valid(cl):
 
 
 def refresh_hud():
-    score_lbl.set("%d" % score)      # set_text re-renders only on a real change
+    score_lbl.set("%d" % score)      # HudBar.draw() below repaints the whole band; .set just stores the string
     lines_lbl.set("%d" % lines)
     level_lbl.set("%d" % level)
     right_panel.draw()
@@ -155,9 +168,9 @@ def spawn():
     cur["x"] = 3
     cur["y"] = -1
     nxt = bag.next()
-    next_spr.bitmap = NEXT_BMP[nxt]                     # swap the preview (pre-built, no alloc)
+    set_next(nxt)                                       # reposition the 4 shared-tileset preview cells
     right_panel.draw()
-    if not valid(cells(cur["name"], 0, 3, -1)):         # board full = game over -> fresh game, score reset
+    if not fits(cur["name"], 0, 3, -1):                 # board full = game over -> fresh game, score reset
         for r in range(ROWS):
             for c in range(COLS):
                 grid[r][c] = 0
@@ -200,18 +213,27 @@ def resolve_flash():
 
 def render_board():
     name, rot, cx, cy = cur["name"], cur["rot"], cur["x"], cur["y"]
-    pcells = set(cells(name, rot, cx, cy))
+    shape = SHAPES[name][1][rot % len(SHAPES[name][1])]
+    # Precompute the 4 piece + 4 ghost cells as int keys (y*COLS+x) ONCE, so the 10x18 sweep tests
+    # membership with an int key (no per-cell (x,y) tuple, no 180-360 throwaway allocs per frame).
+    pset = set()
+    for (dx, dy) in shape:
+        pset.add((cy + dy) * COLS + cx + dx)
     gy = cy                                             # ghost = drop the piece straight down
-    while valid(cells(name, rot, cx, gy + 1)):
+    while fits(name, rot, cx, gy + 1):
         gy += 1
-    gcells = set(cells(name, rot, cx, gy))
+    gset = set()
+    for (dx, dy) in shape:
+        gset.add((gy + dy) * COLS + cx + dx)
     color = SHAPES[name][0]
     for y in range(ROWS):
         row = grid[y]
+        base = y * COLS
         for x in range(COLS):
-            if (x, y) in pcells:
+            k = base + x
+            if k in pset:
                 v = color
-            elif row[x] == 0 and (x, y) in gcells:
+            elif row[x] == 0 and k in gset:
                 v = 9                                   # ghost outline on empty cells only
             else:
                 v = row[x]
@@ -234,17 +256,17 @@ while True:
             resolve_flash()
             changed = True
     else:
-        if btn.just_pressed(btn.LEFT) and valid(cells(cur["name"], cur["rot"], cur["x"] - 1, cur["y"])):
+        if btn.just_pressed(btn.LEFT) and fits(cur["name"], cur["rot"], cur["x"] - 1, cur["y"]):
             cur["x"] -= 1
             changed = True
             sfx("move")
-        if btn.just_pressed(btn.RIGHT) and valid(cells(cur["name"], cur["rot"], cur["x"] + 1, cur["y"])):
+        if btn.just_pressed(btn.RIGHT) and fits(cur["name"], cur["rot"], cur["x"] + 1, cur["y"]):
             cur["x"] += 1
             changed = True
             sfx("move")
         if btn.just_pressed(btn.A):
             nr = (cur["rot"] + 1) % len(SHAPES[cur["name"]][1])
-            if valid(cells(cur["name"], nr, cur["x"], cur["y"])):
+            if fits(cur["name"], nr, cur["x"], cur["y"]):
                 cur["rot"] = nr
                 changed = True
                 sfx("rot")
@@ -252,7 +274,7 @@ while True:
         interval = 1 if btn.is_pressed(btn.DOWN) else INTERVALS[min(level, len(INTERVALS) - 1)]
         if grav >= interval:
             grav = 0
-            if valid(cells(cur["name"], cur["rot"], cur["x"], cur["y"] + 1)):
+            if fits(cur["name"], cur["rot"], cur["x"], cur["y"] + 1):
                 cur["y"] += 1
             else:
                 lock_piece()

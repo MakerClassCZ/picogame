@@ -6,7 +6,7 @@
 # tile coincidence, and a bundled-font HUD. Generated art.
 #
 # Copy with picogame_game.py, picogame_input.py, picogame_clock.py,
-# picogame_font.py to CIRCUITPY. Needs the latest firmware.
+# picogame_ui.py to CIRCUITPY. Needs the latest firmware.
 
 import board
 import terminalio
@@ -14,7 +14,7 @@ import picogame as pg
 import picogame_game
 import picogame_input
 import picogame_clock
-import picogame_font
+import picogame_ui as ui
 import picogame_shapes as shp
 import picogame_fx as fx
 
@@ -50,8 +50,8 @@ MAZE = [
 ]
 ROWS = len(MAZE)
 COLS = len(MAZE[0])
-XOFF = (320 - COLS * TILE) // 2
-YOFF = 22
+XOFF = (board.DISPLAY.width - COLS * TILE) // 2   # centre the maze horizontally at any width
+YOFF = 22                                         # maze is ROWS*TILE=210 px -> +22 fits a 240-tall screen
 SPEED = 2                      # must divide TILE
 
 
@@ -78,26 +78,38 @@ maze = pg.Tilemap(tileset, COLS, ROWS)
 maze.move(XOFF, YOFF)
 scene.add(maze)
 
-pellets_left = 0
 pac_start = (1, 1)
 ghost_home = []
+
+
+def fill_pellets():
+    # (re)place the pellet/power tiles (values 2/3) from MAZE; returns the count.
+    n = 0
+    for ty in range(ROWS):
+        for tx in range(COLS):
+            ch = MAZE[ty][tx]
+            if ch == ".":
+                maze.tile(tx, ty, 2)
+                n += 1
+            elif ch == "o":
+                maze.tile(tx, ty, 3)
+                n += 1
+    return n
+
+
+# wall pass + P/G detection (once), then lay the pellets via fill_pellets().
 for ty in range(ROWS):
     for tx in range(COLS):
         ch = MAZE[ty][tx]
         if ch == "#":
             maze.tile(tx, ty, 1)
-        elif ch == ".":
-            maze.tile(tx, ty, 2)
-            pellets_left += 1
-        elif ch == "o":
-            maze.tile(tx, ty, 3)
-            pellets_left += 1
-        else:
+        elif ch not in (".", "o"):
             maze.tile(tx, ty, 0)
         if ch == "P":
             pac_start = (tx, ty)
         elif ch == "G":
             ghost_home.append((tx, ty))
+_pellets_start = fill_pellets()
 
 while len(ghost_home) < 4:
     ghost_home.append((COLS // 2, ROWS // 2))
@@ -114,12 +126,33 @@ ghosts = [pg.Sprite(ghost_bms[i], 0, 0) for i in range(4)]
 scene.add_all(ghosts)
 scene.add(pac)
 
-hud = picogame_font.Label(pg, terminalio.FONT, 4, 4, pg.rgb565(255, 255, 0), BG)
+hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, pg.rgb565(255, 255, 0), BG)
+hud.reserve(24)
 flash = fx.Fade(scene, board.DISPLAY.width, board.DISPLAY.height,
                 color=pg.rgb565(255, 60, 60))   # juice: red flash when a ghost catches you
 
 DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))
-S = {}
+DIR_R, DIR_L, DIR_D, DIR_U = DIRS      # shared constants -> no per-frame tuple alloc
+
+# game state (a State instance `st`)
+# NOTE: the ghost-state dict list is named ghost_states to avoid colliding with
+# the module-level `ghosts` Sprite list.
+class State:
+    def __init__(self):
+        self.score = 0
+        self.lives = 3
+        self.fright = 0
+        self.pac_tx = 0
+        self.pac_ty = 0
+        self.pac_px = 0
+        self.pac_py = 0
+        self.pac_dir = (0, 0)
+        self.pac_want = (0, 0)
+        self.ghost_states = []
+        self.pellets_left = _pellets_start
+
+
+st = State()
 
 
 def tile_is_wall(tx, ty):
@@ -129,29 +162,26 @@ def tile_is_wall(tx, ty):
 
 
 def reset_positions():
-    S["pac_tx"], S["pac_ty"] = pac_start
-    S["pac_px"] = pac_start[0] * TILE
-    S["pac_py"] = pac_start[1] * TILE
-    S["pac_dir"] = (0, 0)
-    S["pac_want"] = (0, 0)
-    S["ghosts"] = []
+    st.pac_tx, st.pac_ty = pac_start
+    st.pac_px = pac_start[0] * TILE
+    st.pac_py = pac_start[1] * TILE
+    st.pac_dir = (0, 0)
+    st.pac_want = (0, 0)
+    st.ghost_states = []
     for i in range(4):
         gx, gy = ghost_home[i % len(ghost_home)]
-        S["ghosts"].append({"px": gx * TILE, "py": gy * TILE,
-                             "dir": (0, -1), "i": i})
+        st.ghost_states.append({"px": gx * TILE, "py": gy * TILE,
+                                "dir": (0, -1), "i": i})
 
 
 def new_game():
-    S.update(score=0, lives=3, fright=0)
+    global st
+    st = State()
     reset_positions()
 
 
 def aligned(px, py):
     return px % TILE == 0 and py % TILE == 0
-
-
-def move_entity(px, py, d):
-    return px + d[0] * SPEED, py + d[1] * SPEED
 
 
 def ghost_choose(g):
@@ -167,8 +197,8 @@ def ghost_choose(g):
         if tile_is_wall(tx + d[0], ty + d[1]):
             continue
         nx, ny = tx + d[0], ty + d[1]
-        dist = abs(nx - S["pac_tx"]) + abs(ny - S["pac_ty"])
-        sc = -dist if S["fright"] > 0 else dist
+        dist = abs(nx - st.pac_tx) + abs(ny - st.pac_ty)
+        sc = -dist if st.fright > 0 else dist
         # lower sc = better (chase: min dist; fright: max dist via negation)
         if best_score is None or sc < best_score:
             best_score = sc
@@ -179,90 +209,96 @@ def ghost_choose(g):
 
 
 new_game()
+# HUD shadow: only reformat+draw the Label when SCORE/LIVES actually change.
+_hud_score = -1
+_hud_lives = -2
+was_fright = False                    # edge-track fright so we swap ghost bitmaps once per edge
 print("D-pad to move. Eat all pellets; power pellets let you eat the blue ghosts.")
-frame = 0
 while True:
     btn.poll()
     flash.tick()                      # animate the hit-flash (no-op while idle)
-    frame += 1
-    if S["fright"] > 0:
-        S["fright"] -= 1
+    if st.fright > 0:
+        st.fright -= 1
+
+    # frightened look: swap all 4 ghost bitmaps only on the fright start/expire edge
+    fright_now = st.fright > 0
+    if fright_now != was_fright:
+        was_fright = fright_now
+        for i in range(4):
+            ghosts[i].bitmap = fright_bm if fright_now else ghost_bms[i]
 
     # --- pac ---
     dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
     dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
-    if dx or dy:
-        S["pac_want"] = (dx, 0) if dx else (0, dy)
+    if dx:
+        st.pac_want = DIR_R if dx > 0 else DIR_L
+    elif dy:
+        st.pac_want = DIR_D if dy > 0 else DIR_U
 
-    px, py = S["pac_px"], S["pac_py"]
+    px, py = st.pac_px, st.pac_py
     if aligned(px, py):
         tx, ty = px // TILE, py // TILE
-        w = S["pac_want"]
+        w = st.pac_want
         if w != (0, 0) and not tile_is_wall(tx + w[0], ty + w[1]):
-            S["pac_dir"] = w
-        d = S["pac_dir"]
+            st.pac_dir = w
+        d = st.pac_dir
         if d != (0, 0) and tile_is_wall(tx + d[0], ty + d[1]):
-            S["pac_dir"] = (0, 0)
+            st.pac_dir = (0, 0)
         # eat
         cell = maze.tile(tx, ty)
         if cell == 2:
             maze.tile(tx, ty, 0)
-            S["score"] += 10
-            pellets_left -= 1
+            st.score += 10
+            st.pellets_left -= 1
         elif cell == 3:
             maze.tile(tx, ty, 0)
-            S["score"] += 50
-            S["fright"] = 180
-            pellets_left -= 1
-        S["pac_tx"], S["pac_ty"] = tx, ty
-    px, py = move_entity(px, py, S["pac_dir"])
+            st.score += 50
+            st.fright = 180
+            st.pellets_left -= 1
+        st.pac_tx, st.pac_ty = tx, ty
+    d = st.pac_dir
+    px += d[0] * SPEED
+    py += d[1] * SPEED
     # horizontal tunnel wrap
     if px < -TILE:
         px = COLS * TILE
     elif px > COLS * TILE:
         px = -TILE
-    S["pac_px"], S["pac_py"] = px, py
+    st.pac_px, st.pac_py = px, py
     pac.move(XOFF + px, YOFF + py)
 
     # --- ghosts ---
-    for g in S["ghosts"]:
+    for g in st.ghost_states:
         if aligned(g["px"], g["py"]):
             ghost_choose(g)
-        g["px"], g["py"] = move_entity(g["px"], g["py"], g["dir"])
-        gx_s = XOFF + g["px"]
-        gy_s = YOFF + g["py"]
-        ghosts[g["i"]].move(gx_s, gy_s)
-        # frightened look via bitmap swap
-        ghosts[g["i"]].bitmap = fright_bm if S["fright"] > 0 else ghost_bms[g["i"]]
-        # collision with pac (same tile)
-        if abs(g["px"] - S["pac_px"]) < TILE and abs(g["py"] - S["pac_py"]) < TILE:
-            if S["fright"] > 0:
-                S["score"] += 200
+        gd = g["dir"]
+        g["px"] += gd[0] * SPEED
+        g["py"] += gd[1] * SPEED
+        gspr = ghosts[g["i"]]
+        gspr.move(XOFF + g["px"], YOFF + g["py"])
+        # collision with pac (native box overlap; both are TILE-sized)
+        if pac.overlaps(gspr):
+            if st.fright > 0:
+                st.score += 200
                 hx, hy = ghost_home[g["i"] % len(ghost_home)]
                 g["px"], g["py"] = hx * TILE, hy * TILE
                 g["dir"] = (0, -1)
             else:
-                S["lives"] -= 1
+                st.lives -= 1
                 flash.pulse()           # juice: flash the screen when caught
-                if S["lives"] < 0:
+                if st.lives < 0:
                     new_game()
                 else:
                     reset_positions()
                 break
 
-    if pellets_left <= 0:           # cleared -> rebuild pellets
-        for ty in range(ROWS):
-            for tx in range(COLS):
-                ch = MAZE[ty][tx]
-                if ch == ".":
-                    maze.tile(tx, ty, 2)
-                    pellets_left += 1
-                elif ch == "o":
-                    maze.tile(tx, ty, 3)
-                    pellets_left += 1
+    if st.pellets_left <= 0:           # cleared -> rebuild pellets
+        st.pellets_left = fill_pellets()
         reset_positions()
 
-    hud.set("SCORE %05d   LIVES %d" % (S["score"], max(0, S["lives"])))
-    hud.draw(board.DISPLAY, bufA)
+    if st.score != _hud_score or st.lives != _hud_lives:
+        _hud_score = st.score
+        _hud_lives = st.lives
+        hud.set("SCORE %05d   LIVES %d" % (st.score, max(0, st.lives)))
     scene.refresh()
     clock.tick()

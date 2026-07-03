@@ -17,7 +17,7 @@ import picogame_shapes as shp
 import picogame_math as m
 import picogame_pool
 
-W, H = 320, 240
+W, H = board.DISPLAY.width, board.DISPLAY.height
 BG = pg.rgb565(0, 0, 8)
 scene, bufA, bufB = picogame_game.setup(background=BG)
 btn = picogame_input.Buttons()
@@ -40,12 +40,32 @@ ship.anchor = (0.5, 0.5)
 # Sprite pools (picogame_pool): visible = the alive flag, .data = per-shot state.
 rocks = picogame_pool.Pool(scene, rock_bm[0], 12, anchor=(0.5, 0.5))
 bullets = picogame_pool.Pool(scene, bullet_bm, 6, anchor=(0.5, 0.5))
+# Pre-seed each pool slot's .data once so spawns MUTATE in place (no per-spawn dict).
+for s in rocks.items:
+    s.data = {"size": 0, "vx": 0.0, "vy": 0.0, "x": 0.0, "y": 0.0}
+for s in bullets.items:
+    s.data = {"vx": 0.0, "vy": 0.0, "life": 0, "x": 0.0, "y": 0.0}
 exhaust = pg.Particles(40, size=2, gravity=0.0)   # engine puff out the ship's tail (no gravity in space)
 scene.add(exhaust)
 scene.add(ship)
 
 hud = picogame_font.Label(pg, terminalio.FONT, 4, 4, pg.rgb565(255, 255, 255), BG)
-S = {}
+
+class State:
+    def __init__(self):
+        self.ang = 0
+        self.sx = float(W // 2)
+        self.sy = float(H // 2)
+        self.vx = 0.0
+        self.vy = 0.0
+        self.score = 0
+        self.lives = 3
+        self.fire_cd = 0
+        self.inv = 60
+        self.wave = 3
+
+
+st = State()
 
 
 def wrap(x, y):
@@ -56,7 +76,12 @@ def spawn_rock(size, x, y, vx, vy):
     r = rocks.spawn()
     if r is None:
         return
-    r.data = {"size": size, "vx": vx, "vy": vy, "x": float(x), "y": float(y)}
+    d = r.data
+    d["size"] = size
+    d["vx"] = vx
+    d["vy"] = vy
+    d["x"] = float(x)
+    d["y"] = float(y)
     r.bitmap = rock_bm[size]
     r.move(int(x), int(y))
 
@@ -71,54 +96,60 @@ def new_wave(n):
 
 
 def new_game():
-    S.update(ang=0, sx=float(W // 2), sy=float(H // 2), vx=0.0, vy=0.0,
-             score=0, lives=3, fire_cd=0, inv=60, wave=3)
+    global st
+    st = State()
     rocks.free_all()
     bullets.free_all()
-    new_wave(S["wave"])
+    new_wave(st.wave)
 
 
 new_game()
 print("LEFT/RIGHT rotate, UP thrust, B fire. Clear the asteroids.")
 frame = 0
+_shown_score, _shown_lives = -1, -1
 while True:
     btn.poll()
     frame += 1
-    S["fire_cd"] -= 1
-    if S["inv"] > 0:
-        S["inv"] -= 1
+    st.fire_cd -= 1
+    if st.inv > 0:
+        st.inv -= 1
 
     # rotate / thrust  (ang in turns 0..1; nose-up so dir = (sin_t, -cos_t))
     if btn.is_pressed(btn.LEFT):
-        S["ang"] = (S["ang"] - TURN) % 1.0
+        st.ang = (st.ang - TURN) % 1.0
     if btn.is_pressed(btn.RIGHT):
-        S["ang"] = (S["ang"] + TURN) % 1.0
-    dx, dy = m.sin_t(S["ang"]), -m.cos_t(S["ang"])
+        st.ang = (st.ang + TURN) % 1.0
+    dx, dy = m.sin_t(st.ang), -m.cos_t(st.ang)
     if btn.is_pressed(btn.UP):
-        S["vx"] += dx * 0.25
-        S["vy"] += dy * 0.25
+        st.vx += dx * 0.25
+        st.vy += dy * 0.25
         if frame & 1:                                  # exhaust puff from the tail, every other frame
-            exhaust.emit(int(S["sx"] - dx * 9), int(S["sy"] - dy * 9), 2, 2, 10,
+            exhaust.emit(int(st.sx - dx * 9), int(st.sy - dy * 9), 2, 2, 10,
                          pg.rgb565(255, 150, 40))
     # cap + drift
-    sp = m.length(S["vx"], S["vy"])
+    sp = m.length(st.vx, st.vy)
     if sp > 5:
-        S["vx"] *= 5 / sp
-        S["vy"] *= 5 / sp
-    S["vx"] *= 0.99
-    S["vy"] *= 0.99
-    S["sx"], S["sy"] = wrap(S["sx"] + S["vx"], S["sy"] + S["vy"])
-    ship.angle = S["ang"] * 360.0          # runtime affine rotation
-    ship.move(int(S["sx"]), int(S["sy"]))
-    ship.visible = (S["inv"] <= 0) or (frame & 1)
+        st.vx *= 5 / sp
+        st.vy *= 5 / sp
+    st.vx *= 0.99
+    st.vy *= 0.99
+    st.sx, st.sy = wrap(st.sx + st.vx, st.sy + st.vy)
+    ship.angle = st.ang * 360.0       # runtime affine rotation
+    ship.move(int(st.sx), int(st.sy))
+    ship.visible = (st.inv <= 0) or (frame & 1)
 
     # fire
-    if btn.just_pressed(btn.B) and S["fire_cd"] <= 0:
+    if btn.just_pressed(btn.B) and st.fire_cd <= 0:
         b = bullets.spawn()
         if b:
-            b.data = {"vx": dx * 7, "vy": dy * 7, "life": 30, "x": S["sx"], "y": S["sy"]}
-            b.move(int(S["sx"]), int(S["sy"]))
-            S["fire_cd"] = 6
+            d = b.data
+            d["vx"] = dx * 7
+            d["vy"] = dy * 7
+            d["life"] = 30
+            d["x"] = st.sx
+            d["y"] = st.sy
+            b.move(int(st.sx), int(st.sy))
+            st.fire_cd = 6
 
     # bullets
     for b in bullets.items:
@@ -150,26 +181,29 @@ while True:
                 rvx, rvy = r.data["vx"], r.data["vy"]
                 bullets.free(b)
                 rocks.free(r)
-                S["score"] += (3 - sz) * 20
+                st.score += (3 - sz) * 20
                 if sz < 2:                       # split into two smaller
                     for s in (-1, 1):
                         spawn_rock(sz + 1, rx, ry, rvx + s * 0.8, rvy - s * 0.8)
                 break
         # ship hit
-        if S["inv"] <= 0 and r.visible and ship.near(r, rr + 6):
-            S["lives"] -= 1
-            S["inv"] = 90
-            S["sx"], S["sy"] = float(W // 2), float(H // 2)
-            S["vx"] = S["vy"] = 0.0
-            if S["lives"] < 0:
+        if st.inv <= 0 and r.visible and ship.near(r, rr + 6):
+            st.lives -= 1
+            st.inv = 90
+            st.sx, st.sy = float(W // 2), float(H // 2)
+            st.vx = st.vy = 0.0
+            if st.lives < 0:
                 new_game()
 
     if rocks.count() == 0:
-        S["wave"] += 1
-        new_wave(S["wave"])
+        st.wave += 1
+        new_wave(st.wave)
 
     exhaust.tick()
     scene.refresh()
-    hud.set("SCORE %05d   SHIPS %d" % (S["score"], max(0, S["lives"])))
+    shown_lives = max(0, st.lives)
+    if st.score != _shown_score or shown_lives != _shown_lives:
+        _shown_score, _shown_lives = st.score, shown_lives
+        hud.set("SCORE %05d   SHIPS %d" % (st.score, shown_lives))
     hud.draw(board.DISPLAY, bufA)
     clock.tick()

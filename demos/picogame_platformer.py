@@ -9,7 +9,7 @@
 # picogame_font.py, picogame_ui.py, picogame_shapes.py. Needs the latest firmware.
 
 import array
-import random
+import board
 import picogame as pg
 import picogame_game
 import picogame_input
@@ -19,7 +19,7 @@ import picogame_ui as ui
 import picogame_shapes as shp
 import picogame_tiles as tiles
 
-W, H = 320, 240
+W, H = board.DISPLAY.width, board.DISPLAY.height
 TILE = 16
 ROWS = H // TILE                 # 15
 COLS = 80                        # level is 80*16 = 1280 px wide
@@ -65,9 +65,26 @@ scene.add_all(enemies)
 scene.add(player)
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4,
                   pg.rgb565(255, 255, 255), pg.rgb565(0, 0, 0))   # fixed layer
+hud.reserve(28)
 
 _MV = [0, 0, False]
-S = {}
+
+# game state (a State instance `st`)
+class State:
+    def __init__(self):
+        self.px = 40.0
+        self.py = 0.0
+        self.vy = 0.0
+        self.landed = False
+        self.coins = 0
+        self.coins_total = 0
+        self.lives = 3
+        self.score = 0
+        self._dbg_landed = False
+        self.frame = 0
+
+
+st = State()
 
 
 def build_level():
@@ -100,7 +117,7 @@ def build_level():
     # enemy spawn columns (on the ground)
     for tx in (14, 30, 44, 48, 63):
         enemy_spawns.append(tx)
-    S["coins_total"] = coins
+    st.coins_total = coins
     return enemy_spawns
 
 
@@ -146,18 +163,19 @@ def move_v(x, y, vy, hw):
 
 
 def follow():
-    ox = max(W - LEVEL_W, min(0, W // 2 - int(S["px"])))
+    ox = max(W - LEVEL_W, min(0, W // 2 - int(st.px)))
     scene.set_view(int(ox), 0)
 
 
 def reset_player():
-    S["px"], S["py"] = 40.0, (ROWS - 2) * TILE
-    S["vy"] = 0.0
-    S["landed"] = False
+    st.px, st.py = 40.0, (ROWS - 2) * TILE
+    st.vy = 0.0
+    st.landed = False
 
 
 def new_game():
-    S.update(coins=0, lives=3, score=0)
+    global st
+    st = State()
     cols = build_level()
     spawn_enemies(cols)
     reset_player()
@@ -166,48 +184,47 @@ def new_game():
 
 new_game()
 print("LEFT/RIGHT run, UP/B jump. Stomp enemies, grab coins, reach the green flag.")
-frame = 0
+_shown_coins, _shown_lives, _shown_score = -1, -1, -1
 while True:
     btn.poll()
-    frame += 1
 
     dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
     if dx:
-        nx = S["px"] + dx * 3
-        if not (solid_at(int(nx) + dx * 6, int(S["py"]) - 4) or
-                solid_at(int(nx) + dx * 6, int(S["py"]) - 12)):
-            S["px"] = max(6, min(LEVEL_W - 6, nx))
+        nx = st.px + dx * 3
+        if not (solid_at(int(nx) + dx * 6, int(st.py) - 4) or
+                solid_at(int(nx) + dx * 6, int(st.py) - 12)):
+            st.px = max(6, min(LEVEL_W - 6, nx))
     jpress = btn.just_pressed(btn.UP) or btn.just_pressed(btn.B)     # rising edge of either jump key
     jbuf.feed(jpress)                                                # remember an early jump press
-    coyote.feed(S["landed"])                                         # remember being grounded
+    coyote.feed(st.landed)                                           # remember being grounded
     jfired = coyote.is_active and jbuf.consume()
     if jfired:
-        S["vy"] = -11.0
-        S["landed"] = False
+        st.vy = -11.0
+        st.landed = False
         coyote.t = 0                                                 # one jump per ledge window
 
     if DEBUG:
+        st.frame += 1
         # Print only on interesting events (a jump key edge, a jump firing, a landed change)
         # plus a 1 Hz heartbeat - enough to see WHY a press did/didn't become a jump, without
         # flooding the 30 fps serial. Read it on the USB console while jumping on HW.
-        landed = S["landed"]
-        if jpress or jfired or landed != S.get("_dbg_landed") or frame % 30 == 0:
+        if jpress or jfired or st.landed != st._dbg_landed or st.frame % 30 == 0:
             print("f%d UP=%d B=%d jpress=%d jbuf=%d coyote=%d landed=%d FIRE=%d py=%d vy=%.1f"
-                  % (frame, btn.is_pressed(btn.UP), btn.is_pressed(btn.B), jpress,
-                     jbuf.t, coyote.t, landed, jfired, int(S["py"]), S["vy"]))
-        S["_dbg_landed"] = landed
+                  % (st.frame, btn.is_pressed(btn.UP), btn.is_pressed(btn.B), jpress,
+                     jbuf.t, coyote.t, st.landed, jfired, int(st.py), st.vy))
+        st._dbg_landed = st.landed
 
-    S["vy"] = min(7.0, S["vy"] + 0.6)
-    move_v(int(S["px"]), int(S["py"]), S["vy"], 6)
-    S["py"] = float(_MV[0])
-    S["vy"] = _MV[1]
-    S["landed"] = _MV[2]
-    player.move(int(S["px"]), int(S["py"]))
+    st.vy = min(7.0, st.vy + 0.6)
+    move_v(int(st.px), int(st.py), st.vy, 6)
+    st.py = float(_MV[0])
+    st.vy = _MV[1]
+    st.landed = _MV[2]
+    player.move(int(st.px), int(st.py))
 
     # fell in a pit
-    if S["py"] > H + 20:
-        S["lives"] -= 1
-        if S["lives"] < 0:
+    if st.py > H + 20:
+        st.lives -= 1
+        if st.lives < 0:
             new_game()
         else:
             reset_player()
@@ -215,15 +232,15 @@ while True:
         continue
 
     # coins: check the tile at the player's chest
-    ctx, cty = int(S["px"]) // TILE, (int(S["py"]) - 8) // TILE
+    ctx, cty = int(st.px) // TILE, (int(st.py) - 8) // TILE
     if 0 <= ctx < COLS and 0 <= cty < ROWS and tf.at(level, ctx, cty, tiles.B_COIN):
         level.tile(ctx, cty, 0)
-        S["coins"] += 1
-        S["score"] += 100
+        st.coins += 1
+        st.score += 100
     # goal
-    gtx = int(S["px"]) // TILE
+    gtx = int(st.px) // TILE
     if tf.at(level, gtx, ROWS - 3, tiles.B_EXIT):
-        S["score"] += 1000
+        st.score += 1000
         new_game()
 
     # enemies
@@ -238,16 +255,16 @@ while True:
         else:
             e.data["x"] = nx
             e.move(int(nx), int(e.data["y"]))
-        # player interaction
-        if abs(e.data["x"] - S["px"]) < 12 and abs(e.data["y"] - S["py"]) < 16:
-            if S["vy"] > 1 and S["py"] < e.data["y"] - 4:      # stomp
+        # player interaction: native box collision, then stomp-vs-hurt discrimination
+        if player.overlaps(e):
+            if st.vy > 1 and st.py <= e.data["y"] + 6:     # falling onto its head -> stomp
                 e.data["on"] = False
                 e.visible = False
-                S["vy"] = -7.0
-                S["score"] += 200
+                st.vy = -7.0
+                st.score += 200
             else:                                              # hurt
-                S["lives"] -= 1
-                if S["lives"] < 0:
+                st.lives -= 1
+                if st.lives < 0:
                     new_game()
                 else:
                     reset_player()
@@ -255,6 +272,9 @@ while True:
                 break
 
     follow()
-    hud.set("COINS %d/%d  LIVES %d  %05d" % (S["coins"], S["coins_total"], max(0, S["lives"]), S["score"]))
+    shown_lives = max(0, st.lives)
+    if st.coins != _shown_coins or shown_lives != _shown_lives or st.score != _shown_score:
+        _shown_coins, _shown_lives, _shown_score = st.coins, shown_lives, st.score
+        hud.set("COINS %d/%d  LIVES %d  %05d" % (st.coins, st.coins_total, shown_lives, st.score))
     scene.refresh()
     clock.tick()

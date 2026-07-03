@@ -19,7 +19,7 @@ import picogame as pg
 import picogame_game
 import picogame_input
 import picogame_clock
-import picogame_shapes as shapes
+import picogame_shapes as shp
 import picogame_ui as ui
 import picogame_pool
 import picogame_rand
@@ -39,11 +39,11 @@ btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
 # --- art: generated shapes (gem = green circle, bomb = red square) ---
-GEM = shapes.circle(13, pg.rgb565(80, 220, 120))
-BOMB = shapes.rect(12, 12, pg.rgb565(230, 70, 70))
-TRAY = shapes.rect(30, 8, pg.rgb565(120, 180, 255))
-TRAY_HIT = shapes.rect(30, 8, pg.rgb565(255, 120, 120))
-POP = shapes.ring(22, INK, 3)
+GEM = shp.circle(13, pg.rgb565(80, 220, 120))
+BOMB = shp.rect(12, 12, pg.rgb565(230, 70, 70))
+TRAY = shp.rect(30, 8, pg.rgb565(120, 180, 255))
+TRAY_HIT_COLOR = pg.rgb565(255, 120, 120)
+POP = shp.ring(22, INK, 3)
 
 # --- player tray ---
 tray = pg.Sprite(TRAY, W // 2, H - 14)
@@ -54,13 +54,15 @@ scene.add(tray)
 # picogame_pool.Pool: sprite.visible IS the alive flag; per-item state on sprite.data.
 MAXITEMS = 6
 items = picogame_pool.Pool(scene, GEM, MAXITEMS, anchor=(0.5, 0.5))
+# Pre-seed each pool slot's .data once so spawns MUTATE in place (no per-spawn dict).
+for s in items.items:
+    s.data = {"bomb": False, "vy": 0.0, "suby": 0.0}
 
 # --- catch pop (juice) ---
 pop = pg.Sprite(POP, 0, 0)
 pop.anchor = (0.5, 0.5)
 pop.visible = False
 scene.add(pop)
-pop_t = 0
 
 # --- juice helpers (picogame_fx): screen shake + dither fade (added LAST = on top) ---
 import picogame_fx as fx
@@ -75,18 +77,25 @@ hud.draw()
 rng = picogame_rand.Rand(0x2545)               # seeded = deterministic sim replays
 
 # --- game state ---
-score = 0
-lives = 3
-spawn_cd = 0
-mercy = 0                                           # i-frames after a hit (deep-difficulty-flow generosity)
-freeze = 0                                          # hit-stop frames (deep-game-feel C2)
-over = False
-last_hud = None
+class State:
+    def __init__(self):
+        self.score = 0
+        self.lives = 3
+        self.spawn_cd = 0
+        self.mercy = 0                              # i-frames after a hit (deep-difficulty-flow generosity)
+        self.freeze = 0                             # hit-stop frames (deep-game-feel C2)
+        self.over = False
+        self.last_score = -1                        # HUD change-detect (plain shadow ints, no per-frame tuple)
+        self.last_lives = -1
+        self.pop_t = 0
+
+
+st = State()
 
 
 def reset():
-    global score, lives, over, spawn_cd, mercy, freeze
-    score = 0; lives = 3; over = False; spawn_cd = 0; mercy = 0; freeze = 0
+    global st
+    st = State()
     items.free_all()
     fader.set(fader.LEVELS); fader.into(speed=2)    # fade in (picogame_fx dither)
 
@@ -97,9 +106,11 @@ def spawn():
         return
     bomb = rng.chance(0.35)                         # ~1/3 are bombs
     s.bitmap = BOMB if bomb else GEM
-    fy = float(BAR + 6)
     s.move(8 + rng.below(W - 16), BAR + 6)
-    s.data = {"bomb": bomb, "vy": 1.6 + score * 0.02, "fy": fy}  # speed ramps with score
+    d = s.data                                      # mutate in place (speed ramps with score)
+    d["bomb"] = bomb
+    d["vy"] = 1.6 + st.score * 0.02
+    d["suby"] = float(BAR + 6)
 
 
 def beep(f, ms):
@@ -116,22 +127,22 @@ print("Starfall - LEFT/RIGHT catch gems, dodge bombs. A restarts when over.")
 while True:
     btn.poll()
 
-    if over:
+    if st.over:
         if btn.just_pressed(btn.A):
             reset()
         fader.tick(); shaker.tick(0, 0)
         scene.refresh()
-        gi = (score, lives, True)
-        if gi != last_hud:
-            last_hud = gi
-            hud_l.set("GAME OVER  %d   A=RETRY" % score)
+        if st.score != st.last_score or st.lives != st.last_lives:
+            st.last_score = st.score
+            st.last_lives = st.lives
+            hud_l.set("GAME OVER  %d   A=RETRY" % st.score)
             hud.draw()
         clock.tick()
         continue
 
     # --- hit-stop: freeze gameplay a few frames on impact (keeps shaking) ---
-    if freeze > 0:
-        freeze -= 1
+    if st.freeze > 0:
+        st.freeze -= 1
         fader.tick(); shaker.tick(0, 0)
         scene.refresh()
         clock.tick()
@@ -144,59 +155,60 @@ while True:
     tray.move(tray.x, base_y)
 
     # --- mercy i-frames after a hit: blink the tray, then restore (fairness) ---
-    if mercy > 0:
-        mercy -= 1
-        tray.visible = (mercy // 3) & 1 == 0
-        if mercy == 0:
+    if st.mercy > 0:
+        st.mercy -= 1
+        tray.visible = (st.mercy // 3) & 1 == 0
+        if st.mercy == 0:
             tray.visible = True
-            tray.bitmap = TRAY
+            tray.flash = None
 
     # --- spawn ---
-    spawn_cd -= 1
-    if spawn_cd <= 0:
+    st.spawn_cd -= 1
+    if st.spawn_cd <= 0:
         spawn()
-        spawn_cd = max(10, 30 - score // 3)         # spawn faster as score climbs
+        st.spawn_cd = max(10, 30 - st.score // 3)   # spawn faster as score climbs
 
     # --- fall + collide ---
     for s in items.items:
         if not s.visible:
             continue
         d = s.data
-        d["fy"] += d["vy"]
-        s.move(s.x, int(d["fy"]))
+        d["suby"] += d["vy"]
+        s.move(s.x, int(d["suby"]))
         # caught? half-extents: item radius 6 + tray half-width 15 / half-height 4
         if s.overlaps(tray):
             items.free(s)
             if d["bomb"]:
-                if mercy == 0:                       # mercy window: a hit can't chain-kill you
-                    lives -= 1
+                if st.mercy == 0:                    # mercy window: a hit can't chain-kill you
+                    st.lives -= 1
                     shaker.add(0.6)                  # big shake (picogame_fx, deep-game-feel C1)
-                    freeze = 3                       # hit-stop (deep-game-feel C2)
-                    mercy = 24; tray.bitmap = TRAY_HIT; beep(120, 120)
-                    if lives <= 0:
-                        over = True
+                    st.freeze = 3                    # hit-stop (deep-game-feel C2)
+                    st.mercy = 24; tray.flash = TRAY_HIT_COLOR; beep(120, 120)
+                    if st.lives <= 0:
+                        st.over = True
+                        st.last_score = -1            # force one HUD redraw on the game-over transition
                         fader.out(speed=2)           # fade to black on game over
             else:
-                score += 1
+                st.score += 1
                 shaker.add(0.12)                     # tiny kick on catch
                 beep(880, 40)
                 pop.move(s.x, s.y); pop.visible = True
-                pop_t = 5
-        elif d["fy"] > H + 8:                        # fell off the bottom
+                st.pop_t = 5
+        elif d["suby"] > H + 8:                        # fell off the bottom
             items.free(s)
 
     # --- pop fade (juice) ---
-    if pop_t > 0:
-        pop_t -= 1
-        if pop_t == 0:
+    if st.pop_t > 0:
+        st.pop_t -= 1
+        if st.pop_t == 0:
             pop.visible = False
 
     fader.tick(); shaker.tick(0, 0)
     scene.refresh()
 
-    hi = (score, lives, False)
-    if hi != last_hud:
-        last_hud = hi
-        hud_l.set("SCORE %d   LIVES %d" % (score, lives))
+    if st.score != st.last_score or st.lives != st.last_lives:
+        st.last_score = st.score
+        st.last_lives = st.lives
+        hud_l.set("SCORE %d   LIVES %d" % (st.score, st.lives))
         hud.draw()
     clock.tick()

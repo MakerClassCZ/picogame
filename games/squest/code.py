@@ -21,7 +21,7 @@ import picogame_pool
 import array
 import terminalio
 import picogame_fx as fx
-import picogame_palette as palmod
+import picogame_palette as palette
 import picogame_font as pgfont
 import picogame_shapes as shp
 import picogame_ui as ui
@@ -87,7 +87,12 @@ SURFACE_TOP = SURFACE_Y - 8      # the sub breaches only a few px above the wate
 FLOOR_Y = H - 24
 LANES = (70, 130, 190)           # enemy lane centers
 LEVELMAX = 8
-SUB_W, SUB_H = 42, 20            # player sub frame size
+# Sprites are baked at native 1x (squest_assets.SCALE=1); each gameplay/font sprite
+# renders through the engine's nearest-neighbour draw scale to its old on-screen size.
+# The collision constants below are in these ON-SCREEN (scaled) px - Sprite.overlaps is
+# scale-aware, so a 1x bitmap at scale 2.5 reports the same bounds as the old 2.5x atlas.
+SPR_SCALE = 2.5
+SUB_W, SUB_H = 42, 20            # player sub frame size (17x8 art * 2.5)
 ENEMY_W = 20
 NPOOL = 9
 NSUB = 3                          # enemy submarines on screen
@@ -148,6 +153,12 @@ enemies = picogame_pool.Pool(scene, A["fish"], NPOOL)  # fish + divers
 subs = picogame_pool.Pool(scene, A["enemy_sub"], NSUB)   # enemy submarines
 torp = pg.Sprite(A["torp"], 0, 0, visible=False)
 sub = pg.Sprite(A["sub"], (W - SUB_W) // 2, 120)
+# render every 1x gameplay sprite at the old on-screen size (2.5x)
+for _p in (etorps, enemies, subs):
+    for _s in _p.items:
+        _s.scale = SPR_SCALE
+torp.scale = SPR_SCALE
+sub.scale = SPR_SCALE
 scene.add(torp)
 scene.add(sub)
 bubbles = pg.Particles(32, size=2, gravity=0.0, fade=True)   # kill bursts (no gravity - underwater)
@@ -164,12 +175,14 @@ scene.add(hud)
 DIG_W = 10
 score_digits = [pg.Sprite(A["font"], W - 52 + i * DIG_W, 3) for i in range(5)]
 for d in score_digits:
+    d.scale = SPR_SCALE           # font baked 1x too -> scale to the old 10x20 glyph
     scene.add(d)
 # "02" labels the oxygen bar - reuse the score's digit glyphs (frames 0 + 2 read as "O2"), no extra art
 o2_label = [pg.Sprite(A["font"], 60 + i * DIG_W, 3) for i in range(2)]
 o2_label[0].frame = 0
 o2_label[1].frame = 2
 for d in o2_label:
+    d.scale = SPR_SCALE
     d.tint = pg.rgb565(0, 220, 120)   # green (multiply), matching the oxygen bar so they read as one unit
     scene.add(d)
 # rescued-diver progress is shown as 6 pips on the HUD canvas (draw_oxygen): they ACCUMULATE across
@@ -207,11 +220,31 @@ _lvlbm, _lvlw, _ = pgfont.render_text(pg, terminalio.FONT, "LVL", pg.rgb565(180,
 lvl_label = pg.Sprite(_lvlbm, W - 17 - _lvlw, H - 15)
 scene.add(lvl_label)
 level_digit = pg.Sprite(A["font"], W - 14, H - 16)
+level_digit.scale = SPR_SCALE
 scene.add(level_digit)
 
 PARK_X, PARK_Y = (W - SUB_W) // 2, SURFACE_TOP        # sub rests breaching the surface during screens
 
-state = {}
+class State:
+    def __init__(self):
+        self.level = 1
+        self.score = 0
+        self.lives = 3
+        self.ox = 90.0
+        self.divers = 0
+        self.facing = 1
+        self.torp_vx = 0
+        self.anim = 0
+        self.ox_tick = 0
+        self.spawn_tick = 0
+        self.surfaced = 0
+        self.sub_tick = 0
+        self.life_mark = 0
+        self.life_flash = 0
+        self.mode = "start"
+
+
+st = State()
 _hud_key = None
 
 
@@ -227,60 +260,59 @@ def park_screen(text, mode):                         # freeze on a parked-sub sc
     sub.move(PARK_X, PARK_Y)
     prompt.visible = False
     show_banner(text)
-    state["mode"] = mode
+    st.mode = mode
 
 
 def reset_game():
-    state.update(level=1, score=0, lives=3, ox=90.0, divers=0,
-                 facing=1, torp_vx=0, anim=0, ox_tick=0, spawn_tick=0,
-                 surfaced=0, sub_tick=0, life_mark=0, life_flash=0)
+    global st
+    st = State()
     sub.move((W - SUB_W) // 2, 120)
     clear_field()
     level_setup()
 
 
 def level_setup():
-    FISH_PAL[1] = pg.rgb565(*squest_assets.FISH_COLORS[(state["level"] - 1) % 4])  # recolor every fish at once
+    FISH_PAL[1] = pg.rgb565(*squest_assets.FISH_COLORS[(st.level - 1) % 4])  # recolor every fish at once
     for e in enemies.items:
         if e.visible and e.data[0] != 1:
             e.touch()                                  # mark the recolored fish dirty so it repaints
 
 
 def amount_sprites():
-    lv = state["level"]
+    lv = st.level
     return 1 if lv <= 2 else (2 if lv <= 6 else 3)
 
 
 def speed():
-    return 1 + state["level"] // 3
+    return 1 + st.level // 3
 
 
 def draw_score():
-    s = state["score"]
+    s = st.score
     for i in range(5):
         score_digits[4 - i].frame = s % 10
         s //= 10
 
 
 def ox_barwidth():
-    return int((OXB_W - 2) * max(0.0, min(1.0, (state["ox"] - 60) / 30.0)))
+    return int((OXB_W - 2) * max(0.0, min(1.0, (st.ox - 60) / 30.0)))
 
 
 def draw_oxygen():
     hud.clear(KEY)
-    d = state["divers"]
+    d = st.divers
     for i in range(6):                               # 6 rescue pips: bright = carried, dim = still needed
         x = 4 + i * 9
         hud.fill_rect(x, 2, 7, 9, pg.rgb565(0, 210, 248) if i < d else pg.rgb565(35, 55, 85))
     hud.fill_rect(84, 3, OXB_W, 10, pg.rgb565(40, 80, 120))
-    col = pg.rgb565(0, 220, 120) if state["ox"] > 70 else pg.rgb565(230, 120, 40)
+    col = pg.rgb565(0, 220, 120) if st.ox > 70 else pg.rgb565(230, 120, 40)
     hud.fill_rect(85, 4, ox_barwidth(), 8, col)
 
 
 def draw_hud():
     draw_score()
     for i in range(5):
-        live_icons[i].visible = i < state["lives"]
+        live_icons[i].visible = i < st.lives
     draw_oxygen()
 
 
@@ -333,7 +365,7 @@ def kill_sub(s):
     bubbles.emit(s.x + 10, s.y + 9, 12, 5, 24, pg.rgb565(255, 80, 20))    # fire
     bubbles.emit(s.x + 10, s.y + 9, 8, 2, 14, pg.rgb565(255, 240, 200))   # bright pressure release
     subs.free(s)
-    state["score"] += 10
+    st.score += 10
     shaker.add(0.4)                                  # subs jolt the screen (half a death's trauma)
     sfx_seq(SEQ_SUBHIT)
     maybe_extra_life()
@@ -342,9 +374,9 @@ def kill_sub(s):
 def lose_life():
     shaker.add(0.7)
     death_fade.pulse(14, speed=1.3)
-    state["lives"] -= 1
-    state["ox"] = 90.0
-    if state["lives"] < 0:
+    st.lives -= 1
+    st.ox = 90.0
+    if st.lives < 0:
         game_over()                  # game over -> the start screen (press A to play again)
         return
     sub.move((W - SUB_W) // 2, 120)
@@ -354,7 +386,7 @@ def lose_life():
 def surface_divers():
     # Divers PERSIST across dives + deaths (you can't grab all 6 on one O2 load). Surfacing just refills
     # O2; only surfacing with the full SIX delivers them -> bonus + next level. Otherwise keep diving.
-    if state["divers"] >= 6:
+    if st.divers >= 6:
         complete_level()
     else:
         sfx_seq(SEQ_SURFACE)                         # just a refill flourish; keep diving
@@ -362,23 +394,23 @@ def surface_divers():
 
 
 def maybe_extra_life():
-    if state["score"] // 100 > state["life_mark"]:
-        state["life_mark"] = state["score"] // 100
-        if state["lives"] < 5:
-            state["lives"] += 1
-            state["life_flash"] = 18                 # blink the NEW life icon white (no screen flash)
+    if st.score // 100 > st.life_mark:
+        st.life_mark = st.score // 100
+        if st.lives < 5:
+            st.lives += 1
+            st.life_flash = 18                       # blink the NEW life icon white (no screen flash)
             sfx_seq(SEQ_EXTRA)
 
 
 def complete_level():
-    bonus = (int(state["ox"]) - 60) * 4              # 0..120: a fast clear (more O2 left) scores more
-    state["score"] += 160 + max(0, bonus)
-    state["level"] = state["level"] + 1 if state["level"] < LEVELMAX else 1
-    state["divers"] = 0
+    bonus = (int(st.ox) - 60) * 4                    # 0..120: a fast clear (more O2 left) scores more
+    st.score += 160 + max(0, bonus)
+    st.level = st.level + 1 if st.level < LEVELMAX else 1
+    st.divers = 0
     level_setup()
     draw_level()
-    state["ox"] = 90.0
-    state["surfaced"] = 1
+    st.ox = 90.0
+    st.surfaced = 1
     deliver_flash.pulse(14, speed=2.0)               # big white celebration flash
     shaker.add(1.0)
     sfx_seq(SEQ_CLEAR)
@@ -390,19 +422,19 @@ def game_over():
 
 
 def draw_level():
-    level_digit.frame = state["level"] if state["level"] < 10 else 0
+    level_digit.frame = st.level if st.level < 10 else 0
 
 
 def begin_play():
     reset_game()
     draw_level()
     hide_banner()
-    state["mode"] = "play"
+    st.mode = "play"
 
 
 def resume_play():
     hide_banner()
-    state["mode"] = "play"
+    st.mode = "play"
 
 
 def present():                                       # ambient + audio + flush, shared by play and the frozen screens
@@ -414,18 +446,18 @@ def present():                                       # ambient + audio + flush, 
         else:
             i += 1
     if frame % 5 == 0:
-        palmod.cycle(WPAL, 1, NWAVE)
+        palette.cycle(WPAL, 1, NWAVE)
         water.touch()
     for b in risers:
         b.fy -= b.data
         if b.fy < SURFACE_Y:
             b.fy = FLOOR_Y
             b.fx = random.randint(0, W - 3)
-    if state["life_flash"] > 0:                       # blink the just-earned life icon white, then clear
-        state["life_flash"] -= 1
-        idx = state["lives"] - 1
+    if st.life_flash > 0:                             # blink the just-earned life icon white, then clear
+        st.life_flash -= 1
+        idx = st.lives - 1
         if 0 <= idx < 5:
-            live_icons[idx].flash = WHITE if state["life_flash"] and (state["life_flash"] // 3) % 2 == 0 else 0
+            live_icons[idx].flash = WHITE if st.life_flash and (st.life_flash // 3) % 2 == 0 else 0
     bubbles.tick()
     shaker.tick()
     death_fade.tick()
@@ -439,16 +471,16 @@ reset_game()
 sub.move(PARK_X, PARK_Y)
 draw_level()
 show_banner(TXT_START)
-state["mode"] = "start"           # boot to the start screen; A dives in
+st.mode = "start"                 # boot to the start screen; A dives in
 gc.collect()                      # compact the heap after all setup before the steady-state loop
 frame = 0
 while True:
     btn.poll()
     frame += 1
 
-    if state["mode"] != "play":                       # frozen screens: start / level-complete / game-over
+    if st.mode != "play":                             # frozen screens: start / level-complete / game-over
         if btn.just_pressed(btn.A):
-            resume_play() if state["mode"] == "leveldone" else begin_play()
+            resume_play() if st.mode == "leveldone" else begin_play()
         present()
         continue
 
@@ -456,35 +488,38 @@ while True:
     dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
     dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
     if dx:
-        state["facing"] = dx
+        st.facing = dx
     if dx or dy:
         sub.move(max(0, min(W - SUB_W, sub.x + dx * 4)),
                  max(SURFACE_TOP, min(FLOOR_Y - SUB_H, sub.y + dy * 4)))
     if frame % 4 == 0:
-        state["anim"] = (state["anim"] + 1) % 3
-    sub.frame = state["anim"] + (3 if state["facing"] > 0 else 0)
+        st.anim = (st.anim + 1) % 3
+    sub.frame = st.anim + (3 if st.facing > 0 else 0)
 
     # --- fire one torpedo ---
     if (btn.just_pressed(btn.A) or btn.just_pressed(btn.B)) and not torp.visible:   # A or B fire (simple game)
         torp.visible = True
-        state["torp_vx"] = 8 if state["facing"] > 0 else -8
-        torp.move(sub.x + (SUB_W if state["facing"] > 0 else -8), sub.y + 8)
+        st.torp_vx = 8 if st.facing > 0 else -8
+        torp.move(sub.x + (SUB_W if st.facing > 0 else -8), sub.y + 8)
         sfx(SND_FIRE)
     if torp.visible:
-        nx = torp.x + state["torp_vx"]
+        nx = torp.x + st.torp_vx
         if nx < -8 or nx > W:
             torp.visible = False
         else:
             torp.move(nx, torp.y)
+    # hoist the player-torpedo collision point ONCE per frame (torp doesn't move again this frame);
+    # reused across every fish/diver + enemy sub, instead of building a fresh tuple per target.
+    torp_pt = (torp.x + 4, torp.y + 2)
 
     # --- spawn fish/divers, and (from level 3) enemy subs ---
-    if frame % max(9, 18 - state["level"]) == 0 and state["spawn_tick"] < amount_sprites():
+    if frame % max(9, 18 - st.level) == 0 and st.spawn_tick < amount_sprites():
         spawn_one()
-        state["spawn_tick"] += 1
+        st.spawn_tick += 1
     if frame % 40 == 0:
-        state["spawn_tick"] = 0
-    if state["level"] >= 3:
-        cad = max(50, 150 - state["level"] * 12)         # subs come faster at higher levels
+        st.spawn_tick = 0
+    if st.level >= 3:
+        cad = max(50, 150 - st.level * 12)               # subs come faster at higher levels
         if frame % cad == 0:
             spawn_sub()
 
@@ -500,18 +535,18 @@ while True:
         if frame % 6 == 0:                           # animate fish AND divers (a swim/kick cycle)
             base = 3 if e.data[1] > 0 else 0
             e.frame = base + ((e.frame + 1) % 3)
-        if e.data[0] == 2 and torp.visible and e.overlaps((torp.x + 4, torp.y + 2)):
+        if e.data[0] == 2 and torp.visible and e.overlaps(torp_pt):
             bubbles.emit(e.x + 10, e.y + 9, 10, 3, 18, pg.rgb565(255, 200, 60))
             enemies.free(e)
             torp.visible = False
-            state["score"] += 3
+            st.score += 3
             sfx_seq(SEQ_HIT)
             maybe_extra_life()
             continue
         if e.overlaps(sub, 4):
             if e.data[0] == 1:
-                if state["divers"] < 6:
-                    state["divers"] += 1
+                if st.divers < 6:
+                    st.divers += 1
                     sfx_seq(SEQ_PICK)
                 enemies.free(e)
             else:
@@ -539,9 +574,9 @@ while True:
             s.flash = 0
             if 0 <= s.x <= W - ENEMY_W:                  # only fire when on screen
                 fire_enemy_torp(s)
-            s.data[1] = max(22, random.randint(40, 85) - state["level"] * 4)
+            s.data[1] = max(22, random.randint(40, 85) - st.level * 4)
         # player torpedo kills the sub
-        if torp.visible and s.overlaps((torp.x + 4, torp.y + 2)):
+        if torp.visible and s.overlaps(torp_pt):
             torp.visible = False
             kill_sub(s)
             continue
@@ -560,45 +595,46 @@ while True:
             etorps.free(et)
             continue
         et.move(nx, et.y)
-        if torp.visible and torp.overlaps((et.x + 4, et.y + 3)):
+        et_pt = (et.x + 4, et.y + 3)                  # this enemy torpedo's point, computed once
+        if torp.visible and torp.overlaps(et_pt):
             bubbles.emit(et.x + 4, et.y + 3, 6, 2, 12, pg.rgb565(180, 220, 255))
             etorps.free(et)
             torp.visible = False
             continue
-        if sub.overlaps((et.x + 4, et.y + 3), 4):
+        if sub.overlaps(et_pt, 4):
             etorps.free(et)
             sfx_seq(SEQ_DIE)
             lose_life()
 
     # --- oxygen (surface refills via a latch) + the classic low-O2 heartbeat ---
     if sub.y <= SURFACE_Y + 2:
-        if not state["surfaced"]:
-            state["surfaced"] = 1
+        if not st.surfaced:
+            st.surfaced = 1
             surface_divers()
-        if state["ox"] < 90.0:                        # O2 refills GRADUALLY; the tick's pitch rises with the tank
-            state["ox"] = min(90.0, state["ox"] + 2.5)
+        if st.ox < 90.0:                              # O2 refills GRADUALLY; the tick's pitch rises with the tank
+            st.ox = min(90.0, st.ox + 2.5)
             if frame % 4 == 0:
-                sfx(REFILL_NOTES[min(6, max(0, int((state["ox"] - 60) / 5)))])
+                sfx(REFILL_NOTES[min(6, max(0, int((st.ox - 60) / 5)))])
     else:
-        state["surfaced"] = 0
-        state["ox_tick"] += 1
-        if state["ox_tick"] >= 10:
-            state["ox_tick"] = 0
-            state["ox"] -= 1
-            if state["ox"] <= 60:
+        st.surfaced = 0
+        st.ox_tick += 1
+        if st.ox_tick >= 10:
+            st.ox_tick = 0
+            st.ox -= 1
+            if st.ox <= 60:
                 sfx_seq(SEQ_DIE)
                 lose_life()
-    ox = state["ox"]
+    ox = st.ox
     if ox < 72:                                          # accelerating TWO-TONE heartbeat as O2 drops
         interval = 10 if ox < 62 else (20 if ox < 66 else 30)
         if frame % interval == 0:
             sfx(SND_OXLOW if (frame // interval) % 2 else SND_OXLOW2)
 
     # --- HUD only when it actually changed (oxygen Canvas redraw is the costly bit) ---
-    key = (state["score"], state["divers"], state["lives"], ox_barwidth())
+    key = (st.score, st.divers, st.lives, ox_barwidth())
     if key != _hud_key:
         _hud_key = key
         draw_hud()
 
-    prompt.visible = state["divers"] >= 6 and (frame // 8) % 2 == 0   # blink the SURFACE! goal cue
+    prompt.visible = st.divers >= 6 and (frame // 8) % 2 == 0   # blink the SURFACE! goal cue
     present()

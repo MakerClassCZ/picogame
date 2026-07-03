@@ -15,8 +15,8 @@
 #  * difficulty: spawn cadence + raider speed ramp with time, in a sawtooth (a short lull every ~20 s).
 #  * fits RP2040: fixed Sprite pools (no per-frame alloc), shared 32px PAL8 art (Kenney CC0), shape bg.
 #
-# Run:  python3 sim/run.py games/picowing/code.py --backend pygame
-#   or: python3 sim/run.py games/picowing/code.py --frames 200 --hold A,LEFT --shot /tmp/pw.png
+# Run:  python3 sim/run.py games/picogame_picowing.py --backend pygame
+#   or: python3 sim/run.py games/picogame_picowing.py --frames 200 --hold A,LEFT --shot /tmp/lw.png
 
 import board
 import array
@@ -26,11 +26,11 @@ import picogame as pg
 import picogame_game
 import picogame_input
 import picogame_clock
-import picogame_shapes as shapes
+import picogame_shapes as shp
 import picogame_ui as ui
 import picogame_pool
 import picogame_rand
-import picogame_fx
+import picogame_fx as fx
 import plane                                       # Kenney Pixel Shmup ship (CC0), 32x32 PAL8
 import enemy                                       # Kenney Pixel Shmup enemy (CC0), 32x32 PAL8
 
@@ -52,7 +52,7 @@ if audio:
 
 try:
     import picogame_save
-    _hi = picogame_save.Save("picowing", {"hi": ("I", 0)})
+    _hi = picogame_save.Save("lastwing", {"hi": ("I", 0)})
 except Exception:
     _hi = None                                        # NVM hi-score is optional (sim/some builds lack it)
 
@@ -84,12 +84,28 @@ RESET_HEAT = 30                                       # gun unlocks once heat dr
 # (wings overlapped with no hit). Lower = kinder, higher = stricter.
 HIT_R = 20
 
+# --- HUD layout, derived from W so the left cluster (heat gauge + chain readout) never collides with
+# the W-anchored life/bomb icons on a narrow (240) screen. At W=320 this reproduces the original layout
+# (heat 82..141, chain at 150); on a 240 screen the chain right-anchors before the icons, shows just the
+# multiplier, and the heat gauge compresses to fit the shrunken gap. ---
+RIGHT_X = W - 90                                     # left edge of the right cluster (life icons)
+FREE0 = 4 + 11 * 6 + 4                                # right edge of "SCORE 00000" + margin
+FREE1 = RIGHT_X - 4                                   # left edge of the life icons - margin
+CHAIN_W = max(18, min(74, (FREE1 - FREE0) - 30))     # chain readout budget (keeps >=30 px for the gauge)
+CHAIN_X = FREE1 - CHAIN_W                             # right-anchored -> 150 at 320, 104 at 240
+CHAIN_FULL = CHAIN_W >= 72                            # narrow -> show just "xN" (the multiplier)
+HEAT_SEGS = 5
+HEAT_X0 = FREE0 + 8                                   # 82 at 320
+_heat_avail = CHAIN_X - 6 - HEAT_X0                   # px available for the gauge before the chain readout
+HEAT_DX = max(3, min(12, _heat_avail // HEAT_SEGS))   # segment spacing (12 at 320, shrinks on narrow)
+HEAT_SW = max(2, min(11, HEAT_DX - 1))                # segment width
+
 scene, bufA, _ = picogame_game.setup(background=SKY, top=BAR)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 rng = picogame_rand.Rand(0x5159)
-shake = picogame_fx.Shake(scene)
-bomb_flash = picogame_fx.InvertFlash(board.DISPLAY)   # FREE full-screen invert pulse for the bomb (HW)
+shake = fx.Shake(scene)
+bomb_flash = fx.InvertFlash(board.DISPLAY)   # FREE full-screen invert pulse for the bomb (HW)
 
 # --- art ---
 PLANE = plane.bitmap(pg)
@@ -100,10 +116,10 @@ _WARM = array.array("H", [0, C(150, 40, 30), C(255, 130, 45), C(120, 45, 25),
 ENEMY = pg.Bitmap(enemy.DATA, enemy.WIDTH, enemy.HEIGHT, format=enemy.FORMAT,
                   palette=_WARM, frames=enemy.FRAMES, stride=enemy.STRIDE,
                   transparent=enemy.TRANSPARENT)
-BULLET = shapes.rect(3, 9, C(250, 240, 120))
-STAR = shapes.rect(2, 2, C(120, 150, 210))
+BULLET = shp.rect(3, 9, C(250, 240, 120))
+STAR = shp.rect(2, 2, C(120, 150, 210))
 # HUD icons: a plane per life, a bomb per bomb.
-LIFE_ICON = shapes.from_mask([
+LIFE_ICON = shp.from_mask([
     "....X....",
     "....X....",
     "....X....",
@@ -114,7 +130,7 @@ LIFE_ICON = shapes.from_mask([
     "....X....",
     "..XX.XX..",
 ], C(205, 215, 235))                                   # cool grey, matches the ship
-BOMB_ICON = shapes.from_mask([
+BOMB_ICON = shp.from_mask([
     "XX.........",
     "XX.######..",
     "...#######.",
@@ -124,9 +140,9 @@ BOMB_ICON = shapes.from_mask([
     "XX.........",
 ], C(255, 175, 70))                                    # amber
 # Heat-gauge segments: 3 pre-built colours, swapped per heat band.
-HEAT_G = shapes.rect(11, 3, C(80, 200, 110))           # cool
-HEAT_O = shapes.rect(11, 3, C(255, 180, 60))           # warming
-HEAT_R = shapes.rect(11, 3, C(255, 70, 50))            # hot / locked
+HEAT_G = shp.rect(HEAT_SW, 3, C(80, 200, 110))      # cool
+HEAT_O = shp.rect(HEAT_SW, 3, C(255, 180, 60))      # warming
+HEAT_R = shp.rect(HEAT_SW, 3, C(255, 70, 50))       # hot / locked
 
 # --- scrolling starfield (cheap endless parallax: a few wrapping dots) ---
 NSTAR = 18
@@ -147,21 +163,23 @@ bullets = picogame_pool.Pool(scene, BULLET, 14, anchor=(0.5, 0.5))
 enemies = picogame_pool.Pool(scene, ENEMY, 8, anchor=(0.5, 0.5))
 for e in enemies.items:
     e.flip_y = True                                   # raiders point DOWN (warm-ember palette = the colour half)
+    e.data = {"vy": 0.0, "drift": 0.0, "dive": False}  # pre-allocate ONE dict per slot; spawn mutates in place
 ps = pg.Particles(180, size=2, gravity=0.0, fade=True)
 scene.add(ps)
 
 # --- HUD (fixed top strip) ---
-# Create the labels at their WIDEST text so each glyph buffer is sized on the clean startup heap,
-# not re-allocated mid-game on a fragmented one (see SceneLabel.prewarm / the memory docs).
+# HudBar labels are a buffer-less StripDraw: a label only stores its string (nothing is rasterized or
+# sized at creation), so the initial text below is just a placeholder - hud_refresh() sets the real
+# values. (The WIDEST-text sizing idiom is only for SceneLabel/.reserve(), which owns a retained buffer.)
 hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, INK)
 l_score = hud.label(terminalio.FONT, 4, 4, TEXT, "SCORE 00000")
-l_chain = hud.label(terminalio.FONT, 150, 4, C(250, 220, 120), "x99  CHAIN 999")
+l_chain = hud.label(terminalio.FONT, CHAIN_X, 4, C(250, 220, 120), "x99  CHAIN 999")
 # Lives + bombs shown as ICON sprites: the number VISIBLE = the count (toggled in hud_refresh).
 # right-anchored from W so they stay on-screen on narrow (240) and wide (320) displays
 life_icons = [hud.add(pg.Sprite(LIFE_ICON, W - 90 + i * 12, 4)) for i in range(3)]
 bomb_icons = [hud.add(pg.Sprite(BOMB_ICON, W - 44 + i * 14, 5)) for i in range(3)]   # max 3 bombs
 # Gun-heat gauge: 5 segments in the gap between SCORE and the CHAIN readout (set in hud_refresh).
-heat_segs = [hud.add(pg.Sprite(HEAT_G, 82 + i * 12, 6)) for i in range(5)]
+heat_segs = [hud.add(pg.Sprite(HEAT_G, HEAT_X0 + i * HEAT_DX, 6)) for i in range(HEAT_SEGS)]
 hud.draw()
 
 # --- centre message (title / game-over overlay) ---
@@ -170,12 +188,30 @@ msg = ui.SceneLabel(scene, pg, terminalio.FONT, 0, 0, TEXT, SKY)
 msg.reserve(len("GAME OVER  99999   BEST 99999   A"))
 
 # --- game state ---
-G = {"state": "title", "score": 0, "best": 0, "lives": 3, "bombs": 2,
-     "chain": 0, "mult": 1, "t": 0, "inv": 0, "fire_cd": 0, "bank": 99, "flash_t": 0,
-     "heat": 0, "gun_locked": False, "next_bomb": 10000}
+class State:
+    def __init__(self):
+        self.state = "title"
+        self.score = 0
+        self.best = 0
+        self.lives = 3
+        self.bombs = 2
+        self.chain = 0
+        self.mult = 1
+        self.t = 0
+        self.inv = 0
+        self.fire_cd = 0
+        self.bank = 99
+        self.flash_t = 0
+        self.heat = 0
+        self.gun_locked = False
+        self.next_bomb = 10000
+        self.hud_dirty = True                          # set at the discrete HUD-state mutation sites
+
+
+st = State()
 if _hi is not None:
     try:
-        G["best"] = _hi.load()["hi"]
+        st.best = _hi.load()["hi"]
     except Exception:
         pass
 
@@ -188,22 +224,23 @@ def set_msg(text):
 
 def clear_actors():
     """Recycle every live raider and bullet, so a fresh state never inherits the last game's."""
-    for e in enemies.items:
-        enemies.free(e)
-    for b in bullets.items:
-        bullets.free(b)
+    enemies.free_all()
+    bullets.free_all()
 
 
 def show_title():
-    G["state"] = "title"
+    st.state = "title"
     set_msg("PICO WING   A: START")
     clear_actors()
 
 
 def new_game():
+    global st
     clear_actors()                                     # drop the previous game's raiders/bullets
-    G.update(score=0, lives=3, bombs=2, chain=0, mult=1, t=0, inv=0, fire_cd=0, flash_t=0,
-             heat=0, gun_locked=False, next_bomb=10000, state="play")
+    best = st.best                                      # preserve the running hi-score across restarts
+    st = State()
+    st.best = best
+    st.state = "play"
     plane.move(W // 2, H - 40)
     plane.visible = True
     plane.flash = 0
@@ -211,18 +248,23 @@ def new_game():
 
 
 def hud_refresh():
-    l_score.set("SCORE %05d" % G["score"])
-    l_chain.set(("x%d  CHAIN %d" % (G["mult"], G["chain"])) if G["chain"] else "")
-    lv, bo = G["lives"], G["bombs"]
+    l_score.set("SCORE %05d" % st.score)
+    if not st.chain:
+        l_chain.set("")
+    elif CHAIN_FULL:
+        l_chain.set("x%d  CHAIN %d" % (st.mult, st.chain))
+    else:                                              # narrow screen: multiplier only (fits the budget)
+        l_chain.set("x%d" % st.mult)
+    lv, bo = st.lives, st.bombs
     for i, s in enumerate(life_icons):                 # N icons visible = the count
         s.visible = i < lv
     for i, s in enumerate(bomb_icons):
         s.visible = i < bo
     # heat gauge: N segments filled, colour by band; full red + blink when the gun is locked
-    locked = G["gun_locked"]
-    h = G["heat"]
-    seg = 5 if locked else h * 5 // 100
-    blink = locked and ((G["t"] // 4) & 1)
+    locked = st.gun_locked
+    h = st.heat
+    seg = HEAT_SEGS if locked else h * HEAT_SEGS // 100
+    blink = locked and ((st.t // 4) & 1)
     col = HEAT_R if (locked or h >= WARN_HEAT) else (HEAT_O if h >= 40 else HEAT_G)
     for i, s in enumerate(heat_segs):
         vis = (i < seg) and not blink
@@ -233,35 +275,37 @@ def hud_refresh():
 
 
 def player_hit():
-    G["lives"] -= 1
-    G["chain"] = 0
-    G["mult"] = 1
-    G["inv"] = 45                                      # mercy i-frames
+    st.lives -= 1
+    st.chain = 0
+    st.mult = 1
+    st.hud_dirty = True                                # lives/chain/mult changed
+    st.inv = 45                                        # mercy i-frames
     plane.flash = WHITE
-    G["flash_t"] = 3                                    # momentary flash, then just blink
+    st.flash_t = 3                                      # momentary flash, then just blink
     shake.add(0.6)
     sfx("hurt")
-    if G["lives"] <= 0:
-        G["state"] = "over"
-        if G["score"] > G["best"]:
-            G["best"] = G["score"]
+    if st.lives <= 0:
+        st.state = "over"
+        if st.score > st.best:
+            st.best = st.score
             if _hi is not None:
                 try:
-                    _hi.save({"hi": G["best"]})
+                    _hi.save({"hi": st.best})
                 except Exception:
                     pass
         gc.collect()                                   # defrag at the run boundary before the banner
-        set_msg("GAME OVER  %05d   BEST %05d   A" % (G["score"], G["best"]))
+        set_msg("GAME OVER  %05d   BEST %05d   A" % (min(st.score, 99999), min(st.best, 99999)))
         plane.visible = False
 
 
 def fire_bomb():
-    if G["bombs"] <= 0:
+    if st.bombs <= 0:
         return
-    G["bombs"] -= 1
-    G["heat"] = max(0, G["heat"] - 40)                 # the bomb also vents the gun (escape a lockout)
-    if G["gun_locked"] and G["heat"] <= RESET_HEAT:
-        G["gun_locked"] = False
+    st.bombs -= 1
+    st.hud_dirty = True                                # bombs changed
+    st.heat = max(0, st.heat - 40)                     # the bomb also vents the gun (escape a lockout)
+    if st.gun_locked and st.heat <= RESET_HEAT:
+        st.gun_locked = False
     shake.add(0.8)                                     # a big kick - this IS the panic button
     bomb_flash.pulse()                                 # full-screen invert pulse (hardware, free)
     # Nothing at the ship (flash/particles there would read as "we got hit"); punch = invert + shake.
@@ -273,52 +317,55 @@ def fire_bomb():
 
 
 def update_play():
-    t = G["t"] = G["t"] + 1
+    t = st.t = st.t + 1
     # --- input: 8-dir move + clamp; bank the ship into horizontal motion ---
     dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
     dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
     plane.fx = max(14, min(W - 14, plane.fx + dx * 3.4))
     plane.fy = max(BAR + 14, min(H - 14, plane.fy + dy * 3.4))
     bank = (1 if dx > 0 else (-1 if dx < 0 else 0))
-    if bank != G["bank"]:                              # only re-bake the rotation on change
-        G["bank"] = bank
+    if bank != st.bank:                                # only re-bake the rotation on change
+        st.bank = bank
         plane.angle = (bank * 14) % 360                # bank INTO the motion (nose toward travel)
     if btn.just_pressed(btn.B):
         fire_bomb()
-    if G["score"] >= G["next_bomb"]:                   # earn a bomb every 10000 pts (kept capped at 3)
-        G["next_bomb"] += 10000
-        if G["bombs"] < 3:
-            G["bombs"] += 1
+    if st.score >= st.next_bomb:                       # earn a bomb every 10000 pts (kept capped at 3)
+        st.next_bomb += 10000
+        if st.bombs < 3:
+            st.bombs += 1
+            st.hud_dirty = True                        # earned a bomb
             sfx("extra")
     # --- autofire on hold, gated by GUN HEAT: hold too long and it overheats + locks ---
     a_held = btn.is_pressed(btn.A)
-    if G["gun_locked"]:                                # locked: must RELEASE the trigger to cool down
+    if st.gun_locked:                                  # locked: must RELEASE the trigger to cool down
         if not a_held:
-            G["heat"] -= COOL_LOCKED
-            if G["heat"] <= RESET_HEAT:
-                G["heat"] = max(0, G["heat"])
-                G["gun_locked"] = False
+            st.heat -= COOL_LOCKED
+            if st.heat <= RESET_HEAT:
+                st.heat = max(0, st.heat)
+                st.gun_locked = False
+                st.hud_dirty = True                    # gun unlocked
         # holding A while jammed keeps it locked -- the lesson is "let go"
     elif a_held:
-        if G["fire_cd"] == 0:
+        if st.fire_cd == 0:
             b = bullets.spawn()
             if b:
                 b.move(int(plane.fx), int(plane.fy) - 16)
                 b.data = -8.0                          # fast, snappy player shot
                 sfx("shot")
-            G["fire_cd"] = 6
-            G["heat"] += HEAT_PER_SHOT
-            if G["heat"] >= 100:                       # overheated -> lock the gun
-                G["heat"] = 100
-                G["gun_locked"] = True
+            st.fire_cd = 6
+            st.heat += HEAT_PER_SHOT
+            if st.heat >= 100:                         # overheated -> lock the gun
+                st.heat = 100
+                st.gun_locked = True
+                st.hud_dirty = True                    # gun locked
                 sfx("jam")
         else:
-            G["fire_cd"] -= 1
+            st.fire_cd -= 1
     else:                                              # not firing: cool down (faster while a chain runs)
-        G["heat"] -= COOL_IDLE + G["chain"] // 3
-        if G["heat"] < 0:
-            G["heat"] = 0
-        G["fire_cd"] = 0                               # ready to fire the instant A is tapped again
+        st.heat -= COOL_IDLE + st.chain // 3
+        if st.heat < 0:
+            st.heat = 0
+        st.fire_cd = 0                                 # ready to fire the instant A is tapped again
     # --- spawn raiders: cadence + speed ramp, with a short lull every ~20 s (sawtooth) ---
     interval = max(11, 30 - t // 160)
     lull = (t % 600) < 54                              # ~1.8 s breather each wave
@@ -329,7 +376,10 @@ def update_play():
             e.move(20 + rng.below(W - 40), -16)
             speed = 1.5 + t / 1500.0
             diver = rng.chance(min(0.55, 0.15 + t / 4000.0))
-            e.data = {"vy": speed, "drift": (rng.below(5) - 2) * 0.4, "dive": diver}
+            d = e.data                                 # pre-allocated dict - mutate in place (no per-spawn alloc)
+            d["vy"] = speed
+            d["drift"] = (rng.below(5) - 2) * 0.4
+            d["dive"] = diver
     # --- bullets ---
     for b in bullets.items:
         if not b.visible:
@@ -338,7 +388,7 @@ def update_play():
         if b.fy < -10:
             bullets.free(b)
     # --- raiders ---
-    inv = G["inv"]
+    inv = st.inv
     for e in enemies.items:
         if not e.visible:
             continue
@@ -355,8 +405,9 @@ def update_play():
         e.fy += e.data["vy"]
         if e.fy > H + 16:                              # slipped past -> chain breaks (no life lost)
             enemies.free(e)
-            G["chain"] = 0
-            G["mult"] = 1
+            st.chain = 0
+            st.mult = 1
+            st.hud_dirty = True                        # chain/mult reset
             continue
         if inv == 0 and e.near(plane, HIT_R):   # forgiving body hitbox (< the 32px sprite)
             enemies.free(e)
@@ -367,15 +418,16 @@ def update_play():
             if b.visible and b.near(e, 16):
                 bullets.free(b)
                 enemies.free(e)
-                G["chain"] += 1
-                G["mult"] = 1 + G["chain"] // 5
-                G["score"] += 50 * G["mult"]
+                st.chain += 1
+                st.mult = 1 + st.chain // 5
+                st.score += 50 * st.mult
+                st.hud_dirty = True                    # score/chain/mult changed
                 ps.emit(int(e.fx), int(e.fy), 20, 5, 26, C(255, 210, 120))  # brighter, punchier kill burst
                 sfx("kill")
                 break
-    if G["inv"] > 0:
-        G["inv"] -= 1
-        plane.visible = (G["inv"] // 3) % 2 == 0       # blink while invulnerable
+    if st.inv > 0:
+        st.inv -= 1
+        plane.visible = (st.inv // 3) % 2 == 0         # blink while invulnerable
     else:
         plane.visible = True
 
@@ -383,8 +435,9 @@ def update_play():
 # --- main loop -------------------------------------------------------------
 show_title()
 hud_refresh()
-print("PICO WING - D-pad move, hold A fire, B bomb. A to start.")
-last_hud = None
+print("Pico Wing - D-pad move, hold A fire, B bomb. A to start.")
+last_heat_band = -1                                    # int shadows (Menu idiom: two ints, not a tuple)
+last_blink = -1
 while True:
     btn.poll()
     # starfield scrolls in every state (motion behind the menus too)
@@ -393,25 +446,29 @@ while True:
         if s.fy > H:
             s.fy = -2
             s.fx = rng.below(W)
-    if G["state"] == "title":
+    if st.state == "title":
         if btn.just_pressed(btn.A):
             new_game()
-    elif G["state"] == "play":
+    elif st.state == "play":
         update_play()
-    elif G["state"] == "over":
+    elif st.state == "over":
         if btn.just_pressed(btn.A):                    # INSTANT restart, re-init in place
             new_game()
-    if G["flash_t"] > 0:                               # momentary player flash -> clear after a few frames
-        G["flash_t"] -= 1
-        if G["flash_t"] == 0:
+    if st.flash_t > 0:                                 # momentary player flash -> clear after a few frames
+        st.flash_t -= 1
+        if st.flash_t == 0:
             plane.flash = 0
     ps.tick()
     shake.tick()                                       # decaying screen-shake on top of the view
     bomb_flash.tick()                                  # restore the panel after the bomb's invert pulse
-    key = (G["score"], G["chain"], G["mult"], G["lives"], G["bombs"],
-           G["heat"] // 20, G["gun_locked"], (G["t"] // 4 & 1) if G["gun_locked"] else 0)
-    if key != last_hud:
-        last_hud = key
+    # Discrete HUD state (score/chain/mult/lives/bombs/lock) sets st.hud_dirty at its mutation sites;
+    # the animated heat gauge (band + locked-blink) is tracked by two int shadows - no per-frame tuple.
+    hb = st.heat // 20
+    blink = (st.t // 4 & 1) if st.gun_locked else 0
+    if st.hud_dirty or hb != last_heat_band or blink != last_blink:
+        last_heat_band = hb
+        last_blink = blink
+        st.hud_dirty = False
         hud_refresh()
     scene.refresh()
     clock.tick()

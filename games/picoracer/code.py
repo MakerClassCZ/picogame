@@ -8,9 +8,6 @@
 #
 # Controls: B gas (and START), A brake/reverse, LEFT/RIGHT steer. Drive on the tarmac; grass slows
 # you. Copy picogame_* helpers + picoracer_track + race_cars assets to CIRCUITPY.
-#
-# Run:  python3 sim/run.py games/picoracer/code.py --backend pygame
-#   or: python3 sim/run.py games/picoracer/code.py --frames 200 --hold B,RIGHT --shot /tmp/pr.png
 
 import math
 import array
@@ -22,7 +19,7 @@ import picogame_input
 import picogame_clock
 import picogame_ui as ui
 import picogame_tiles as tiles
-import picogame_fx as fx_mod
+import picogame_fx as fx
 
 import picoracer_track as track
 import race_cars
@@ -66,10 +63,6 @@ car.anchor = (0.5, 0.5)
 scene.add(car)
 
 # --- car state (world pixels, heading in degrees) ---
-fx = START_X
-fy = START_Y
-th = START_TH
-speed = 0.0
 ACCEL = 0.10                                     # gradual build-up to top speed
 BRAKE = 0.35                                      # decisive braking into corners
 DRAG = 0.125                                       # coast (lift off B) sheds ~2.5/s -> one lift clears a 90 corner
@@ -80,37 +73,54 @@ TURN = 3.8
 GRIP_SPEED = 3.5                                 # full steering grip up to here...
 TURN_MIN = 0.42                                  # ...falls to this fraction of TURN at SPEED_MAX (understeer)
 
-cam = fx_mod.Camera(scene, W, H + BAR, lerp=1.0, world_w=WORLD_W, world_h=WORLD_H)
+cam = fx.Camera(scene, W, H + BAR, lerp=1.0, world_w=WORLD_W, world_h=WORLD_H)
 WHITE = pg.rgb565(255, 255, 255)
-flash_t = 0                                      # countdown for the best-lap blink on the player car
 
-# --- lap timing: cross the finish line rightward, but only after touching the far-side checkpoint ---
-prev_fx = fx
-cp_hit = False
-lap = 0                                          # laps COMPLETED so far
-lap_t = 0
-best_t = 0
-race_t = 0
 NLAPS = 5
-mode = "start"                                    # start -> race -> finish
+
+
+# --- game state (car pos/heading, lap timing, banners/countdown) ---
+class State:
+    def __init__(self):
+        self.subx = START_X
+        self.suby = START_Y
+        self.th = START_TH
+        self.speed = 0.0
+        self.flash_t = 0                         # countdown for the best-lap blink on the player car
+        # lap timing: cross the finish line rightward, but only after touching the far-side checkpoint
+        self.prev_subx = START_X
+        self.cp_hit = False
+        self.lap = 0                             # laps COMPLETED so far
+        self.lap_t = 0
+        self.best_t = 0
+        self.race_t = 0
+        self.mode = "start"                      # start -> race -> finish
+        self.rec_n = 0
+        self.banner_t = 0                        # frames a flash banner stays up (GO! / lap time)
+        self.countdown_t = 0
+        self.cd_phase = -1
+        self.last_lap = -1                       # HUD shadow ints (no per-frame tuple)
+        self.last_lsec = -1
+        self.last_bsec = -1
+
+
+st = State()
 
 # --- ghosts: each completed lap is recorded (decimated) and replayed by one ghost car, looping ---
 REC_STEP = 3                                      # sample 1 of every 3 frames (RAM: ~14 KB for 4+1 traces)
 REC_MAX = 420                                     # up to ~31 s lap captured
 rec_x = array.array("h", [0] * REC_MAX)          # the lap being driven now
 rec_y = array.array("h", [0] * REC_MAX)
-rec_a = array.array("h", [0] * REC_MAX)
-rec_n = 0
+rec_a = array.array("B", [0] * REC_MAX)          # angle//2 packed into a byte (0..179); *2 on use
 g_x = [array.array("h", [0] * REC_MAX) for _ in range(NGHOST)]   # one stored trace per ghost
 g_y = [array.array("h", [0] * REC_MAX) for _ in range(NGHOST)]
-g_a = [array.array("h", [0] * REC_MAX) for _ in range(NGHOST)]
+g_a = [array.array("B", [0] * REC_MAX) for _ in range(NGHOST)]
 g_len = [0] * NGHOST
 g_pos = [0.0] * NGHOST                            # float playback cursor (samples), advances 1/REC_STEP per frame
 g_done = [False] * NGHOST                         # reached the end of its lap -> park at the finish until re-sync
 
 hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, pg.rgb565(14, 16, 30))
 info = hud.label(terminalio.FONT, 4, 3, pg.rgb565(255, 255, 255), "LAP 1")
-last_info = None
 
 banner = ui.SceneLabel(scene, pg, terminalio.FONT, 0, H // 2 - 6,
                        pg.rgb565(255, 235, 110), pg.rgb565(0, 12, 42))
@@ -125,50 +135,46 @@ def show_banner(text, big=False):
     banner.sprite.move(max(2, (W - len(text) * cw) // 2), H // 2 - (12 if big else 6))
 
 
-banner_t = 0                                     # frames a flash banner stays up (GO! / lap time)
-countdown_t = 0
-cd_phase = -1
-
-
 def flash_banner(text, frames, big=False):
-    global banner_t
     show_banner(text, big)
-    banner_t = frames
+    st.banner_t = frames
 
 
 def reset_race():                                # fresh race: clear all ghosts
-    global fx, fy, th, speed, lap, lap_t, race_t, rec_n, prev_fx, cp_hit, flash_t
-    fx, fy, th = START_X, START_Y, START_TH
-    speed = 0.0
-    lap = lap_t = race_t = rec_n = 0
-    prev_fx = fx
-    cp_hit = False
-    flash_t = 0
+    st.subx, st.suby, st.th = START_X, START_Y, START_TH
+    st.speed = 0.0
+    st.lap = st.lap_t = st.race_t = st.rec_n = 0
+    st.prev_subx = st.subx
+    st.cp_hit = False
+    st.flash_t = 0
     car.flash = 0
     for i in range(NGHOST):
         g_len[i] = 0
         g_pos[i] = 0.0
         g_done[i] = False
         ghosts[i].visible = False
-    car.move(int(fx), int(fy))
-    car.angle = th
+    car.move(int(st.subx), int(st.suby))
+    car.angle = st.th
 
 
 def finish_lap():                                # store the just-driven lap as the next ghost
-    global lap, lap_t, best_t, rec_n
-    if best_t == 0 or lap_t < best_t:
-        best_t = lap_t
-    if lap < NGHOST:                             # laps 1..4 each spawn a ghost; lap 5 has no slot
-        for i in range(rec_n):
-            g_x[lap][i] = rec_x[i]
-            g_y[lap][i] = rec_y[i]
-            g_a[lap][i] = rec_a[i]
-        g_len[lap] = rec_n
-        g_pos[lap] = 0.0
-    lap += 1
-    lap_t = 0
-    rec_n = 0
-    for i in range(min(lap, NGHOST)):            # all active ghosts restart the lap together with the player
+    global rec_x, rec_y, rec_a
+    if st.best_t == 0 or st.lap_t < st.best_t:
+        st.best_t = st.lap_t
+    if st.lap < NGHOST:                          # laps 1..4 each spawn a ghost; lap 5 has no slot
+        # rec_* and this ghost slot are same-size arrays -> swap the buffer REFERENCES instead of
+        # copying up to 1260 elements. The just-driven trace becomes the ghost; the ghost's old
+        # (now-unused) buffer becomes the fresh recording buffer (rec_n resets to 0, so its stale
+        # contents are never read). Playback reads only [0, g_len) -> identical to the element-copy.
+        rec_x, g_x[st.lap] = g_x[st.lap], rec_x
+        rec_y, g_y[st.lap] = g_y[st.lap], rec_y
+        rec_a, g_a[st.lap] = g_a[st.lap], rec_a
+        g_len[st.lap] = st.rec_n
+        g_pos[st.lap] = 0.0
+    st.lap += 1
+    st.lap_t = 0
+    st.rec_n = 0
+    for i in range(min(st.lap, NGHOST)):         # all active ghosts restart the lap together with the player
         g_pos[i] = 0.0
         g_done[i] = False
 
@@ -196,7 +202,7 @@ def sfx(n):
 def engine_update(on_road):
     if engine is None:
         return
-    rev = min(1.0, abs(speed) / SPEED_MAX)
+    rev = min(1.0, abs(st.speed) / SPEED_MAX)
     freq = IDLE_HZ + (REDLINE_HZ - IDLE_HZ) * (rev ** 0.75)
     if not on_road:
         freq *= 0.8
@@ -210,57 +216,57 @@ def engine_silence():
 
 
 print("PicoRacer - B gas, A brake, LEFT/RIGHT steer. 5 laps - each lap adds a ghost!")
-car.move(int(fx), int(fy))
-car.angle = th
+car.move(int(st.subx), int(st.suby))
+car.angle = st.th
 hud.draw()
 show_banner("PICORACER     B: START")
 
 while True:
     btn.poll()
 
-    if mode == "start" or mode == "finish":       # frozen title / results; B begins the countdown
+    if st.mode == "start" or st.mode == "finish":  # frozen title / results; B begins the countdown
         if btn.just_pressed(btn.B):
             reset_race()
-            mode = "countdown"
-            countdown_t = 0
-            cd_phase = -1
+            st.mode = "countdown"
+            st.countdown_t = 0
+            st.cd_phase = -1
             if engine:
                 engine.start()
         else:
             engine_silence()
-        cam.follow(fx, fy).apply()
+        cam.follow(st.subx, st.suby).apply()
         scene.refresh()
         clock.tick()
         continue
 
-    if mode == "countdown":                        # 3 - 2 - 1 - GO!, with a blip each second
-        countdown_t += 1
-        ph = min(2, (countdown_t - 1) // 40)
-        if ph != cd_phase:
-            cd_phase = ph
+    if st.mode == "countdown":                     # 3 - 2 - 1 - GO!, with a blip each second
+        st.countdown_t += 1
+        ph = min(2, (st.countdown_t - 1) // 40)
+        if ph != st.cd_phase:
+            st.cd_phase = ph
             show_banner(("3", "2", "1")[ph], big=True)
             sfx(SFX_COUNT)
-        if countdown_t > 120:
+        if st.countdown_t > 120:
             sfx(SFX_GO)
             flash_banner("GO!", 28, big=True)
-            last_info = None
-            mode = "race"
-        cam.follow(fx, fy).apply()
+            st.last_lap = st.last_lsec = st.last_bsec = -1
+            st.mode = "race"
+        cam.follow(st.subx, st.suby).apply()
         scene.refresh()
         clock.tick()
         continue
 
-    if banner_t > 0:                               # tick down a flash banner (GO! / lap time)
-        banner_t -= 1
-        if banner_t == 0:
+    if st.banner_t > 0:                            # tick down a flash banner (GO! / lap time)
+        st.banner_t -= 1
+        if st.banner_t == 0:
             banner.set("")
-    if flash_t > 0:                                # best-lap celebration: BLINK the car white
-        flash_t -= 1
-        car.flash = WHITE if (flash_t // 3) & 1 else 0
-        if flash_t == 0:
+    if st.flash_t > 0:                             # best-lap celebration: BLINK the car white
+        st.flash_t -= 1
+        car.flash = WHITE if (st.flash_t // 3) & 1 else 0
+        if st.flash_t == 0:
             car.flash = 0
-    lap_t += 1
-    race_t += 1
+    st.lap_t += 1
+    st.race_t += 1
 
     a_up = btn.is_pressed(btn.B)
     a_dn = btn.is_pressed(btn.A)
@@ -268,65 +274,65 @@ while True:
     a_right = btn.is_pressed(btn.RIGHT)
 
     if a_up:
-        speed += ACCEL
+        st.speed += ACCEL
     elif a_dn:
-        speed -= BRAKE
+        st.speed -= BRAKE
     else:
-        speed -= DRAG if speed > 0 else -DRAG
-        if abs(speed) < DRAG:
-            speed = 0.0
-    on_road = road.at_px(tm, min(WORLD_W - 1, int(fx)), min(WORLD_H - 1, int(fy)), tiles.B_SOLID)
+        st.speed -= DRAG if st.speed > 0 else -DRAG
+        if abs(st.speed) < DRAG:
+            st.speed = 0.0
+    on_road = road.at_px(tm, min(WORLD_W - 1, int(st.subx)), min(WORLD_H - 1, int(st.suby)), tiles.B_SOLID)
     cap = SPEED_MAX if on_road else OFFROAD_MAX
     if not on_road:
-        speed *= OFFROAD_DRAG
-    speed = max(-cap * 0.5, min(cap, speed))
+        st.speed *= OFFROAD_DRAG
+    st.speed = max(-cap * 0.5, min(cap, st.speed))
     engine_update(on_road)
-    if speed != 0.0:
-        if abs(speed) <= GRIP_SPEED:
-            bite = min(1.0, abs(speed) / 2.5)
+    if st.speed != 0.0:
+        if abs(st.speed) <= GRIP_SPEED:
+            bite = min(1.0, abs(st.speed) / 2.5)
         else:                                    # above grip speed steering weakens -> understeer, brake to turn
-            grip_t = (abs(speed) - GRIP_SPEED) / (SPEED_MAX - GRIP_SPEED)
+            grip_t = (abs(st.speed) - GRIP_SPEED) / (SPEED_MAX - GRIP_SPEED)
             bite = 1.0 - grip_t * (1.0 - TURN_MIN)
-        th += (a_right - a_left) * TURN * bite * (1 if speed > 0 else -1)
+        st.th += (a_right - a_left) * TURN * bite * (1 if st.speed > 0 else -1)
 
-    rad = math.radians(th)
-    fx += math.sin(rad) * speed
-    fy += -math.cos(rad) * speed
-    fx = max(0, min(WORLD_W, fx))
-    fy = max(0, min(WORLD_H, fy))
+    rad = math.radians(st.th)
+    st.subx += math.sin(rad) * st.speed
+    st.suby += -math.cos(rad) * st.speed
+    st.subx = max(0, min(WORLD_W, st.subx))
+    st.suby = max(0, min(WORLD_H, st.suby))
 
-    car.move(int(fx), int(fy))
-    car.angle = th
+    car.move(int(st.subx), int(st.suby))
+    car.angle = st.th
 
     # --- lap: touch the far-left checkpoint, then cross the finish line rightward ---
-    if fx < CP_X:
-        cp_hit = True
-    if cp_hit and prev_fx < FIN_X <= fx and FIN_Y0 <= fy < FIN_Y1:
-        cp_hit = False
-        ct = lap_t
-        prev_best = best_t
+    if st.subx < CP_X:
+        st.cp_hit = True
+    if st.cp_hit and st.prev_subx < FIN_X <= st.subx and FIN_Y0 <= st.suby < FIN_Y1:
+        st.cp_hit = False
+        ct = st.lap_t
+        prev_best = st.best_t
         finish_lap()
-        if lap >= NLAPS:
-            show_banner(FIN_FMT % (race_t // 40, best_t // 40))
-            mode = "finish"
+        if st.lap >= NLAPS:
+            show_banner(FIN_FMT % (st.race_t // 40, st.best_t // 40))
+            st.mode = "finish"
             engine_silence()
         else:
             sfx(SFX_LAP)                          # chime crossing into the next lap
             pb = (prev_best == 0) or (ct < prev_best)
             if pb:
-                flash_t = 18                      # ~3 white blinks on a NEW BEST lap only
-            flash_banner("LAP %d  %02ds%s" % (lap, ct // 40, "  BEST!" if pb else ""), 70)
-    prev_fx = fx
+                st.flash_t = 18                   # ~3 white blinks on a NEW BEST lap only
+            flash_banner("LAP %d  %02ds%s" % (st.lap, ct // 40, "  BEST!" if pb else ""), 70)
+    st.prev_subx = st.subx
 
     # --- record this lap (decimated) ---
-    if rec_n < REC_MAX and (lap_t - 1) % REC_STEP == 0:
-        rec_x[rec_n] = int(fx)
-        rec_y[rec_n] = int(fy)
-        rec_a[rec_n] = int(th) % 360
-        rec_n += 1
+    if st.rec_n < REC_MAX and (st.lap_t - 1) % REC_STEP == 0:
+        rec_x[st.rec_n] = int(st.subx)
+        rec_y[st.rec_n] = int(st.suby)
+        rec_a[st.rec_n] = (int(st.th) % 360) // 2
+        st.rec_n += 1
 
     # --- advance + draw each active ghost (loops its own trace, position interpolated) ---
-    for i in range(min(lap, NGHOST)):
+    for i in range(min(st.lap, NGHOST)):
         n = g_len[i]
         if n < 2:
             continue
@@ -343,18 +349,20 @@ while True:
         gx = g_x[i][i0] + (g_x[i][i1] - g_x[i][i0]) * fr
         gy = g_y[i][i0] + (g_y[i][i1] - g_y[i][i0]) * fr
         ghosts[i].move(int(gx), int(gy))
-        ghosts[i].angle = g_a[i][i0]
+        ghosts[i].angle = g_a[i][i0] * 2
         ghosts[i].visible = True
 
-    cam.follow(fx, fy).apply()
+    cam.follow(st.subx, st.suby).apply()
     scene.refresh()
 
-    show = (lap + 1, lap_t // 40, best_t // 40)
-    if show != last_info:
-        last_info = show
-        msg = "LAP %d/%d  %02ds" % (min(lap + 1, NLAPS), NLAPS, lap_t // 40)
-        if best_t:
-            msg += "  BEST %02ds" % (best_t // 40)
+    lap1 = st.lap + 1
+    lsec = st.lap_t // 40
+    bsec = st.best_t // 40
+    if lap1 != st.last_lap or lsec != st.last_lsec or bsec != st.last_bsec:
+        st.last_lap, st.last_lsec, st.last_bsec = lap1, lsec, bsec
+        msg = "LAP %d/%d  %02ds" % (min(st.lap + 1, NLAPS), NLAPS, st.lap_t // 40)
+        if st.best_t:
+            msg += "  BEST %02ds" % (st.best_t // 40)
         info.set(msg)
         hud.draw()
     clock.tick()

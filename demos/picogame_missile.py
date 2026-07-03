@@ -1,9 +1,8 @@
 # Missile Command on picogame - genre port of TinyJoypad's TinyMissile.
 # Particle-heavy showcase: move a crosshair, fire blasts that detonate as particle
 # explosions and wipe incoming missiles caught in the radius; defend the cities.
-# Copy with picogame_game/input/clock/font/audio. Requires Particles firmware.
+# Copy with picogame_game/input/clock/ui/audio/pool. Requires Particles firmware.
 
-import array
 import random
 import board
 import terminalio
@@ -11,10 +10,10 @@ import picogame as pg
 import picogame_game
 import picogame_input
 import picogame_clock
-import picogame_font
 import picogame_ui as ui
 import picogame_audio
 import picogame_pool
+import picogame_shapes as shp
 
 scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(10, 8, 30))
 btn = picogame_input.Buttons()
@@ -22,19 +21,14 @@ clock = picogame_clock.Clock(30)
 audio = picogame_audio.Audio()
 boom_sfx = picogame_audio.tone(120, 180)
 
-W, H = 320, 240
+W, H = board.DISPLAY.width, board.DISPLAY.height
 GROUND = H - 14
 BLAST_R = 34
 
 
-def solid(w, h, r, g, b):
-    bp = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(r, g, b)])
-    return pg.Bitmap(bytearray(b"\x01" * (w * h)), w, h, format=pg.PAL8, palette=bp, transparent=0)
-
-
-cross_bmp = solid(7, 7, 255, 255, 255)
-warhead_bmp = solid(4, 4, 255, 120, 120)
-city_bmp = solid(24, 12, 90, 200, 120)
+cross_bmp = shp.rect(7, 7, pg.rgb565(255, 255, 255))
+warhead_bmp = shp.rect(4, 4, pg.rgb565(255, 120, 120))
+city_bmp = shp.rect(24, 12, pg.rgb565(90, 200, 120))
 
 particles = pg.Particles(192, size=2, gravity=0.0)
 crosshair = pg.Sprite(cross_bmp, W // 2, H // 2)
@@ -70,13 +64,29 @@ scene.add(crosshair)
 # HUD as a scene-layer label (painted BY scene.refresh): an immediate Label.draw() over a live fast
 # Display fights the scene's strip push and flickers. SceneLabel is the right component here.
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 2, pg.rgb565(255, 230, 160), pg.rgb565(10, 8, 30))
+hud.reserve(21)
 
 score = 0
 frame = 0
+# shadow copies of the last-shown HUD values - only format+set the string when
+# SCORE or the live-city count actually changed (avoids a throwaway %-format
+# alloc every frame). Shadows start at -1 so the first frame always draws.
+_h_score = -1
+_h_cities = -1
 
 
 def live_cities():
     return [c for c in cities if c.visible]
+
+
+def count_live_cities():
+    # same alive test as live_cities() but no throwaway list - used on the
+    # every-frame paths (restart check + HUD) where only the count is needed.
+    n = 0
+    for c in cities:
+        if c.visible:
+            n += 1
+    return n
 
 
 def spawn():
@@ -139,15 +149,19 @@ while True:
         else:
             m.move(int(m.data[0]), int(m.data[1]))
 
-    if not live_cities():        # all gone -> restart
+    n_cities = count_live_cities()
+    if n_cities == 0:            # all gone -> restart
         score = 0
         for c in cities:
             c.visible = True
         incoming.free_all()
+        n_cities = len(cities)
 
     if beam[4] > 0:                          # the firing beam is a brief flash
         beam[4] -= 1
     particles.tick()
-    hud.set("SCORE %05d  CITIES %d" % (score, len(live_cities())))   # before refresh -> painted by it
+    if score != _h_score or n_cities != _h_cities:   # before refresh -> painted by it
+        _h_score, _h_cities = score, n_cities
+        hud.set("SCORE %05d  CITIES %d" % (score, n_cities))
     scene.refresh()
     clock.tick()

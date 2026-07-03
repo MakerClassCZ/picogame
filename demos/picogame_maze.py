@@ -42,34 +42,43 @@ title = hud.label(terminalio.FONT, 4, 1, pg.rgb565(255, 255, 255), "MAZE  LVL 1"
 
 rng = picogame_rand.Rand(0x1234)               # seeded -> reproducible maze layouts
 
-maze = [[WALL] * COLS for _ in range(ROWS)]     # generated layout (WALL/FLOOR/DOOR)
-seen = [[False] * COLS for _ in range(ROWS)]
-px = py = 1
-dx = dy = 1
-level = 1
-reveal_door = 0
+# flat COLS*ROWS bytearrays indexed [y*COLS + x] (was list-of-lists ~10 KB in ~58 GC blocks).
+maze = bytearray(COLS * ROWS)                   # generated layout (WALL/FLOOR/DOOR)
+seen = bytearray(COLS * ROWS)                   # 0/1 revealed flag
+
+
+class State:
+    def __init__(self):
+        self.px = 1
+        self.py = 1
+        self.dx = 1
+        self.dy = 1
+        self.level = 1
+        self.reveal_door = 0
+
+
+st = State()
 
 
 def generate():
     # iterative recursive-backtracker on odd cells (avoids deep recursion on device)
-    for y in range(ROWS):
-        for x in range(COLS):
-            maze[y][x] = WALL
-            seen[y][x] = False
+    for i in range(COLS * ROWS):
+        maze[i] = WALL
+        seen[i] = 0
     sx, sy = 1, 1
-    maze[sy][sx] = FLOOR
+    maze[sy * COLS + sx] = FLOOR
     stack = [(sx, sy)]
     while stack:
         x, y = stack[-1]
         nb = []
         for ddx, ddy in ((2, 0), (-2, 0), (0, 2), (0, -2)):
             nx, ny = x + ddx, y + ddy
-            if 1 <= nx < COLS - 1 and 1 <= ny < ROWS - 1 and maze[ny][nx] == WALL:
+            if 1 <= nx < COLS - 1 and 1 <= ny < ROWS - 1 and maze[ny * COLS + nx] == WALL:
                 nb.append((nx, ny, ddx, ddy))
         if nb:
             nx, ny, ddx, ddy = rng.choice(nb)
-            maze[y + ddy // 2][x + ddx // 2] = FLOOR
-            maze[ny][nx] = FLOOR
+            maze[(y + ddy // 2) * COLS + (x + ddx // 2)] = FLOOR
+            maze[ny * COLS + nx] = FLOOR
             stack.append((nx, ny))
         else:
             stack.pop()
@@ -77,86 +86,76 @@ def generate():
 
 def place_door():
     # a floor cell far (bottom-right quadrant) from the start
-    global dx, dy
     for _ in range(200):
         x = COLS - 2 - rng.below(COLS // 2)
         y = ROWS - 2 - rng.below(ROWS // 2)
-        if maze[y][x] == FLOOR:
-            dx, dy = x, y
-            maze[y][x] = DOOR
+        if maze[y * COLS + x] == FLOOR:
+            st.dx, st.dy = x, y
+            maze[y * COLS + x] = DOOR
             return
-    dx, dy = COLS - 2, ROWS - 2
-    maze[dy][dx] = DOOR
+    st.dx, st.dy = COLS - 2, ROWS - 2
+    maze[st.dy * COLS + st.dx] = DOOR
 
 
 def draw_all_hidden():
-    for y in range(ROWS):
-        for x in range(COLS):
-            tm.tile(x, y, HIDDEN)
+    tm.fill(HIDDEN)
 
 
 def reveal(cx, cy):
     # reveal a 5x5 area around (cx,cy); paint newly-seen cells' real tile (floor/wall/door)
     for y in range(max(0, cy - 2), min(ROWS, cy + 3)):
         for x in range(max(0, cx - 2), min(COLS, cx + 3)):
-            if not seen[y][x]:
-                seen[y][x] = True
-                tm.tile(x, y, maze[y][x])
+            if not seen[y * COLS + x]:
+                seen[y * COLS + x] = 1
+                tm.tile(x, y, maze[y * COLS + x])
 
 
 def new_level():
-    global px, py, reveal_door
     generate()
     place_door()
     draw_all_hidden()
-    px, py = 1, 1
-    reveal_door = 0
-    reveal(px, py)
-    tm.tile(px, py, PLAYER)
+    st.px, st.py = 1, 1
+    st.reveal_door = 0
+    reveal(st.px, st.py)
+    tm.tile(st.px, st.py, PLAYER)
 
 
 new_level()
 hud.draw()
 print("Maze - arrows move, A reveals the door. Find the exit.")
 
-move_cd = 0
 while True:
     btn.poll()
-    nx, ny = px, py
-    ddx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
-    ddy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
-    if move_cd > 0:
-        move_cd -= 1
-    if (ddx or ddy) and move_cd == 0:           # move on press, then auto-repeat while held
-        if ddx:
-            nx += 1 if ddx > 0 else -1
-        elif ddy:
-            ny += 1 if ddy > 0 else -1
-        move_cd = 5
-    elif not (ddx or ddy):
-        move_cd = 0                             # released -> next press is immediate
+    nx, ny = st.px, st.py
+    # btn.repeat gives grid auto-repeat for free: True on press, then every 5 frames while held
+    ddx = btn.repeat(btn.RIGHT, 5, 5) - btn.repeat(btn.LEFT, 5, 5)
+    ddy = btn.repeat(btn.DOWN, 5, 5) - btn.repeat(btn.UP, 5, 5)
+    if ddx:                                     # horizontal takes precedence over vertical
+        nx += 1 if ddx > 0 else -1
+    elif ddy:
+        ny += 1 if ddy > 0 else -1
 
-    if (nx, ny) != (px, py) and 0 <= nx < COLS and 0 <= ny < ROWS and maze[ny][nx] != WALL:
-        tm.tile(px, py, maze[py][px])           # restore the tile we leave (floor/door)
-        px, py = nx, ny
-        if (px, py) == (dx, dy):                 # reached the exit -> next level
-            level += 1
-            title.set("MAZE  LVL %d" % level)
+    if (nx != st.px or ny != st.py) and 0 <= nx < COLS and 0 <= ny < ROWS and maze[ny * COLS + nx] != WALL:
+        tm.tile(st.px, st.py, maze[st.py * COLS + st.px])   # restore the tile we leave (floor/door)
+        st.px, st.py = nx, ny
+        if st.px == st.dx and st.py == st.dy:     # reached the exit -> next level
+            st.level += 1
+            title.set("MAZE  LVL %d" % st.level)
             hud.draw()
             new_level()
         else:
-            reveal(px, py)
-            tm.tile(px, py, PLAYER)
+            reveal(st.px, st.py)
+            tm.tile(st.px, st.py, PLAYER)
 
     # A = flash the hidden door location as a hint, then restore it
     if btn.just_pressed(btn.A):
-        reveal_door = 24
-    if reveal_door > 0:
-        reveal_door -= 1
-        if reveal_door == 0:
-            tm.tile(dx, dy, DOOR if seen[dy][dx] else HIDDEN)   # restore
+        st.reveal_door = 24
+    if st.reveal_door > 0:
+        st.reveal_door -= 1
+        if st.reveal_door == 0:
+            tm.tile(st.dx, st.dy, DOOR if seen[st.dy * COLS + st.dx] else HIDDEN)   # restore
         else:
-            tm.tile(dx, dy, DOOR if (reveal_door // 4) % 2 else HIDDEN)   # blink
+            tm.tile(st.dx, st.dy, DOOR if (st.reveal_door // 4) % 2 else HIDDEN)   # blink
 
     scene.refresh()
     clock.tick()
