@@ -34,8 +34,6 @@ somewhere safe.
 
 Later levels get tight — a long train through a narrow yard leaves little room to turn.
 
-📖 **Full rules: [RULES.md](RULES.md)** (English + Česky)
-
 ## Controls
 Works on any board with a D-pad + **A** and **B**.
 

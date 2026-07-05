@@ -34,8 +34,6 @@ you and bleeds off speed if you run wide.
 - **Grass slows you down.** Stay on the tarmac to keep your speed.
 - A **new best lap** flashes your car white and pops a **BEST!** banner.
 
-📖 **Full rules: [RULES.md](RULES.md)** (English + Česky)
-
 ## Controls
 Works on any board with a D-pad + **A** and **B** (no X/Y needed).
 

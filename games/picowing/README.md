@@ -36,8 +36,6 @@ clears the whole screen (and vents the gun). You start with two, and earn one mo
 - Raiders speed up and spawn faster over time (with a short breather between waves). Some **dive** —
   they bank toward you instead of falling straight.
 
-📖 **Full rules & scoring: [RULES.md](RULES.md)** (English + Česky)
-
 ## Controls
 Works on any board with a D-pad + **A** and **B** (no X/Y needed).
 

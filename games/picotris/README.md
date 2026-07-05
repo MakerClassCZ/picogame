@@ -29,8 +29,6 @@ so the real game is deciding when to keep stacking for the big clear and when to
 - Every **10 lines** = **+1 level** = faster gravity.
 - Stack to the top and there's no room to spawn → **game over**, and a fresh well starts.
 
-📖 **Full rules & scoring tables: [RULES.md](RULES.md)** (English + Česky)
-
 ## Controls
 Works on any board with a D-pad + **A** (no B/X/Y needed).
 

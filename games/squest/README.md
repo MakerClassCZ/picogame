@@ -38,8 +38,6 @@ them out of the water.
   ramming them) cost a life. Your torpedo can shoot theirs down.
 - **Extra life every 100 points** (up to 5). Higher levels are **faster** and busier.
 
-📖 **Full rules & scoring: [RULES.md](RULES.md)** (English + Česky)
-
 ## Controls
 Works on any board with a D-pad + **A** and **B** (no X/Y needed).
 
