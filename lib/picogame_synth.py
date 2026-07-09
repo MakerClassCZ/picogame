@@ -11,16 +11,30 @@
 #   beep = snd.note(72, snd.SQUARE, decay=0.08)       # an SFX (build once)
 #   s.sfx(beep)                                       # fire it (retriggers cleanly)
 #
-# Needs synthio + audiopwmio + audiomixer in the firmware (they are on both our boards).
-# No simulator support - this is a device-only module.
+# Uses synthio + audiopwmio + audiomixer when the firmware has them (both our boards do).
+# SAFE ON AUDIO-LESS FIRMWARE: if those modules are missing, importing this lib still works
+# and the whole API degrades to silent no-ops (Synth/Drone/note/load_midi all accept the same
+# args and return inert values) - a game needs ZERO try/except guard code. Check the module
+# flag `AVAILABLE` (bool) if you want to branch (e.g. hide a volume option).
+# (The simulator provides its own synthio stub, so under the sim the real path runs.)
 
 import array
 import math
-import board
-import synthio
-from audiopwmio import PWMAudioOut
-from audiomixer import Mixer
-from micropython import const
+
+try:
+    import board
+    import synthio
+    from audiopwmio import PWMAudioOut
+    from audiomixer import Mixer
+    AVAILABLE = True
+except ImportError:            # audio-less firmware (or desktop Python) -> silent no-op mode
+    AVAILABLE = False
+
+try:
+    from micropython import const
+except ImportError:            # desktop Python has no micropython module
+    def const(x):
+        return x
 
 # ---- built-in oscillator waveforms (signed 16-bit, one cycle) ----
 _LEN = const(256)
@@ -167,3 +181,82 @@ def load_midi(path, sample_rate=22050, waveform=None, envelope=None, tempo=120, 
             f.read(18)
         return synthio.MidiTrack(f.read(), tempo=ppqn * tempo // 60,
                                  sample_rate=sample_rate, waveform=waveform, envelope=envelope)
+
+
+# ---- silent no-op fallback (audio-less firmware) ----------------------------------------
+# When synthio/audiopwmio/audiomixer are missing, the definitions below SHADOW the real
+# note/pitch_bend/Synth/Drone/load_midi above (which stay byte-identical for the normal
+# path). Same signatures, no audio hardware touched, no mixers/buffers allocated - every
+# call is a cheap no-op so game audio code runs unchanged, just silently. The waveform
+# constants above are pure array/math and stay real either way.
+
+if not AVAILABLE:
+
+    class _Null:
+        """Inert stand-in for notes/LFOs/tracks: calls return self, unknown attribute
+        reads return self, attribute writes stick (Drone.set, drone.note.waveform = ...),
+        truth value is False."""
+
+        def __call__(self, *args, **kwargs):
+            return self
+
+        def __getattr__(self, name):
+            return self
+
+        def __bool__(self):
+            return False
+
+    def note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08,
+             amplitude=0.6, bend=None, cutoff=None):
+        return _Null()
+
+    def pitch_bend(semitones, ms, waveform=None, once=True):
+        return _Null()
+
+    def load_midi(path, sample_rate=22050, waveform=None, envelope=None, tempo=120, ppqn=240):
+        return _Null()
+
+    class Synth:
+        """No-op Synth: same surface, no audio out, no mixer, no synthesizer."""
+
+        def __init__(self, pin=None, sample_rate=22050, buffer_size=2048,
+                     music_level=0.4, sfx_level=0.7):
+            self.sample_rate = sample_rate
+            self.audio = _Null()
+            self.mixer = _Null()
+            self.synth = _Null()
+            self._last_sfx = None
+
+        def sfx(self, n):
+            pass
+
+        def press(self, n):
+            pass
+
+        def release(self, n):
+            pass
+
+        def music(self, midi_track):
+            pass
+
+        def stop_music(self):
+            pass
+
+    class Drone:
+        """No-op Drone: keeps the .note / .playing surface so per-frame set() calls work."""
+
+        def __init__(self, synth, waveform=None, amplitude=0.35, attack=0.03, release=0.12):
+            self.synth = synth
+            self.note = _Null()
+            self.playing = False
+
+        def start(self):
+            self.playing = True
+
+        def set(self, frequency, amplitude=None):
+            self.note.frequency = frequency
+            if amplitude is not None:
+                self.note.amplitude = amplitude
+
+        def stop(self):
+            self.playing = False

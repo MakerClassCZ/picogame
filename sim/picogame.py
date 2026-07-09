@@ -837,6 +837,19 @@ class Scene:
         for it in items:
             self.add(it)
 
+    def remove(self, item):
+        # Mirrors the firmware: unlink a previously add()ed item (identity match);
+        # the next refresh repaints over where it was (the sim always repaints the
+        # play rect, so no ghost by construction). The item itself is untouched and
+        # can be add()ed again later. ValueError if not in the scene.
+        for i, it in enumerate(self.items):
+            if it is item:
+                del self.items[i]
+                del self.kinds[i]
+                del self.fixed[i]
+                return
+        raise ValueError("item not in scene")
+
     def set_view(self, ox, oy):
         self.ox = ox
         self.oy = oy

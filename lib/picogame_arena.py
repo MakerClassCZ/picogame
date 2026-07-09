@@ -17,6 +17,23 @@
 #   ...
 #   AR.reset(); shapes = AR.canvas(320, 44); btn = AR.canvas(160, 48)   # intro: two from one arena
 #
+# NESTED lifetimes (mark/release) - the Doom "zone tag" idea (Z_FreeTags) as a LIFO stack:
+# grab whole-RUN buffers first, then mark() on entering a MODE (battle/boss/menu) and release(m)
+# on leaving it - freeing everything alloc'd since the mark while KEEPING everything before it.
+# reset() is just release(0). Unlike reset()'s all-or-nothing, this lets persistent run-level
+# buffers survive while a transient mode reuses the space above them:
+#
+#   AR = picogame_arena.Arena(320 * 120)
+#   hud = AR.canvas(320, 24)          # RUN-lifetime: lives the whole game
+#   m = AR.mark()                     # <- remember the fill point
+#   arena_bg = AR.canvas(320, 96)     #    MODE-lifetime: only during the battle
+#   ...battle...
+#   AR.release(m)                     # frees arena_bg, hud survives; space above m is free again
+#
+# Marks are LIFO (release in reverse order of mark) - enough for nested game modes, and it only
+# reclaims arena BUFFERS; Python object graphs (Sprites/Scenes) are still GC'd by dropping refs
+# + gc.collect() (see the Wyrmfall world_free/world_build pattern - the object-graph half).
+#
 # Needs the firmware Canvas `buffer=` argument (the sim ignores it and allocates its own).
 # See HARDWARE.md for why this matters on the RP2040 (~138 KB heap).
 
@@ -33,6 +50,18 @@ class Arena:
         """Free all slices handed out so far (call at the start of each scene that
         reuses the arena). Any Canvas from a previous reset() must no longer be drawn."""
         self.used = 0
+
+    def mark(self):
+        """Save the current fill point for a later release() - the start of a nested lifetime
+        (a MODE/SCENE). Returns an opaque handle (the offset). Marks are LIFO: release them in
+        reverse order. See the module header for the Doom-zone nesting pattern."""
+        return self.used
+
+    def release(self, m):
+        """Rewind to a saved mark(): frees every slice handed out since that mark, keeping
+        everything before it. Any Canvas/slice alloc'd after `m` must no longer be drawn/used.
+        `reset()` == `release(0)`."""
+        self.used = m
 
     def alloc(self, nbytes, align=1):
         """A `memoryview` slice of `nbytes` from the arena (generic, not just Canvas):

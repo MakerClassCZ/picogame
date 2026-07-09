@@ -12,6 +12,11 @@
 #
 #   menu = ui.Menu(pg, font, 8, 160, ["ATTACK", "MAGIC", "FLEE"], white, navy)
 #   pick = menu.tick(btn); menu.draw(board.DISPLAY, bufA)      # pick>=0 on confirm
+#
+# Lifecycle rule for the Scene* widgets: RECURRING UI (a HUD label, the battle menu) = build ONCE
+# and toggle with set("")/hide()/show() - never re-create per visit. ONE-SHOT UI (a tutorial hint,
+# a one-time dialog) = destroy() when dismissed, which detaches it from the scene (Scene.remove)
+# so GC reclaims it.
 
 import picogame_font
 
@@ -61,6 +66,7 @@ class SceneLabel:
 
     def __init__(self, scene, pg, font, x, y, fg, bg):
         self.pg = pg
+        self.scene = scene
         self.font = font
         self.fg = fg
         self.bg = bg
@@ -91,6 +97,15 @@ class SceneLabel:
         if self._buf is None or len(self._buf) < need:
             self._buf = bytearray(need)
         self.sprite.visible = False         # nothing is shown
+
+    def destroy(self):
+        """TRANSIENT label teardown: detach from the scene + drop the text buffer, so GC reclaims
+        it (unlike set(None)/visible, which keep the slot + buffer forever). The label is dead -
+        make a new one to show text again. (A double destroy raises Scene.remove's ValueError -
+        that's a game bug, surfaced, not masked.)"""
+        self.scene.remove(self.sprite)
+        self._buf = None                    # drop the reused text buffer
+        self._text = None
 
 
 class SceneBox:
@@ -157,6 +172,12 @@ class SceneBox:
         if 0 <= i < self.nlines:
             self._lines[i] = _txt(text)
             self._sd.invalidate()
+
+    def destroy(self):
+        """TRANSIENT box teardown: erase + detach from the scene so GC reclaims it (hide() keeps
+        the scene slot forever). Dead after - make a new one to show a box again."""
+        self.hide()                          # one clean erase repaint first
+        self.scene.remove(self._sd)
 
 
 class _HudLabel:
@@ -425,6 +446,12 @@ class SceneMenu:
     def hide(self):
         self.active = False
         self.panel.hide()
+
+    def destroy(self):
+        """TRANSIENT menu teardown (a one-shot dialog): tears down the underlying SceneBox so the
+        scene slot is freed. Dead after."""
+        self.active = False
+        self.panel.destroy()
 
     def tick(self, btn):
         if not self.active:
