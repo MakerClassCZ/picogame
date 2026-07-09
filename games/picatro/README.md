@@ -23,11 +23,11 @@ card can become any rank you need.
 
 ## Quick rules
 - Beat **5 blinds**; each has a **target** you must reach in **3 hands** (+ **3 discards**).
-  Targets: **500 / 1300 / 2100 / 2900 / 3700**.
+  Targets: **800 / 1800 / 2800 / 3600 / 4200**.
 - **Pick up to 5 cards → PLAY** → they score as a poker hand (**CHIPS × MULT**).
 - **DISCARD** picked cards to **bank a bonus** onto your next hand: ♥ +4 chips · ♦ +1 mult ·
   ♣ ×mult · ♠ dig +1 card.
-- **3 Acts** boost every hand: **Grinder** (+3 chips/card), **Steady** (+3 mult), **Ringmaster**
+- **3 Acts** boost every hand: **Grinder** (+3 chips/card), **Steady** (+3 mult), **Harlequin**
   (+1 mult per *extra suit* — rewards variety).
 - **Carry-hand**: cards you don't play carry into the next blind — save a great card for a hard one.
 - **The Understudy** (the gold **"?"** card, once per run): becomes whatever *rank* scores best

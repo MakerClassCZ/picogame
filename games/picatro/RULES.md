@@ -13,7 +13,7 @@ discards**). Clear blind 5 and you beat the Pico Circus.
 
 | Blind | 1 | 2 | 3 | 4 | 5 |
 |------:|--:|--:|--:|--:|--:|
-| Target | 500 | 1300 | 2100 | 2900 | 3700 |
+| Target | 800 | 1800 | 2800 | 3600 | 4200 |
 
 Clearing 3 blinds is already a genuine run — the game is hard on purpose.
 
@@ -27,6 +27,7 @@ Works on any board with a D-pad + **A** and **B** (no X/Y needed).
 | **↓** | drop it back (deselect) |
 | **A** | **PLAY** the picked cards (score them) |
 | **B** | **DISCARD** the picked cards (bank a bonus — see below) |
+| **Y** | *(optional)* toggle a **live score preview** of your current pick — a learning aid; boards without a Y button just skip it |
 | **A** | continue / next, on the result screens |
 
 ### How scoring works
@@ -34,7 +35,7 @@ A played hand scores **CHIPS × MULT**.
 
 - **CHIPS** = the hand's base chips + the *rank value* of each scoring card + **Grinder** (+3 per
   scoring card) + any **banked hearts**.
-- **MULT** = the hand's base mult + any **banked diamonds** + **Steady** (+3) + **Ringmaster**
+- **MULT** = the hand's base mult + any **banked diamonds** + **Steady** (+3) + **Harlequin**
   (+1 for each different suit in the five cards beyond the first). Then, if you banked clubs, the
   whole mult is multiplied by **×(1 + 0.5 × banked clubs)**.
 
@@ -46,12 +47,16 @@ Rank values (chips): 2→2, 3→3 … 9→9, 10/J/Q/K→10, A→11.
 | High Card | 5 × 1 |
 | Pair | 10 × 2 |
 | Two Pair | 20 × 2 |
-| Three of a Kind | 30 × 2 |
-| Straight | 30 × 4 |
-| Flush | 35 × 3 |
-| Full House | 35 × 4 |
+| Three of a Kind | 40 × 2 |
+| Straight | 40 × 3 |
+| Flush | 70 × 3 |
+| Full House | 55 × 4 |
 | Four of a Kind | 55 × 6 |
-| Straight Flush | 75 × 8 |
+| Straight Flush | 110 × 8 |
+
+The base values read as a poker ladder (a flush beats a straight, a straight flush beats four of a
+kind). The monosuit hands (Flush, Straight Flush) carry high **chips** because they can never earn
+Harlequin — so a well-mixed rainbow hand still out-scores a same-tier flush. That's the twist.
 
 ### The DISCARD is your weapon
 Discarding cards doesn't just cycle them — each discarded card **banks a bonus onto your NEXT
@@ -69,7 +74,7 @@ Banks are spent by your **next PLAY**. Timing *when* you cash in a big bank is t
 ### The 3 Acts (always-on bonuses, shown top-left)
 - **Grinder** — +3 chips per scoring card.
 - **Steady** — +3 mult, every hand.
-- **Ringmaster** — +1 mult for every *different suit* in your played five (beyond the first). This
+- **Harlequin** — +1 mult for every *different suit* in your played five (beyond the first). This
   rewards **variety** — it's the reason a rainbow hand can out-score a flush.
 
 ### Carry-hand
@@ -90,13 +95,13 @@ Once per run, a special **"?" card** appears — a masked circus understudy who 
 ### Worked example
 You play **K♠ K♥ 7♦ 7♣ 2♠** = Two Pair. You had banked **3 hearts** and **2 clubs** last turn.
 - CHIPS = 20 (Two Pair) + (10+10+7+7 rank) + 12 (Grinder, 4 scoring cards) + 12 (3 banked hearts) = **90**
-- MULT = 2 (Two Pair) + 3 (Steady) + 3 (Ringmaster: 4 suits → +3) = 8, then ×(1 + 0.5×2 clubs) = ×2.0 → **16**
+- MULT = 2 (Two Pair) + 3 (Steady) + 3 (Harlequin: 4 suits → +3) = 8, then ×(1 + 0.5×2 clubs) = ×2.0 → **16**
 - Score = 90 × 16 = **1440**
 
 ### Tips
 - Discard early to build a big bank, then unleash it on one huge hand.
 - Clubs are the multiplier — a few banked clubs turn a modest hand into a blind-clearer.
-- Ringmaster loves rainbows; don't tunnel on flushes.
+- Harlequin loves rainbows; don't tunnel on flushes.
 - Save the Understudy for when you really need it.
 
 ---
@@ -109,7 +114,7 @@ Poraz **5 blindů**. Každý blind má **cílové skóre**, které musíš dosá
 
 | Blind | 1 | 2 | 3 | 4 | 5 |
 |------:|--:|--:|--:|--:|--:|
-| Cíl | 500 | 1300 | 2100 | 2900 | 3700 |
+| Cíl | 800 | 1800 | 2800 | 3600 | 4200 |
 
 Zvládnout 3 blindy je už opravdový úspěch — hra je záměrně těžká.
 
@@ -123,6 +128,7 @@ Funguje na jakékoli desce s D‑padem + **A** a **B** (X/Y netřeba).
 | **↓** | vrať ji zpět (zruš výběr) |
 | **A** | **PLAY** — zahraj vybrané karty (obodují se) |
 | **B** | **DISCARD** — odhoď vybrané karty (nabankuješ bonus — viz níže) |
+| **Y** | *(volitelné)* přepni **živý náhled skóre** aktuálního výběru — učební pomůcka; desky bez tlačítka Y ho prostě přeskočí |
 | **A** | pokračovat / dále, na výsledkových obrazovkách |
 
 ### Jak funguje bodování
@@ -130,7 +136,7 @@ Zahraná ruka boduje jako **CHIPS × MULT**.
 
 - **CHIPS** = základ ruky + *hodnota* každé bodující karty + **Grinder** (+3 za bodující kartu) +
   nabankovaná **srdce**.
-- **MULT** = základ ruky + nabankované **kára** + **Steady** (+3) + **Ringmaster** (+1 za každou
+- **MULT** = základ ruky + nabankované **kára** + **Steady** (+3) + **Harlequin** (+1 za každou
   další barvu v pěti kartách nad první). Pokud jsi bankoval **kříže**, celý mult se pak vynásobí
   **×(1 + 0,5 × počet křížů)**.
 
@@ -142,12 +148,16 @@ Hodnoty karet (chips): 2→2, 3→3 … 9→9, 10/J/Q/K→10, A→11.
 | Vysoká karta | 5 × 1 |
 | Pár | 10 × 2 |
 | Dva páry | 20 × 2 |
-| Trojice | 30 × 2 |
-| Postupka | 30 × 4 |
-| Barva (Flush) | 35 × 3 |
-| Full House | 35 × 4 |
+| Trojice | 40 × 2 |
+| Postupka | 40 × 3 |
+| Barva (Flush) | 70 × 3 |
+| Full House | 55 × 4 |
 | Čtveřice | 55 × 6 |
-| Postupka v barvě | 75 × 8 |
+| Postupka v barvě | 110 × 8 |
+
+Základy tvoří pokerový žebříček (flush poráží postupku, postupka v barvě poráží čtveřici). Monobarevné
+ruce (Flush, Postupka v barvě) mají vysoké **chips**, protože nikdy nedostanou Harlequin — takže dobře
+namíchaná duhová ruka pořád přebije flush stejné úrovně. To je ten twist.
 
 ### DISCARD je tvoje zbraň
 Odhození karet je nejen protočí — každá odhozená karta **nabankuje bonus na tvou DALŠÍ ruku** podle
@@ -165,7 +175,7 @@ Banky se spotřebují **další rukou (PLAY)**. Načasování, *kdy* velký bank
 ### 3 Acts (stálé bonusy, vlevo nahoře)
 - **Grinder** — +3 chips za bodující kartu.
 - **Steady** — +3 mult, každou ruku.
-- **Ringmaster** — +1 mult za každou *další barvu* ve tvých pěti kartách (nad první). Odměňuje
+- **Harlequin** — +1 mult za každou *další barvu* ve tvých pěti kartách (nad první). Odměňuje
   **pestrost** — proto duhová ruka může přebít flush.
 
 ### Carry‑hand (ruka se přenáší)
@@ -186,11 +196,11 @@ jakoukoli roli.
 ### Příklad výpočtu
 Zahraješ **K♠ K♥ 7♦ 7♣ 2♠** = Dva páry. Minulé kolo jsi nabankoval **3 srdce** a **2 kříže**.
 - CHIPS = 20 (Dva páry) + (10+10+7+7 hodnoty) + 12 (Grinder, 4 bodující karty) + 12 (3 srdce) = **90**
-- MULT = 2 (Dva páry) + 3 (Steady) + 3 (Ringmaster: 4 barvy → +3) = 8, pak ×(1 + 0,5×2 kříže) = ×2,0 → **16**
+- MULT = 2 (Dva páry) + 3 (Steady) + 3 (Harlequin: 4 barvy → +3) = 8, pak ×(1 + 0,5×2 kříže) = ×2,0 → **16**
 - Skóre = 90 × 16 = **1440**
 
 ### Tipy
 - Odhazuj brzy a nabankuj velký bonus, pak ho uvolni na jednu obří ruku.
 - Kříže jsou násobitel — pár nabankovaných křížů promění slabou ruku ve vyčištění blindu.
-- Ringmaster miluje duhy; nezacyklíš se jen na flushích.
+- Harlequin miluje duhy; nezacyklíš se jen na flushích.
 - Understudy si schovej na chvíli, kdy ho fakt potřebuješ.
