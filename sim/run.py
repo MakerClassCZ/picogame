@@ -15,6 +15,12 @@ import os
 import argparse
 import traceback
 
+# The sim's display rests NON-inverted (unlike the PicoPad panel, which sends INVON at init). Tell
+# picogame_fx so InvertFlash flips to the negative on pulse() and restores to NORMAL - otherwise it
+# "restores" to inverted and the whole sim stays stuck in negative after the first flash. setdefault
+# so an explicit PICOGAME_INVERT (e.g. to emulate an inverted panel) still wins.
+os.environ.setdefault("PICOGAME_INVERT", "0")
+
 
 def _run_profiled(host, code, g, game_path, game_dir, root, frames):
     """Headless run under cProfile + tracemalloc, then print a STRUCTURE report.

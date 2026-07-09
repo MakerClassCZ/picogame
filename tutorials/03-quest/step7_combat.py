@@ -15,7 +15,6 @@
 #
 # Run:  python3 sim/run.py tutorials/03-quest/step7_combat.py --hold B --shot /tmp/q7.png
 
-import array
 import board
 import terminalio
 import picogame as pg
@@ -52,19 +51,32 @@ MAP = [
     "##############################",
 ]
 MAPCOLS, MAPROWS = 30, 20
-CHAR2TILE = {".": 1, "P": 1, "N": 1, "*": 1, "E": 1, ":": 2, "~": 3, "#": 4,
-           "W": 5, "D": 6, "G": 7}
-TILE_RGB = [(40, 120, 50), (180, 160, 110), (40, 90, 200), (20, 80, 30),
-            (120, 120, 130), (150, 90, 40), (240, 210, 60)]
-SOLID = (3, 4, 5, 6)
+# tile values (frame index into the colour tileset; 0 = empty)
+GRASS, PATH, WATER, TREE, WALL, DOOR, GOAL = 1, 2, 3, 4, 5, 6, 7
+CHAR2TILE = {".": GRASS, "P": GRASS, "N": GRASS, "*": GRASS, "E": GRASS,
+             ":": PATH, "~": WATER, "#": TREE, "W": WALL, "D": DOOR, "G": GOAL}
+TILE_RGB = [(40, 120, 50),    # GRASS
+            (180, 160, 110),  # PATH
+            (40, 90, 200),    # WATER
+            (20, 80, 30),     # TREE
+            (120, 120, 130),  # WALL
+            (150, 90, 40),    # DOOR
+            (240, 210, 60)]   # GOAL
+SOLID = (WATER, TREE, WALL, DOOR)         # these tiles block movement
 DOWN, UP, LEFT, RIGHT = 0, 1, 2, 3
-DIR = {DOWN: (0, 1), UP: (0, -1), LEFT: (-1, 0), RIGHT: (1, 0)}
-FACE_NAME = ("down", "up", "left", "right")
+DIR = {DOWN: (0, 1), UP: (0, -1), LEFT: (-1, 0), RIGHT: (1, 0)}   # facing -> (dx, dy) step
+FACING_ANIM = ("down", "up", "side", "side")  # animation per facing (left/right share the side art)
 EXPLORE, DIALOG = 0, 1                        # game modes (int constants, not strings)
+WALK_FPS = 8                                  # walk-animation speed (frames per second)
+MAX_HP = 6
+HURT_FRAMES = 40   # ~1.3s of mercy after a hit (at 30 fps)
+FLASH_FRAMES = 3   # how long the white hit-flash shows
 BACKGROUND = pg.rgb565(0, 0, 0)
 WHITE = pg.rgb565(255, 255, 255)
 NAVY = pg.rgb565(10, 10, 40)
 
+# buffer_a/buffer_b = the engine's two shared render strips; immediate-mode draws
+# (the dialog box below) paint straight into buffer_a
 scene, buffer_a, buffer_b = picogame_game.setup(background=BACKGROUND)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
@@ -77,7 +89,7 @@ coin_spots, enemy_spots = [], []
 for tile_y in range(MAPROWS):
     for tile_x in range(MAPCOLS):
         char = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
-        world.tile(tile_x, tile_y, CHAR2TILE.get(char, 1))
+        world.tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))
         if char == "P":
             START = (tile_x * TILE, tile_y * TILE)
         elif char == "N":
@@ -100,34 +112,130 @@ npc = pg.Sprite(shp.rect(TILE, TILE, pg.rgb565(230, 200, 60)), npc_x, npc_y)
 scene.add(npc)
 
 
-def hero_bitmap():
-    palette = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(210, 80, 60),
-                            pg.rgb565(255, 225, 170), pg.rgb565(120, 40, 30)])
-    stride = TILE * 8
-    data = bytearray(stride * TILE)
-    for f in range(4):
-        for s in range(2):
-            fr = f * 2 + s
-            for y in range(s, TILE):
-                yy = y - s
-                for x in range(TILE):
-                    face = ((f == 0 and yy >= TILE - 4) or (f == 1 and yy < 4) or
-                            (f == 2 and x < 4) or (f == 3 and x >= TILE - 4))
-                    data[y * stride + fr * TILE + x] = 2 if face else 1
-            lx = 4 if s == 0 else 6
-            for x in (lx, TILE - 1 - lx):
-                data[(TILE - 1) * stride + fr * TILE + x] = 3
-    return pg.Bitmap(data, TILE, TILE, format=pg.PAL8, palette=palette, frames=8,
-                     stride=stride, transparent=0)
-
-
-hero = pg.Sprite(hero_bitmap(), START[0], START[1], frame=0)
+# --- the hero: ASCII pixel art you can edit. '#' = a pixel, '.' = transparent. One
+# colour = a 1-bit silhouette; the FACING reads from the shape: DOWN has eyes, UP is
+# the back of the head, SIDE is a profile with a nose (LEFT = SIDE mirrored at runtime
+# with flip_x). Two poses per facing make the walk -- the legs scissor between A and B.
+HERO_COLOR = pg.rgb565(235, 90, 70)
+DOWN_A = [
+    "................",
+    ".....####.......",
+    "....######......",
+    "....######......",
+    "....#.##.#......",   # eye gaps -> the face
+    "....######......",
+    ".....####.......",
+    "...########.....",
+    "..##########....",
+    "..##########....",
+    "..##########....",
+    "...########.....",
+    "....##..##......",
+    "...###..##......",
+    "..###...##......",   # left foot forward
+    "..##............",
+]
+DOWN_B = [
+    "................",
+    ".....####.......",
+    "....######......",
+    "....######......",
+    "....#.##.#......",
+    "....######......",
+    ".....####.......",
+    "...########.....",
+    "..##########....",
+    "..##########....",
+    "..##########....",
+    "...########.....",
+    "....##..##......",
+    "....##..###.....",
+    "....##...###....",   # right foot forward
+    "..........##....",
+]
+UP_A = [
+    "................",
+    ".....####.......",
+    "....######......",
+    "....######......",
+    "....######......",   # solid head = the hero's back
+    "....######......",
+    ".....####.......",
+    "...########.....",
+    "..##########....",
+    "..##########....",
+    "..##########....",
+    "...########.....",
+    "....##..##......",
+    "...###..##......",
+    "..###...##......",
+    "..##............",
+]
+UP_B = [
+    "................",
+    ".....####.......",
+    "....######......",
+    "....######......",
+    "....######......",
+    "....######......",
+    ".....####.......",
+    "...########.....",
+    "..##########....",
+    "..##########....",
+    "..##########....",
+    "...########.....",
+    "....##..##......",
+    "....##..###.....",
+    "....##...###....",
+    "..........##....",
+]
+SIDE_A = [
+    "................",
+    ".....####.......",
+    "....#####.......",
+    "....######......",
+    "....#####.#.....",   # nose nub -> faces right (flip_x -> left)
+    "....######......",
+    ".....####.......",
+    "....######......",
+    "....######.#....",   # arm swung forward
+    "....######.#....",
+    "....######......",
+    ".....####.......",
+    "...##....##.....",   # legs split
+    "..##......##....",
+    "..##......##....",
+    "..#........#....",
+]
+SIDE_B = [
+    "................",
+    ".....####.......",
+    "....#####.......",
+    "....######......",
+    "....#####.#.....",
+    "....######......",
+    ".....####.......",
+    "....######......",
+    "....######......",   # arm tucked in
+    "....######......",
+    "....######......",
+    ".....####.......",
+    ".....####.......",   # legs pass under the body
+    ".....####.......",
+    "....##..##......",
+    "....#....#......",
+]
+BM = {"down": [shp.from_mask(DOWN_A, HERO_COLOR), shp.from_mask(DOWN_B, HERO_COLOR)],
+      "up":   [shp.from_mask(UP_A, HERO_COLOR), shp.from_mask(UP_B, HERO_COLOR)],
+      "side": [shp.from_mask(SIDE_A, HERO_COLOR), shp.from_mask(SIDE_B, HERO_COLOR)]}
+hero = pg.Sprite(BM["down"][0], START[0], START[1])
 walk = picogame_anim.AnimatedSprite(hero, {
-    "down": ([0, 1], 8, True), "up": ([2, 3], 8, True),
-    "left": ([4, 5], 8, True), "right": ([6, 7], 8, True)})
+    "down": (BM["down"], WALK_FPS, True),
+    "up":   (BM["up"], WALK_FPS, True),
+    "side": (BM["side"], WALK_FPS, True)})
 scene.add(hero)
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, WHITE, BACKGROUND)
-dialog = ui.TextBox(pg, terminalio.FONT, 8, H - 60, W - 16, 54, WHITE, NAVY, maxlines=4)
+dialog = ui.TextBox(pg, terminalio.FONT, 8, H - 64, W - 16, 58, WHITE, NAVY, maxlines=4)
 LINES = ["Villager:", "Slimes ahead! Press B to", "swing at them.", "(press A)"]
 
 
@@ -136,10 +244,10 @@ class State:
     def __init__(self):
         self.facing = DOWN
         self.coins = 0
-        self.hp = 6
+        self.hp = MAX_HP
         self.hurt_cooldown = 0            # frames of mercy after a hit (i-frames)
         self.mode = EXPLORE              # EXPLORE = walking around, DIALOG = talking
-        self.frame = 0                   # frame counter (slimes chase every other frame)
+        self.frame_count = 0             # frames elapsed (slimes chase every other frame)
         self.dlg_shown = False           # draw the modal once, not every frame
 
 
@@ -159,20 +267,21 @@ def can_walk(pixel_x, pixel_y):
 
 
 def near(a, bx, by, d=TILE):
+    # True if sprite a is within d px of the point (bx, by) on both axes (a box test)
     return abs(a.x - bx) < d and abs(a.y - by) < d
 
 
-def follow():
+def camera_follow():
     offset_x = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
     offset_y = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
     scene.set_view(int(offset_x), int(offset_y))
 
 
-follow()
+camera_follow()
 dt = 1 / 30
 while True:
     btn.poll()
-    st.frame += 1
+    st.frame_count += 1
 
     if st.mode == DIALOG:
         if not st.dlg_shown:                  # draw ONCE -> no per-frame flicker
@@ -180,7 +289,8 @@ while True:
             dialog.draw(board.DISPLAY, buffer_a, LINES)
             st.dlg_shown = True
         if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
-            st.mode = EXPLORE; scene.invalidate()
+            st.mode = EXPLORE
+            scene.invalidate()
         clock.tick()
         continue
 
@@ -190,15 +300,18 @@ while True:
         st.facing = RIGHT if delta_x > 0 else LEFT
     elif delta_y:
         st.facing = DOWN if delta_y > 0 else UP
+    hero.flip_x = (st.facing == LEFT)         # mirror the side art for LEFT
     moved = False
     if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
         hero.move(hero.x + delta_x * SPEED, hero.y); moved = True
     if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
         hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
     if moved:
-        follow(); walk.play(FACE_NAME[st.facing]); walk.tick(dt)
+        camera_follow()
+        walk.play(FACING_ANIM[st.facing])
+        walk.tick(dt)
     else:
-        hero.frame = st.facing * 2
+        hero.bitmap = BM[FACING_ANIM[st.facing]][0]   # still: pose A of the current facing
 
     # attack: defeat a slime in the tile ahead of the facing
     if btn.just_pressed(btn.B):
@@ -209,42 +322,47 @@ while True:
                 enemy.visible = False
 
     # slimes chase (slower: move every other frame) and respect walls
-    if st.frame % 2 == 0:
+    if st.frame_count % 2 == 0:
         for enemy in enemies:
             if not enemy.visible:
                 continue
-            sx = (hero.x > enemy.x) - (hero.x < enemy.x)
-            sy = (hero.y > enemy.y) - (hero.y < enemy.y)
-            if sx and can_walk(enemy.x + sx, enemy.y):
-                enemy.move(enemy.x + sx, enemy.y)
-            if sy and can_walk(enemy.x, enemy.y + sy):
-                enemy.move(enemy.x, enemy.y + sy)
+            # which way to the hero: -1, 0 or +1 per axis (a compact sign())
+            chase_dx = (hero.x > enemy.x) - (hero.x < enemy.x)
+            chase_dy = (hero.y > enemy.y) - (hero.y < enemy.y)
+            if chase_dx and can_walk(enemy.x + chase_dx, enemy.y):
+                enemy.move(enemy.x + chase_dx, enemy.y)
+            if chase_dy and can_walk(enemy.x, enemy.y + chase_dy):
+                enemy.move(enemy.x, enemy.y + chase_dy)
 
     # take damage on contact (unless the cooldown from the last hit is still running)
     if st.hurt_cooldown > 0:
         st.hurt_cooldown -= 1              # count the "safe" frames down
-        if st.hurt_cooldown == 37:        # ...and end the hit-flash after 3 frames
+        if st.hurt_cooldown == HURT_FRAMES - FLASH_FRAMES:  # ...and end the hit-flash after 3 frames
             hero.flash = None
     else:
         for enemy in enemies:
+            # 13px: slime radius (~7) + hero half-width (~8), i.e. they're touching
             if enemy.visible and near(enemy, hero.x, hero.y, 13):
                 st.hp -= 1
-                st.hurt_cooldown = 40     # 40 frames where another touch can't hurt you
+                st.hurt_cooldown = HURT_FRAMES  # frames where another touch can't hurt you
                 hero.flash = WHITE        # white blit-flash for 3 frames: "I got hit"
                 if st.hp <= 0:                # down -> back to start, full HP
-                    st.hp = 6
+                    st.hp = MAX_HP
                     hero.move(START[0], START[1])
-                    follow()
+                    camera_follow()
                 break
 
+    # pick up any coin we're standing on (within ~12px on both axes = close enough)
     for coin in coins:
         if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
-            coin.visible = False; st.coins += 1
+            coin.visible = False
+            st.coins += 1
 
     if near(hero, npc.x, npc.y):
         hud.set("HP %d  COINS %d/%d  A:TALK B:SWING" % (st.hp, st.coins, len(coins)))
         if btn.just_pressed(btn.A):
-            st.mode = DIALOG; st.dlg_shown = False
+            st.mode = DIALOG
+            st.dlg_shown = False
     else:
         hud.set("HP %d  COINS %d/%d" % (st.hp, st.coins, len(coins)))
 

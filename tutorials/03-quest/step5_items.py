@@ -12,7 +12,6 @@
 #
 # Run:  python3 sim/run.py tutorials/03-quest/step5_items.py --hold RIGHT --shot /tmp/q5.png
 
-import array
 import terminalio
 import picogame as pg
 import picogame_game
@@ -48,13 +47,21 @@ MAP = [
     "##############################",
 ]
 MAPCOLS, MAPROWS = 30, 20
-CHAR2TILE = {".": 1, "P": 1, "N": 1, "*": 1, "E": 1, ":": 2, "~": 3, "#": 4,
-           "W": 5, "D": 6, "G": 7}
-TILE_RGB = [(40, 120, 50), (180, 160, 110), (40, 90, 200), (20, 80, 30),
-            (120, 120, 130), (150, 90, 40), (240, 210, 60)]
-SOLID = (3, 4, 5, 6)
+# tile values (frame index into the colour tileset; 0 = empty)
+GRASS, PATH, WATER, TREE, WALL, DOOR, GOAL = 1, 2, 3, 4, 5, 6, 7
+CHAR2TILE = {".": GRASS, "P": GRASS, "N": GRASS, "*": GRASS, "E": GRASS,
+             ":": PATH, "~": WATER, "#": TREE, "W": WALL, "D": DOOR, "G": GOAL}
+TILE_RGB = [(40, 120, 50),    # GRASS
+            (180, 160, 110),  # PATH
+            (40, 90, 200),    # WATER
+            (20, 80, 30),     # TREE
+            (120, 120, 130),  # WALL
+            (150, 90, 40),    # DOOR
+            (240, 210, 60)]   # GOAL
+SOLID = (WATER, TREE, WALL, DOOR)         # these tiles block movement
 DOWN, UP, LEFT, RIGHT = 0, 1, 2, 3
-FACE_NAME = ("down", "up", "left", "right")
+FACING_ANIM = ("down", "up", "side", "side")   # animation per facing (left/right share the side art)
+WALK_FPS = 8
 BACKGROUND = pg.rgb565(0, 0, 0)
 
 scene, _, _ = picogame_game.setup(background=BACKGROUND)
@@ -68,7 +75,7 @@ coin_spots = []
 for tile_y in range(MAPROWS):
     for tile_x in range(MAPCOLS):
         char = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
-        world.tile(tile_x, tile_y, CHAR2TILE.get(char, 1))
+        world.tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))
         if char == "P":
             hero_x, hero_y = tile_x * TILE, tile_y * TILE
         elif char == "*":
@@ -81,31 +88,127 @@ for coin in coins:
     scene.add(coin)
 
 
-def hero_bitmap():
-    palette = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(210, 80, 60),
-                            pg.rgb565(255, 225, 170), pg.rgb565(120, 40, 30)])
-    stride = TILE * 8
-    data = bytearray(stride * TILE)
-    for f in range(4):
-        for s in range(2):
-            fr = f * 2 + s
-            for y in range(s, TILE):
-                yy = y - s
-                for x in range(TILE):
-                    face = ((f == 0 and yy >= TILE - 4) or (f == 1 and yy < 4) or
-                            (f == 2 and x < 4) or (f == 3 and x >= TILE - 4))
-                    data[y * stride + fr * TILE + x] = 2 if face else 1
-            lx = 4 if s == 0 else 6
-            for x in (lx, TILE - 1 - lx):
-                data[(TILE - 1) * stride + fr * TILE + x] = 3
-    return pg.Bitmap(data, TILE, TILE, format=pg.PAL8, palette=palette, frames=8,
-                     stride=stride, transparent=0)
-
-
-hero = pg.Sprite(hero_bitmap(), hero_x, hero_y, frame=0)
+# --- the hero: ASCII pixel art you can edit. '#' = a pixel, '.' = transparent. One
+# colour = a 1-bit silhouette; the FACING reads from the shape: DOWN has eyes, UP is
+# the back of the head, SIDE is a profile with a nose (LEFT = SIDE mirrored at runtime
+# with flip_x). Two poses per facing make the walk -- the legs scissor between A and B.
+HERO_COLOR = pg.rgb565(235, 90, 70)
+DOWN_A = [
+    "................",
+    ".....####.......",
+    "....######......",
+    "....######......",
+    "....#.##.#......",   # eye gaps -> the face
+    "....######......",
+    ".....####.......",
+    "...########.....",
+    "..##########....",
+    "..##########....",
+    "..##########....",
+    "...########.....",
+    "....##..##......",
+    "...###..##......",
+    "..###...##......",   # left foot forward
+    "..##............",
+]
+DOWN_B = [
+    "................",
+    ".....####.......",
+    "....######......",
+    "....######......",
+    "....#.##.#......",
+    "....######......",
+    ".....####.......",
+    "...########.....",
+    "..##########....",
+    "..##########....",
+    "..##########....",
+    "...########.....",
+    "....##..##......",
+    "....##..###.....",
+    "....##...###....",   # right foot forward
+    "..........##....",
+]
+UP_A = [
+    "................",
+    ".....####.......",
+    "....######......",
+    "....######......",
+    "....######......",   # solid head = the hero's back
+    "....######......",
+    ".....####.......",
+    "...########.....",
+    "..##########....",
+    "..##########....",
+    "..##########....",
+    "...########.....",
+    "....##..##......",
+    "...###..##......",
+    "..###...##......",
+    "..##............",
+]
+UP_B = [
+    "................",
+    ".....####.......",
+    "....######......",
+    "....######......",
+    "....######......",
+    "....######......",
+    ".....####.......",
+    "...########.....",
+    "..##########....",
+    "..##########....",
+    "..##########....",
+    "...########.....",
+    "....##..##......",
+    "....##..###.....",
+    "....##...###....",
+    "..........##....",
+]
+SIDE_A = [
+    "................",
+    ".....####.......",
+    "....#####.......",
+    "....######......",
+    "....#####.#.....",   # nose nub -> faces right (flip_x -> left)
+    "....######......",
+    ".....####.......",
+    "....######......",
+    "....######.#....",   # arm swung forward
+    "....######.#....",
+    "....######......",
+    ".....####.......",
+    "...##....##.....",   # legs split
+    "..##......##....",
+    "..##......##....",
+    "..#........#....",
+]
+SIDE_B = [
+    "................",
+    ".....####.......",
+    "....#####.......",
+    "....######......",
+    "....#####.#.....",
+    "....######......",
+    ".....####.......",
+    "....######......",
+    "....######......",   # arm tucked in
+    "....######......",
+    "....######......",
+    ".....####.......",
+    ".....####.......",   # legs pass under the body
+    ".....####.......",
+    "....##..##......",
+    "....#....#......",
+]
+BM = {"down": [shp.from_mask(DOWN_A, HERO_COLOR), shp.from_mask(DOWN_B, HERO_COLOR)],
+      "up":   [shp.from_mask(UP_A, HERO_COLOR), shp.from_mask(UP_B, HERO_COLOR)],
+      "side": [shp.from_mask(SIDE_A, HERO_COLOR), shp.from_mask(SIDE_B, HERO_COLOR)]}
+hero = pg.Sprite(BM["down"][0], hero_x, hero_y)
 walk = picogame_anim.AnimatedSprite(hero, {
-    "down": ([0, 1], 8, True), "up": ([2, 3], 8, True),
-    "left": ([4, 5], 8, True), "right": ([6, 7], 8, True)})
+    "down": (BM["down"], WALK_FPS, True),
+    "up":   (BM["up"], WALK_FPS, True),
+    "side": (BM["side"], WALK_FPS, True)})
 scene.add(hero)
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, pg.rgb565(255, 255, 255), BACKGROUND)
 
@@ -125,22 +228,24 @@ def can_walk(pixel_x, pixel_y):
                 solid_at(pixel_x + 2, pixel_y + TILE - 3) or solid_at(pixel_x + TILE - 3, pixel_y + TILE - 3))
 
 
-def follow():
+def camera_follow():
     offset_x = max(W - MAPCOLS * TILE, min(0, W // 2 - (hero.x + TILE // 2)))
     offset_y = max(H - MAPROWS * TILE, min(0, H // 2 - (hero.y + TILE // 2)))
     scene.set_view(int(offset_x), int(offset_y))
 
 
-follow()
+camera_follow()
 dt = 1 / 30
 while True:
     btn.poll()
+    # True/False count as 1/0, so this is -1 (left), 0, or +1 (right)
     delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
     delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
     if delta_x:
         facing = RIGHT if delta_x > 0 else LEFT
     elif delta_y:
         facing = DOWN if delta_y > 0 else UP
+    hero.flip_x = (facing == LEFT)        # mirror the side art for LEFT
 
     moved = False
     if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
@@ -148,12 +253,12 @@ while True:
     if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
         hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
     if moved:
-        follow()
-        walk.play(FACE_NAME[facing]); walk.tick(dt)
+        camera_follow()
+        walk.play(FACING_ANIM[facing]); walk.tick(dt)
     else:
-        hero.frame = facing * 2
+        hero.bitmap = BM[FACING_ANIM[facing]][0]   # still: pose A of the current facing
 
-    # pick up any coin we're standing on
+    # pick up any coin we're standing on (within ~12px on both axes = close enough)
     for coin in coins:
         if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
             coin.visible = False
