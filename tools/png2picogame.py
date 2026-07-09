@@ -230,6 +230,12 @@ def main():
     ap.add_argument("--dedup", action="store_true",
                     help="with --tile: fold identical tiles -> smaller tileset (less RAM); emits a "
                          "REMAP table to rewrite your tilemap (new = REMAP[old])")
+    ap.add_argument("--split", action="store_true",
+                    help="emit pic_X.py (metadata+palette+loader) AND X.bin (raw pixels) instead "
+                         "of inlining DATA: the .bin goes into a ROMFS asset image "
+                         "(tools/build_romfs.py) and loads 0-copy from XIP flash on boards with "
+                         "an asset region; everywhere else the loader falls back to reading the "
+                         "sibling .bin (device FAT / desktop sim)")
     ap.add_argument("--name", default=None)
     args = ap.parse_args()
     args.colors = max(1, min(255, args.colors))
@@ -323,6 +329,52 @@ def main():
         raw = w * h
         print("wrote %s: RLE %dx%d, %d B (raw %d B, %.0f%% of raw)" % (
             args.output, w, h, len(rle), raw, 100.0 * len(rle) / raw))
+        return
+
+    if args.split:
+        if args.rle:
+            sys.exit("--split and --rle are exclusive (RLE inlines its data)")
+        import os
+        base = os.path.splitext(os.path.basename(args.output))[0]
+        bin_name = (base[4:] if base.startswith("pic_") else base) + ".bin"
+        bin_path = os.path.join(os.path.dirname(args.output) or ".", bin_name)
+        with open(bin_path, "wb") as bf:
+            bf.write(data)
+        write_module(args.output, ([
+            "import array"] if needs_array else []) + [
+            "# picogame SPLIT asset from %s (%s, frame %dx%d, frames %d): pixels live in %s," % (
+                args.name or args.input, fmt, frame_w, h, frames, bin_name),
+            "# packed into the ROMFS asset image by tools/build_romfs.py. Only the palette (~%d B)" % (
+                len(palette_bytes) or 2),
+            "# stays in RAM; on a board with an asset region the pixels blit 0-copy from XIP flash.",
+            "WIDTH = %d" % frame_w,
+            "HEIGHT = %d" % h,
+            "FRAMES = %d" % frames,
+            "STRIDE = %d" % stride,
+            "FORMAT = %d  # 0=RGB565, 1=PAL8" % fmt_const,
+            "TRANSPARENT = %s" % (str(transparent) if transparent is not None else "None"),
+            "PALETTE = %s" % palette_repr,
+            "BIN = %r" % bin_name,
+        ] + (["REMAP = %r  # per old tile: (idx, flip_x, flip_y, transpose); tm.tile(x, y, *REMAP[old])"
+              % (remap,)] if remap is not None else []) + [
+            "",
+            "",
+            "def bitmap(pg, root=\"\"):",
+            "    \"\"\"Pixels from the ROMFS asset region when present (0-copy over XIP flash;",
+            "    the memoryview points into flash, so the file handle may go away), else from",
+            "    the sibling .bin at `root` (read into RAM - device FAT / desktop sim).\"\"\"",
+            "    try:",
+            "        data = memoryview(open(\"/rom/\" + BIN, \"rb\"))",
+            "    except OSError:",
+            "        with open(root + BIN, \"rb\") as f:",
+            "            data = f.read()",
+            "    return pg.Bitmap(data, WIDTH, HEIGHT, format=FORMAT, palette=PALETTE,",
+            "                     frames=FRAMES, stride=STRIDE, transparent=TRANSPARENT)",
+            "",
+        ])
+        print("wrote %s + %s: %s %dx%d x%d frames, pixels %d B split out%s" % (
+            args.output, bin_path, fmt, frame_w, h, frames, len(data),
+            ", palette %d B stays in .py" % len(palette_bytes) if fmt == "pal8" else ""))
         return
 
     write_module(args.output, ([
