@@ -14,8 +14,11 @@
 # Uses synthio + audiopwmio + audiomixer when the firmware has them (both our boards do).
 # SAFE ON AUDIO-LESS FIRMWARE: if those modules are missing, importing this lib still works
 # and the whole API degrades to silent no-ops (Synth/Drone/note/load_midi all accept the same
-# args and return inert values) - a game needs ZERO try/except guard code. Check the module
-# flag `AVAILABLE` (bool) if you want to branch (e.g. hide a volume option).
+# args and return inert values). ALSO SAFE ON A TIGHT HEAP: if Synth() itself fails mid-init
+# (MemoryError allocating the mixer buffers, or the pin is claimed), the instance degrades to
+# the same silent no-ops instead of raising - a game needs ZERO try/except guard code either
+# way. Branch on the module flag `AVAILABLE` (modules present) or `synth.available` (this
+# instance actually has audio out) if you want e.g. to hide a volume option.
 # (The simulator provides its own synthio stub, so under the sim the real path runs.)
 
 import array
@@ -74,6 +77,25 @@ SQUARE = square()
 NOISE = noise()
 
 
+class _Null:
+    """Inert stand-in for notes/LFOs/tracks/mixers: calls and indexing return self, unknown
+    attribute reads return self, attribute writes stick (Drone.set, drone.note.waveform = ...),
+    truth value is False. Used by the no-op fallback below AND by a Synth that failed to
+    initialise (MemoryError on a tight heap) - so the API stays call-safe either way."""
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+    def __getattr__(self, name):
+        return self
+
+    def __getitem__(self, i):
+        return self
+
+    def __bool__(self):
+        return False
+
+
 def note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08,
          amplitude=0.6, bend=None, cutoff=None):
     """Build a reusable SFX/instrument note. `midi` = MIDI number (60 = middle C);
@@ -91,21 +113,36 @@ def pitch_bend(semitones, ms, waveform=None, once=True):
 
 
 class Synth:
-    """PWM audio out -> a mixer with a music voice + a synth voice for SFX."""
+    """PWM audio out -> a mixer with a music voice + a synth voice for SFX.
+
+    Init is self-guarding: on a heap too tight for the mixer buffers (MemoryError) or a
+    claimed pin, the instance degrades to silent no-ops instead of raising - the game runs
+    without sound and without any try/except of its own. Check `.available` to branch."""
 
     def __init__(self, pin=None, sample_rate=22050, buffer_size=2048,
                  music_level=0.4, sfx_level=0.7):
         self.sample_rate = sample_rate
-        self.audio = PWMAudioOut(pin if pin is not None else board.AUDIO)
-        self.mixer = Mixer(voice_count=2, sample_rate=sample_rate, channel_count=1,
-                           bits_per_sample=16, buffer_size=buffer_size)
-        self.audio.play(self.mixer)
-        self.mixer.voice[0].level = music_level      # voice 0: music (MidiTrack)
-        self.mixer.voice[1].level = sfx_level        # voice 1: live synth SFX
-        self.synth = synthio.Synthesizer(sample_rate=sample_rate, channel_count=1)
-        self.mixer.voice[1].play(self.synth)
         self._last_sfx = None        # last one-shot SFX; released on the next sfx so HELD notes
         #                              (a Drone engine/siren) and the music voice are never cut off
+        try:
+            self.audio = PWMAudioOut(pin if pin is not None else board.AUDIO)
+            self.mixer = Mixer(voice_count=2, sample_rate=sample_rate, channel_count=1,
+                               bits_per_sample=16, buffer_size=buffer_size)
+            self.audio.play(self.mixer)
+            self.mixer.voice[0].level = music_level      # voice 0: music (MidiTrack)
+            self.mixer.voice[1].level = sfx_level        # voice 1: live synth SFX
+            self.synth = synthio.Synthesizer(sample_rate=sample_rate, channel_count=1)
+            self.mixer.voice[1].play(self.synth)
+            self.available = True
+        except Exception:            # MemoryError on a tight heap / pin in use -> run silent
+            out = getattr(self, "audio", None)
+            if out is not None and not isinstance(out, _Null):
+                try:
+                    out.deinit()     # release the pin so a later Audio()/Synth() can claim it
+                except Exception:
+                    pass
+            self.audio = self.mixer = self.synth = _Null()
+            self.available = False
 
     def sfx(self, n):
         """Play a one-shot SFX note (monophonic: cuts off the PREVIOUS sfx, but leaves HELD notes -
@@ -192,19 +229,7 @@ def load_midi(path, sample_rate=22050, waveform=None, envelope=None, tempo=120, 
 
 if not AVAILABLE:
 
-    class _Null:
-        """Inert stand-in for notes/LFOs/tracks: calls return self, unknown attribute
-        reads return self, attribute writes stick (Drone.set, drone.note.waveform = ...),
-        truth value is False."""
-
-        def __call__(self, *args, **kwargs):
-            return self
-
-        def __getattr__(self, name):
-            return self
-
-        def __bool__(self):
-            return False
+    # (_Null lives at module level above - shared with the failed-init degrade path.)
 
     def note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08,
              amplitude=0.6, bend=None, cutoff=None):
@@ -226,6 +251,7 @@ if not AVAILABLE:
             self.mixer = _Null()
             self.synth = _Null()
             self._last_sfx = None
+            self.available = False
 
         def sfx(self, n):
             pass

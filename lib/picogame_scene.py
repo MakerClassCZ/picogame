@@ -80,6 +80,11 @@ class View:
 def _build_bitmaps(pg, assets):
     bm = {}
     for aid, (fmt, hexdata, bw, bh, frames, transp, pal) in assets.items():
+        if fmt != "pal8":
+            # this loader only knows how to rebuild PAL8 atlases; anything else
+            # would be silently misinterpreted (wrong stride/format) - refuse.
+            raise ValueError("asset %r: format %r not supported by this loader (PAL8 only)"
+                             % (aid, fmt))
         palette = array.array("H", pal)
         bm[aid] = pg.Bitmap(bytes.fromhex(hexdata), bw, bh, format=pg.PAL8,
                             palette=palette, frames=frames, stride=bw * frames,
@@ -117,26 +122,32 @@ def load_bank(pg, bank):
 
 
 def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
-    display = display if display is not None else board.DISPLAY
-    # A framebuffer render target (picogame.Framebuffer, on scanout-buffer platforms like the
-    # WASM playground / FruitJam) has no auto_refresh / root_group; a BusDisplay does. Set them
-    # only where present so load() works with either target. (A real display still gets both.)
-    try:
-        display.auto_refresh = False
-    except (AttributeError, TypeError):
-        pass
-    try:
-        display.root_group = None
-    except (AttributeError, TypeError):
-        pass
+    # Shared platform logic (board.DISPLAY / supervisor display / Framebuffer unwrap /
+    # busdisplay) lives in picogame_game.resolve_display - ONE resolver for both entry points.
+    import picogame_game
+    backend, is_fb = picogame_game.resolve_display(display)
     if strip_h is None:
         strip_h = getattr(pg, "STRIP_H", 8)   # board default (8 DMA / 24 not)
-    w = display.width
     v = View()
-    v.bufA = bytearray(w * strip_h * 2)
-    v.bufB = bytearray(w * strip_h * 2)
-    backend = pg.Display(display) if hasattr(pg, "Display") else display
-    v.scene = pg.Scene(backend, v.bufA, v.bufB, background=scene["bg"])
+    if is_fb:
+        # framebuffer target: the scene composites straight into it - no strip buffers
+        v.bufA = v.bufB = None
+        v.scene = pg.Scene(backend, None, None, background=scene["bg"])
+    else:
+        try:
+            backend.auto_refresh = False
+        except (AttributeError, TypeError):
+            pass
+        try:
+            backend.root_group = None
+        except (AttributeError, TypeError):
+            pass
+        w = backend.width
+        v.bufA = bytearray(w * strip_h * 2)
+        v.bufB = bytearray(w * strip_h * 2)
+        if hasattr(pg, "Display"):
+            backend = pg.Display(backend)
+        v.scene = pg.Scene(backend, v.bufA, v.bufB, background=scene["bg"])
 
     if bank is not None:                      # shared bank: reuse its bitmaps/props/anims
         bitmaps = bank["bitmaps"]

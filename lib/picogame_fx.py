@@ -360,7 +360,7 @@ class InvertFlash:
     """A FREE full-screen hit-flash via the panel's hardware colour inversion (pg.invert) -
     no StripDraw, no buffer, no repaint: the whole screen flips to its negative for a few
     frames. Cheaper than a Fade overlay; great for a sharp 1-bit "hit". Needs a controller
-    that supports INVON/INVOFF (ST7789/ST7735); on the sim it's a silent no-op.
+    that supports INVON/INVOFF (ST7789/ST7735); the sim emulates it (preview shows the negative).
 
         flash = InvertFlash(board.DISPLAY)
         ...on hit:      flash.pulse()

@@ -9,6 +9,7 @@ import _host
 
 RGB565 = 0
 PAL8 = 1
+API_LEVEL = 1                # feature-gate level, mirrors the firmware module constant
 RGB444_SUPPORTED = False     # capability flag (mirrors firmware); the desktop sim renders RGB565
 W = _host.W
 H = _host.H
@@ -48,8 +49,12 @@ def _src_pixel(bm, sx, sy):
         idx = bm.data[sy * bm.stride + sx]
         if bm.has_transparent and idx == bm.transparent:
             return None
-        if idx >= len(bm.palette):           # parity with the C blitter's per-access clamp (H2)
-            idx = 0
+        if idx >= len(bm.palette):
+            # The C blitter does NOT clamp (documented UB contract: indices MUST be
+            # < palette length; on device this reads past the palette and can even
+            # fault). The sim raises instead, so a bad asset surfaces at dev time.
+            raise ValueError("PAL8 index %d out of palette (%d entries) - fix the asset"
+                             % (idx, len(bm.palette)))
         return bm.palette[idx]
     # RGB565
     if bm._u16:
@@ -108,7 +113,14 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
     fcol = frame * sw
     cx0, cy0, cx1, cy1 = clip
     fb = _host.fb
-    if transpose:                          # cheap 90deg (mirrors the C transpose path); scale 1
+    # 8.8 fixed-point scale, mirroring the C engine (sprite.scale is quantized to
+    # uint16 8.8 on device; the setter clamps it >= 1/256).
+    scale_q = int(scale * 256)
+    if scale_q < 1:
+        scale_q = 1
+    # C honours transpose ONLY on the fast path (scale == 256); the scaled blitter
+    # ignores it (see picogame_blit_bitmap / blit_sprite in shared-module).
+    if transpose and scale_q == 256:       # cheap 90deg (mirrors the C transpose path)
         dw, dh = sh, sw                     # footprint swaps
         xs = max(dx0, cx0, 0); ys = max(dy0, cy0, 0)
         xe = min(dx0 + dw, cx1, W); ye = min(dy0 + dh, cy1, H)
@@ -124,10 +136,14 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
         return
     # destination extent grows with scale; each dest pixel maps back to a source
     # pixel by nearest-neighbour (same technique as PicoLibSDK DrawImgMat, but
-    # axis-aligned). scale == 1.0 reduces to the 1:1 path.
-    dw = max(1, int(round(sw * scale)))
-    dh = max(1, int(round(sh * scale)))
-    inv = 1.0 / scale
+    # axis-aligned). scale == 1.0 (scale_q == 256) reduces to the 1:1 path.
+    # Size math mirrors the C scaled blitter EXACTLY: FLOOR of dim * 8.8 scale,
+    # and NO 1px minimum (C: dw <= 0 || dh <= 0 -> nothing drawn).
+    dw = (sw * scale_q) >> 8
+    dh = (sh * scale_q) >> 8
+    if dw <= 0 or dh <= 0:
+        return
+    step = (1 << 24) // scale_q            # source px per dest px, 16.16 (mirrors C)
     cx0, cy0, cx1, cy1 = clip
     x_start = max(dx0, cx0, 0)
     y_start = max(dy0, cy0, 0)
@@ -135,7 +151,7 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
     y_end = min(dy0 + dh, cy1, H)
     fb = _host.fb
     for y in range(y_start, y_end):
-        sy = int((y - dy0) * inv)
+        sy = ((y - dy0) * step) >> 16
         if sy >= sh:
             sy = sh - 1
         if flip_y:
@@ -143,7 +159,7 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
         srow = sy * bm.stride + fcol
         drow = y * W
         for x in range(x_start, x_end):
-            sx = int((x - dx0) * inv)
+            sx = ((x - dx0) * step) >> 16
             if sx >= sw:
                 sx = sw - 1
             if flip_x:
@@ -158,8 +174,10 @@ def _src_pixel_row(bm, srow, sx):
         idx = bm.data[srow + sx]
         if bm.has_transparent and idx == bm.transparent:
             return None
-        if idx >= len(bm.palette):           # parity with the C blitter's per-access clamp (H2)
-            idx = 0
+        if idx >= len(bm.palette):
+            # C does NOT clamp (UB contract, see _src_pixel) - raise to surface asset bugs.
+            raise ValueError("PAL8 index %d out of palette (%d entries) - fix the asset"
+                             % (idx, len(bm.palette)))
         return bm.palette[idx]
     if bm._u16:
         v = bm.data[srow + sx]
@@ -184,10 +202,10 @@ class Sprite:
         self.anchor_y = 0.0
         self.scale = 1.0          # uniform draw scale (nearest-neighbour)
         self.angle = 0.0          # rotation in degrees (about the anchor); 0 = fast path
-        self.shadow = False       # darken-mode: opaque pixels dim the destination (drop shadows / dimming)
-        self.flash = None         # flash: opaque pixels drawn as this wire-RGB565 colour
-        self.dither = 0           # 0=opaque .. 16=invisible: Bayer dither -> fake transparency
-        self.tint = None          # tint: multiply opaque pixels by this colour (keeps shading)
+        # blit effect: ONE shared slot (device parity). shadow/flash/dither/tint are
+        # properties below - setting one clears the others (last-set-wins).
+        self._fx_mode = None      # None | "shadow" | "flash" | "dither" | "tint"
+        self._fx_val = None
         self.transpose = False    # swap x/y -> cheap 90deg (with flips = all 8 orientations)
         self.data = None
 
@@ -223,6 +241,56 @@ class Sprite:
     def fy(self, v):
         self._y = float(v)
 
+    # ---- blit effects: one shared slot, exactly like the device ----
+    # On device the four effects are flag bits over ONE effect slot (set_effect in
+    # shared-bindings/picogame): assigning a truthy value to any of shadow/flash/
+    # tint/dither CLEARS the other three (last-set-wins); assigning a falsy value
+    # clears only that effect (so `spr.flash = 0` can't wipe an active dither).
+    # Draw priority in C is dither > flash > tint > shadow - moot with exclusivity
+    # (at most one is ever active) but _fxput tests in that same order.
+    def _set_fx(self, mode, value):
+        if value:
+            self._fx_mode = mode
+            self._fx_val = value
+        elif self._fx_mode == mode:
+            self._fx_mode = None
+            self._fx_val = None
+
+    @property
+    def shadow(self):
+        return self._fx_mode == "shadow"   # darken-mode: opaque pixels dim the destination
+
+    @shadow.setter
+    def shadow(self, v):
+        self._set_fx("shadow", bool(v))
+
+    @property
+    def flash(self):
+        # flash: opaque pixels drawn as this wire-RGB565 colour
+        return self._fx_val if self._fx_mode == "flash" else None
+
+    @flash.setter
+    def flash(self, v):
+        self._set_fx("flash", v)
+
+    @property
+    def dither(self):
+        # 0=opaque .. 16=invisible: Bayer dither -> fake transparency
+        return self._fx_val if self._fx_mode == "dither" else 0
+
+    @dither.setter
+    def dither(self, v):
+        self._set_fx("dither", v)
+
+    @property
+    def tint(self):
+        # tint: multiply opaque pixels by this colour (keeps shading)
+        return self._fx_val if self._fx_mode == "tint" else None
+
+    @tint.setter
+    def tint(self, v):
+        self._set_fx("tint", v)
+
     @property
     def anchor(self):
         return (self.anchor_x, self.anchor_y)
@@ -243,23 +311,56 @@ class Sprite:
     def _topleft(self):
         w = self.bitmap.width if self.bitmap else 0
         h = self.bitmap.height if self.bitmap else 0
-        w = int(round(w * self.scale))       # anchor is a fraction of the SCALED size
-        h = int(round(h * self.scale))
+        scale_q = max(1, int(self.scale * 256))
+        w = (w * scale_q) >> 8               # anchor is a fraction of the SCALED size
+        h = (h * scale_q) >> 8               # (FLOOR of 8.8 scale, like C picogame_sprite_topleft)
+        if self.transpose and scale_q == 256:   # footprint swaps only on the fast path (like C)
+            w, h = h, w
         return (self.x - int(self.anchor_x * w), self.y - int(self.anchor_y * h))
 
     def _bounds(self):
-        # drawn box (x1, y1, x2, y2); x2/y2 = far corner (tl + size). Mirrors the C
-        # picogame_sprite_aabb angle==0 path: scale + transpose, anchor offset. (The sim
-        # ignores arbitrary rotation here; the device aabb pads a rotated box.)
+        # drawn box (x1, y1, x2, y2); x2/y2 = far corner. Mirrors C picogame_sprite_aabb:
+        # angle==0 -> floor-scaled size + transpose (fast path only) + anchor offset;
+        # angle!=0 -> rotated-corners bbox + the C margins (-1,-1,+2,+2).
         w = self.bitmap.width if self.bitmap else 0
         h = self.bitmap.height if self.bitmap else 0
-        sw = int(w * self.scale)
-        sh = int(h * self.scale)
-        if self.transpose and self.scale == 1.0:
-            sw, sh = sh, sw
-        tx = self.x - int(self.anchor_x * sw)
-        ty = self.y - int(self.anchor_y * sh)
-        return (tx, ty, tx + sw, ty + sh)
+        scale_q = max(1, int(self.scale * 256))
+        if self.angle == 0:
+            sw = (w * scale_q) >> 8
+            sh = (h * scale_q) >> 8
+            if self.transpose and scale_q == 256:
+                sw, sh = sh, sw
+            tx = self.x - int(self.anchor_x * sw)
+            ty = self.y - int(self.anchor_y * sh)
+            return (tx, ty, tx + sw, ty + sh)
+        # rotated: transform the 4 UNSCALED-rect corners about the anchor pivot
+        # (pivot in SOURCE pixels, scale applied to the corner deltas), floor each,
+        # take the min/max bbox, then add C's margins. Mirrors corners_bbox +
+        # picogame_sprite_aabb. NOTE: C uses a Q15 sine LUT at WHOLE degrees and
+        # Q16 fixed-point; math.sin/cos on a float angle can differ by +-1 px at
+        # quantization boundaries (accepted residual).
+        pivx = int(self.anchor_x * w)
+        pivy = int(self.anchor_y * h)
+        a = math.radians(self.angle)
+        cs, sn = math.cos(a), math.sin(a)
+        sc = scale_q / 256.0
+        minx = miny = 1 << 30
+        maxx = maxy = -(1 << 30)
+        for (cx, cy) in ((0, 0), (w, 0), (0, h), (w, h)):
+            du = (cx - pivx) * sc
+            dv = (cy - pivy) * sc
+            X = int(math.floor(du * cs - dv * sn))
+            Y = int(math.floor(du * sn + dv * cs))
+            if X < minx:
+                minx = X
+            if X > maxx:
+                maxx = X
+            if Y < miny:
+                miny = Y
+            if Y > maxy:
+                maxy = Y
+        px, py = self.x, self.y
+        return (px + minx - 1, py + miny - 1, px + maxx + 2, py + maxy + 2)
 
     def _other_box(self, b):
         if isinstance(b, Sprite):
@@ -394,10 +495,13 @@ class Tilemap:
 
     def _draw(self, vx, vy, clip):
         tw, th = self.tileset.width, self.tileset.height
+        nframes = self.tileset.frames
         for ty in range(self.map_h):
             for tx in range(self.map_w):
                 off = ty * self.map_w + tx
                 v = self.grid[off]
+                if v >= nframes:
+                    continue        # C skips out-of-range tile indices (no wrap)
                 o = self.orient[off] if self.orient is not None else 0
                 _blit(self.tileset, self.ox + tx * tw + vx, self.oy + ty * th + vy,
                       v, bool(o & 1), bool(o & 2), clip, 1.0, False, None, 0, None, bool(o & 4))
@@ -956,7 +1060,7 @@ def fbm2d(x, y, *, octaves=4, seed=0, lacunarity=2.0, gain=0.5):
     freq = 1.0
     norm = 0.0
     for _ in range(octaves):
-        total += amp * value2d(x * freq, y * freq, seed)
+        total += amp * value2d(x * freq, y * freq, seed=seed)
         norm += amp
         amp *= gain
         freq *= lacunarity
@@ -969,7 +1073,7 @@ def fbm1d(x, *, octaves=4, seed=0, lacunarity=2.0, gain=0.5):
     freq = 1.0
     norm = 0.0
     for _ in range(octaves):
-        total += amp * value1d(x * freq, seed)
+        total += amp * value1d(x * freq, seed=seed)
         norm += amp
         amp *= gain
         freq *= lacunarity
