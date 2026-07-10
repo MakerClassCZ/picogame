@@ -183,7 +183,9 @@ while True:
                     st.lives -= 1
                     shaker.add(0.6)                  # big shake (picogame_fx, deep-game-feel C1)
                     st.freeze = 3                    # hit-stop (deep-game-feel C2)
-                    st.mercy = 24; tray.flash = TRAY_HIT_COLOR; beep(120, 120)
+                    st.mercy = 24
+                    tray.flash = TRAY_HIT_COLOR
+                    beep(120, 120)
                     if st.lives <= 0:
                         st.over = True
                         st.last_score = -1            # force one HUD redraw on the game-over transition

@@ -24,25 +24,43 @@ import picogame_clock
 import picogame_shapes as shp
 import picogame_ui as ui
 
-# --- audio: build the SFX samples ONCE at startup, then play them async via the mixer. NEVER call
-# tone() per shot - it only *builds* a sample (a Python array alloc), so doing it every shot stalls
-# and allocates for nothing (that was the old beep bug). Guarded so the sim (no audio HW) stays silent.
-audio = FIRE_SND = BOOM_SND = None
+# --- audio: WARM synthio SFX (picogame_synth), built ONCE at import - synthio renders in real
+# time (~0 sample RAM), so a note is a reusable object; never build one per shot. Warmth = a
+# rounded custom wavetable / soft triangle + a Biquad LOW_PASS per note + a percussive envelope
+# (instead of the old raw-square tone() blips). Guarded: no synthio (the sim) = silent no-ops.
+FIRE_SND = BOOM_SND = None
 try:
-    import picogame_audio
-    audio = picogame_audio.Audio()                  # PWM on board.AUDIO (GP15), async 4-voice mixer
-    FIRE_SND = picogame_audio.tone(650, 55)         # quick blip on launch
-    BOOM_SND = picogame_audio.tone(90, 200)         # low thud on impact
+    import array
+    import synthio                          # noqa: F401  (device-only; ImportError in the sim)
+    import picogame_synth as snd
+
+    _synth = snd.Synth(sfx_level=0.7)
+
+    def _wave(harmonics):                   # summed harmonics with rolloff = a baked low-pass
+        acc = [0.0] * 256
+        for h, a in harmonics:
+            w = 2 * math.pi * h / 256
+            for i in range(256):
+                acc[i] += a * math.sin(w * i)
+        m = max(abs(v) for v in acc) or 1.0
+        return array.array("h", [int(28000 * v / m) for v in acc])
+
+    _PAD = _wave([(1, 1.0), (2, 0.42), (3, 0.20), (4, 0.09), (5, 0.04)])   # dark, round
+    # FIRE (was tone(650, 55)): a quick bright launch chirp - soft triangle + a small rising
+    # bend under a warm cutoff, so it pops without piercing.
+    FIRE_SND = snd.note(81, snd.TRIANGLE, attack=0.005, decay=0.05, release=0.08,
+                        amplitude=0.5, bend=snd.pitch_bend(2, 45), cutoff=2200)
+    # BOOM (was tone(90, 200)): a low warm thud - percussive envelope (fast attack, real
+    # release ring) + a falling bend on the dark table under a tight low-pass.
+    BOOM_SND = snd.note(38, _PAD, attack=0.01, decay=0.09, release=0.2,
+                        amplitude=0.8, bend=snd.pitch_bend(-4, 170), cutoff=700)
+
+    def sfx(n):
+        if n is not None:
+            _synth.sfx(n)                   # monophonic one-shot; retriggers its bend LFO
 except Exception:
-    audio = None
-
-
-def sfx(sample):
-    if audio is not None and sample is not None:
-        try:
-            audio.sfx(sample)                       # fire-and-forget on a free mixer voice (non-blocking)
-        except Exception:
-            pass
+    def sfx(n):
+        pass
 
 
 # --- colours (ALWAYS via rgb565 - never raw 0xRRGGBB) ---

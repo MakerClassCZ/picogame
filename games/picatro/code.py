@@ -81,7 +81,7 @@ parts = pg.Particles(64, size=2, gravity=0.05, fade=True)    # slam pop + win/fi
 scene.add(parts)
 
 # one-time how-to card at run start (0-RAM SceneBox; dismiss with A) - teaches PLAY vs DISCARD, not a wall
-howto = ui.SceneBox(scene, pg, L, 14, 38, 292, 118, INK, C(244, 236, 210), nlines=8, border=INK)
+howto = ui.SceneBox(scene, pg, L, 14, 38, 292, 118, INK, C(244, 236, 210), nlines=9, border=INK)
 
 # big WIN / BUSTED banner: ONE reusable sprite of scaled text. Text is re-rendered into a shared buffer
 # (via Canvas, in place) then revealed - no per-event Sprite churn, and Scene has no remove().
@@ -131,6 +131,9 @@ def bust_look(cleared):
 # --- state ---
 SELECT, OVER, WIN, SCORING, HOWTO, FINAL = 0, 1, 2, 3, 4, 5
 BLIND_TARGETS = (800, 1800, 2800, 3600, 4200)   # score to clear each blind (rising); one source of truth
+ENCORE_OVERKILL = 1000           # beat a blind by 1000+ -> ENCORE: +1 hand in the next blind (cap +1).
+#                                  Headless-tuned (review/picatro-carryover-study.md): triggers a flat
+#                                  24/22/19/13% across B1-B4, +3.3pp win rate, never costs a run.
 LAST_BLIND = len(BLIND_TARGETS)        # clearing the final blind = the run is won
 
 
@@ -144,6 +147,7 @@ class State:
         self.preview = False    # beginner aid: Y toggles a live score preview of the current selection
         self.used_help = False  # did the player turn the preview on at all this run? -> "with help" on the end screen
         self.blind = self.target = self.total = self.hands = self.discards = 0
+        self.encore = False           # earned by ENCORE_OVERKILL on the previous blind -> +1 hand here
         self.bank_c = self.bank_m = 0
         self.bank_xc = 0        # banked clubs count -> next hand's mult x(1 + 0.5*bank_xc)
         # scoring-slam animation (the Balatro tally: hand-name -> count chips -> count mult -> SLAM)
@@ -155,6 +159,11 @@ class State:
         self.bust_flavor = ""   # graded, upbeat end-of-run quip (set when the run ends short)
         self.wild_suit = 0      # the Understudy's fixed printed suit (0..3), chosen once per run
         self.wild_live = True   # is the ONE Understudy still in play (deck/hand)? False once played/discarded
+        # HUD format-on-change shadows: a per-frame "%"-format allocates even when nothing shown
+        # moved (GC churn) - .set() only gates the REDRAW. The PEEK shadow additionally gates
+        # score_play() itself (a per-frame rescore + list build otherwise). -1 forces the first pass.
+        self.h_blind = self.h_total = self.h_hands = self.h_disc = -1
+        self.h_peek = -1        # composite int key of everything the PEEK preview depends on
 
 
 st = State()
@@ -217,6 +226,9 @@ def new_blind(reset_run):
     st.target = BLIND_TARGETS[min(st.blind - 1, LAST_BLIND - 1)]
     st.total = 0
     st.hands, st.discards = 3, 3
+    if st.encore and not reset_run:       # the ENCORE hand earned by last blind's monster overkill
+        st.hands += 1
+    st.encore = False
     if reset_run or not CARRY_HAND:
         deal()                       # fresh run (or carry disabled): a brand-new hand
     else:
@@ -431,9 +443,7 @@ def invalidate_cards():
 
 
 # ---------------- audio (guarded: synthio device-only; sim silent -> no-ops) ----------------
-# Music: "The Big Top Wager" (picatro_theme.mid beside this file) - a D minor circus waltz that
-# loops under HOWTO + SELECT only; the SCORING tally, banners and stings play over silence so the
-# chip/mult tickers + SLAM read clearly (music resumes when the hand returns to SELECT).
+# Music: none (removed 2026-07-10 on owner playtest - it distracted from the cards). SFX only.
 _frame = 0
 _lock_until = 0                           # input-lock frame: a decided result ignores presses briefly so a
                                           # skip-masher can't blow through the banner before it registers
@@ -445,25 +455,10 @@ try:
     _synth = snd.Synth(music_level=0.35, sfx_level=0.7)
     SQ, TR = snd.SQUARE, snd.TRIANGLE
 
-    def _calliope():                       # warm reed/calliope wavetable (~0.5 KB, built once): 1/n
-        import array, math                 # harmonics under a 6x-f0 knee = a baked low-pass, so the
-        L = 256                            # waltz is warm, not raw-square 8-bit (MidiTrack has no filter)
-        acc = [0.0] * L
-        for h in range(1, 13):
-            a = (1.0 / h) / (1.0 + (h / 6.0) ** 2)
-            w = 2.0 * math.pi * h / L
-            for i in range(L):
-                acc[i] += a * math.sin(w * i)
-        m = max(abs(v) for v in acc)
-        return array.array("h", [int(28000 * v / m) for v in acc])
-
-    try:                                   # cwd-relative like cavern.bin (launcher/sim chdir here);
-        _MUSIC = snd.load_midi("picatro_theme.mid", tempo=144, ppqn=240,   # a missing file mutes
-                               waveform=_calliope(),                       # MUSIC only, never SFX
-                               envelope=synthio.Envelope(attack_time=0.008, decay_time=0.10,
-                                                         sustain_level=0.5, release_time=0.12))
-    except Exception:
-        _MUSIC = None
+    # Music REMOVED (owner playtest verdict 2026-07-10: "je rušivá" - the waltz fought the card
+    # focus). SFX stay. music_on() below keeps its no-op shape so call sites need no change;
+    # the theme .mid + the calliope wavetable went with it.
+    _MUSIC = None
     _mus_on = False
 
     def music_on(want):                    # start/stop only on a state change (loop-safe, no per-frame work)
@@ -520,13 +515,14 @@ new_blind(True)
 st.state = HOWTO                          # open on the how-to card (dismiss with A)
 howto.show([
     "PICATRO  -  THE PICO CIRCUS",
-    "Beat each TARGET in 3 hands + 3 discards.",
+    "Beat the TARGET in 3 hands + 3 discards",
     "UP pick (max 5)   A PLAY = CHIPS x MULT",
-    "B DISCARD picked = bank a suit bonus",
-    "  onto your NEXT hand (the twist!)",
-    "3 Acts (top-left) auto-boost every hand",
-    "gold '?' card = the Understudy: any rank",
-    "press A to begin",
+    "B DISCARD banks that suit's favor",
+    "  onto your NEXT hand - a showman's trick",
+    "3 Acts on the bill (top-left) boost every hand",
+    "the gold '?' Understudy stands in for any rank",
+    "1000+ over = ENCORE! +1 hand next blind",
+    "press A - on with the show!",
 ])
 print("Picatro prototype. L/R move, UP/DN pick, A PLAY, B DISCARD.")
 while True:
@@ -645,18 +641,32 @@ while True:
                     "hand->9 (+1 card)" if grew else "hand->8", st.discards))
             dbg_status("after DISCARD")
 
-        top_lbl.set("BLIND %d   %d / %d   hands %d  disc %d" % (st.blind, st.total, st.target, st.hands, st.discards))
-        acts_lbl.set("Grind+3c Steady+3m Harl+1/suit")  # what each Act (icon at left) does
+        # HUD: format-on-change (compare ints, format only on a real change - see State.h_*)
+        if (st.blind != st.h_blind or st.total != st.h_total
+                or st.hands != st.h_hands or st.discards != st.h_disc):
+            st.h_blind, st.h_total, st.h_hands, st.h_disc = st.blind, st.total, st.hands, st.discards
+            top_lbl.set("BLIND %d   %d / %d   hands %d  disc %d" % (st.blind, st.total, st.target, st.hands, st.discards))
+        acts_lbl.set("Grind+3c Steady+3m Harl+1/suit")  # constant string -> .set() no-ops (free)
         # PEEK (Y): a live preview of what the picked cards would score right now, banks included. Uses the
         # SAME score_play()/breakdown as a real play (no drift), but commits nothing - purely a teaching aid.
+        # Re-score ONLY when the selection changes: a selection BITMASK suffices as the key, because every
+        # path that changes the hand or the banks (play / discard / new blind) also RESETS st.sel.
         if st.preview and any(st.sel):
-            pt, pc, pm, pv = score_play(selected_cards())
-            result_lbl.set("PEEK  %s   %d x %d = %d" % (HAND_NAME[pt], pc, pm, pv))
-            mult_lbl.set(breakdown_line(pt, pc, pm))
+            key = 0
+            for _i in range(len(st.sel)):
+                if st.sel[_i]:
+                    key |= 1 << _i
+            if key != st.h_peek:
+                st.h_peek = key
+                pt, pc, pm, pv = score_play(selected_cards())
+                result_lbl.set("PEEK  %s   %d x %d = %d" % (HAND_NAME[pt], pc, pm, pv))
+                mult_lbl.set(breakdown_line(pt, pc, pm))
         elif st.preview:
+            st.h_peek = -1
             result_lbl.set("PEEK on - pick cards to see the score")
             mult_lbl.set("")
         else:
+            st.h_peek = -1
             result_lbl.set("")                          # (the running bank shows on banked_lbl - no dup line)
             mult_lbl.set("")
         banked_lbl.set(banked_label() if (st.bank_c or st.bank_m or st.bank_xc) else "")
@@ -730,7 +740,8 @@ while True:
                         parts.emit(250, 110, 20, 7, 55, TEAL)
                     else:                                  # end-of-BLIND: a two-colour double burst
                         st.state = WIN
-                        show_banner("CLEARED!", CREAM, SELC, y=130)
+                        st.encore = (st.total - st.target) >= ENCORE_OVERKILL
+                        show_banner("ENCORE!" if st.encore else "CLEARED!", CREAM, SELC, y=130)
                         parts.emit(90, 108, 22, 6, 48, HILITE)
                         parts.emit(230, 108, 22, 6, 48, VERM)
                     sfx_seq(SEQ_WIN)
@@ -752,7 +763,8 @@ while True:
         # hidden. One press -> next blind (the input-lock stops a masher blowing past the banner).
         top_lbl.set("BLIND %d CLEARED!  %d / %d" % (st.blind, st.total, st.target))
         set_breakdown()
-        help_lbl.set("any button: next blind")
+        help_lbl.set("ENCORE! overkill %d -> +1 hand next blind" % (st.total - st.target)
+                     if st.encore else "any button: next blind")
         if _frame % 4 == 0:                        # gentle confetti keeps raining while the banner holds
             parts.emit(random.randint(16, 300), 6, 2, 2, 52, HILITE if (_frame // 4) & 1 else VERM)
         if _frame >= _lock_until and btn.just_pressed():

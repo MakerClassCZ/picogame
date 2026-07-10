@@ -98,7 +98,7 @@ while True:
         hx, hy = st.body[-1]
         nx, ny = hx + st.direction[0], hy + st.direction[1]
         cell = grid.tile(nx, ny) if 0 <= nx < COLS and 0 <= ny < ROWS else BODY
-        if nx < 0 or nx >= COLS or ny < 0 or ny >= ROWS or cell == BODY or cell == HEAD:
+        if cell == BODY or cell == HEAD:       # out-of-bounds already maps to BODY above
             new_game()                     # crash -> restart
         else:
             grid.tile(hx, hy, BODY)        # old head becomes body

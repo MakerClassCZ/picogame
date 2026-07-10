@@ -29,6 +29,20 @@ btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
 TILE = 16
+# Tile role -> tileset frame index (see legend below)
+GRASS, TREE, WATER, PATH = 0, 1, 2, 3
+
+# Gameplay tuning
+ENEMY_MISS_CHANCE = 3          # enemy misses when randint(0, 20) <= this (~3/21 chance)
+# player attack roll (original Arduventure formula): roll 0..HIT_ROLL_MAX (wider when you
+# out-speed the enemy); below MISS_BELOW = a miss, above CRIT_ABOVE = a critical (2x)
+HIT_ROLL_MAX = 20
+HIT_ROLL_MAX_FAST = 25
+MISS_BELOW = 2
+CRIT_ABOVE = 18
+XP_PER_LEVEL = 200             # xp needed to level up
+ENCOUNTER_MIN_STEPS = 120      # steps before a random encounter can trigger
+ENCOUNTER_CHANCE = 7           # per-step encounter roll succeeds when randint(0, 9) < this
 # Overworld: # tree(solid), ~ water(solid), . grass, : path, N npc, P player
 OVER = [
     "########################",
@@ -67,10 +81,10 @@ def tile_frame(buf, stride, f, fill):
 # tileset frames: 0 grass, 1 tree, 2 water, 3 path
 stride = TILE * 4
 atlas = bytearray(stride * TILE)
-tile_frame(atlas, stride, 0, 1)   # grass
-tile_frame(atlas, stride, 1, 2)   # tree
-tile_frame(atlas, stride, 2, 3)   # water
-tile_frame(atlas, stride, 3, 4)   # path
+tile_frame(atlas, stride, GRASS, 1)   # grass
+tile_frame(atlas, stride, TREE, 2)    # tree
+tile_frame(atlas, stride, WATER, 3)   # water
+tile_frame(atlas, stride, PATH, 4)    # path
 tpal = array.array("H", [pg.rgb565(0, 0, 0), pg.rgb565(40, 120, 50),
                          pg.rgb565(20, 80, 30), pg.rgb565(40, 90, 200),
                          pg.rgb565(180, 160, 110)])
@@ -83,7 +97,7 @@ player_tile = (8, 10)
 for ty in range(MROWS):
     for tx in range(MCOLS):
         ch = OVER[ty][tx]
-        v = {"#": 1, "~": 2, ":": 3}.get(ch, 0)
+        v = {"#": TREE, "~": WATER, ":": PATH}.get(ch, GRASS)
         world.tile(tx, ty, v)
         if ch == "N":
             npc_tile = (tx, ty)
@@ -93,7 +107,7 @@ scene.add(world)
 
 # Tile metadata: trees (1) and water (2) are solid. TileFlags + at_px replaces the
 # hand-rolled solid_at side table and probe boilerplate.
-tflags = tiles.TileFlags({1: tiles.SOLID, 2: tiles.SOLID}, tile_px=TILE)
+tflags = tiles.TileFlags({TREE: tiles.SOLID, WATER: tiles.SOLID}, tile_px=TILE)
 
 npc = pg.Sprite(solid(TILE, TILE, pg.rgb565(230, 200, 60)),
                 npc_tile[0] * TILE, npc_tile[1] * TILE)
@@ -169,7 +183,7 @@ st = State()
 def new_game():
     global st
     st = State()
-    follow()
+    camera_follow()
 
 
 def solid_at(px, py):
@@ -184,9 +198,13 @@ def can_walk(px, py):
                 solid_at(px + 2, py + TILE - 3) or solid_at(px + TILE - 3, py + TILE - 3))
 
 
-def follow():
-    ox = max(W - MCOLS * TILE, min(0, W // 2 - (st.px + TILE // 2)))
-    oy = max(H - MROWS * TILE, min(0, H // 2 - (st.py + TILE // 2)))
+def camera_follow():
+    ox = W // 2 - (st.px + TILE // 2)   # centre the view on the player...
+    ox = min(0, ox)                     # ...but never scroll past the left edge
+    ox = max(W - MCOLS * TILE, ox)      # ...nor past the right edge
+    oy = H // 2 - (st.py + TILE // 2)   # centre the view on the player...
+    oy = min(0, oy)                     # ...but never scroll past the top edge
+    oy = max(H - MROWS * TILE, oy)      # ...nor past the bottom edge
     scene.set_view(int(ox), int(oy))
 
 
@@ -210,7 +228,7 @@ def battle_msg(s, t=30):
 
 def enemy_turn():
     e = st.enemy
-    if random.randint(0, 20) > 3:          # ENEMY_MISS_CHANCE 3
+    if random.randint(0, 20) > ENEMY_MISS_CHANCE:
         dmg = max(e["atk"] * st.level // (st.dfn), 1)
         st.hp = max(0, st.hp - dmg)
         battle_msg("Slime hits! -%d HP" % dmg)
@@ -222,8 +240,8 @@ def enemy_turn():
 
 def gain_xp(elv):
     st.xp += elv * 30 // st.level
-    if st.xp >= 200:
-        st.xp -= 200
+    if st.xp >= XP_PER_LEVEL:
+        st.xp -= XP_PER_LEVEL
         st.level += 1
         st.hpmax += 7
         st.mpmax += 4
@@ -261,9 +279,9 @@ while True:
                 moved = True
         if moved:
             player.move(st.px, st.py)
-            follow()
+            camera_follow()
             st.steps += 1
-            if st.steps > 120 and random.randint(0, 9) < 7:
+            if st.steps > ENCOUNTER_MIN_STEPS and random.randint(0, 9) < ENCOUNTER_CHANCE:
                 st.steps = 0
                 start_battle()
         # talk to NPC
@@ -314,18 +332,18 @@ while True:
             act = bmenu.tick(btn)
             if act is not None and act >= 0:
                 if act == 0:        # attack
-                    ch = random.randint(0, 25 if st.spd > e["spd"] else 20)
-                    if ch < 2:
+                    ch = random.randint(0, HIT_ROLL_MAX_FAST if st.spd > e["spd"] else HIT_ROLL_MAX)
+                    if ch < MISS_BELOW:
                         battle_msg("You missed!")
                     else:
-                        crit = 2 if ch > 18 else 1
+                        crit = 2 if ch > CRIT_ABOVE else 1
                         dmg = max(1, st.atk * crit * st.level // e["dfn"])
                         e["hp"] = max(0, e["hp"] - dmg)
                         battle_msg("Hit! -%d HP" % dmg)
                     if e["hp"] <= 0:
                         gain_xp(e["lv"])
                         st.gold += e["lv"] * random.randint(1, 3)
-                        if st.xp < 200:    # gain_xp may have queued a level msg
+                        if st.xp < XP_PER_LEVEL:    # gain_xp may have queued a level msg
                             battle_msg("You win! +gold", 50)
                     else:
                         enemy_turn()

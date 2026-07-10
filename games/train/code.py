@@ -32,6 +32,7 @@ FONT = terminalio.FONT
 DIR_R, DIR_U, DIR_L, DIR_D = 0, 1, 2, 3
 ITEMMIN, ITEMMAX = 0, 59
 WAGONMIN = 60
+TILE_ROW = 20                                      # tiles per row in the tileset (strip animation phase -> base frame)
 LOCO = (142, 141, 140, 143)                         # by direction R,U,L,D
 LOCOMIN, LOCOMAX = 140, 151
 WOFF = (40, 20, 0, 60)                              # wagon row offset by direction R,U,L,D
@@ -42,6 +43,8 @@ EMPTY = 159
 CRASH = 160
 CRASHMAX = 169                                      # crash explosion animates 160..169
 CRASH_DUR = 0.7                                     # seconds the wreck/explosion shows
+WIN_NOTE_DT = 0.12                                  # spacing between win-arpeggio notes
+WIN_HOLD = 0.7                                      # delay after the win before advancing
 
 # play sub-states (inside PLAYING) + top-level game states
 WAIT, GO, CRASH_ST, FINISH = 0, 1, 2, 3
@@ -195,16 +198,16 @@ def step():
         else:
             wy -= 1
         w = tile(wx, wy)
-        while w >= WAGONMIN + 20:
-            w -= 20
+        while w >= WAGONMIN + TILE_ROW:             # strip animation phase -> base frame
+            w -= TILE_ROW
         tile(xold, yold, w + WOFF[dd])
         xold, yold = wx, wy
 
     if ITEMMIN <= b <= ITEMMAX:                     # collected an item -> grow + new wagon
         st.length += 1
         w = b + WAGONMIN
-        while w >= WAGONMIN + 20:
-            w -= 20
+        while w >= WAGONMIN + TILE_ROW:
+            w -= TILE_ROW
         tile(xold, yold, w + WOFF[_D[xold + yold * _mw]])
         st.items -= 1
         if st.items == 0:
@@ -230,9 +233,9 @@ def anim_level():
         for x in range(MAPW):
             b = tile(x, y)
             if ITEMMIN <= b <= ITEMMAX:             # items: 3-frame loop (tile rows 0-2)
-                while b >= ITEMMIN + 20:
-                    b -= 20
-                tile(x, y, b + st.phase * 20)
+                while b >= ITEMMIN + TILE_ROW:
+                    b -= TILE_ROW
+                tile(x, y, b + st.phase * TILE_ROW)
             elif LOCOMIN <= b <= LOCOMAX:           # locomotive: 3 frames per direction
                 while b >= LOCOMIN + 4:
                     b -= 4
@@ -334,10 +337,10 @@ while True:
                     init_level(st.level)            # restart the scene
             elif st.state == FINISH:
                 st.finish_t += dt                   # play the win arpeggio, then advance straight in
-                while st.finish_i < 3 and st.finish_t >= st.finish_i * 0.12:
+                while st.finish_i < 3 and st.finish_t >= st.finish_i * WIN_NOTE_DT:
                     sfx(SUCCESS[st.finish_i])
                     st.finish_i += 1
-                if st.finish_t >= 0.7:
+                if st.finish_t >= WIN_HOLD:
                     if st.level < L.LEVNUM:
                         start_level(st.level + 1, fresh=False)
                     else:

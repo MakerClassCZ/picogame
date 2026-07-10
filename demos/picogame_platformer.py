@@ -67,7 +67,7 @@ hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4,
                   pg.rgb565(255, 255, 255), pg.rgb565(0, 0, 0))   # fixed layer
 hud.reserve(28)
 
-_MV = [0, 0, False]
+_MV = [0, 0, False]   # reused out-param [new_y, new_vy, landed] from move_v() (avoids a per-frame tuple alloc)
 
 # game state (a State instance `st`)
 class State:
@@ -94,9 +94,7 @@ def build_level():
         for tx in range(COLS):
             level.tile(tx, ty, 0)
     # ground (2 tall) with a few pits
-    pits = set()
-    for g in (18, 19, 34, 35, 52):
-        pits.add(g)
+    pits = {18, 19, 34, 35, 52}
     for tx in range(COLS):
         if tx in pits:
             continue                 # leave a gap (pit) here
@@ -232,14 +230,14 @@ while True:
         continue
 
     # coins: check the tile at the player's chest
-    ctx, cty = int(st.px) // TILE, (int(st.py) - 8) // TILE
-    if 0 <= ctx < COLS and 0 <= cty < ROWS and tf.at(level, ctx, cty, tiles.B_COIN):
-        level.tile(ctx, cty, 0)
+    chest_tx, chest_ty = int(st.px) // TILE, (int(st.py) - 8) // TILE
+    if 0 <= chest_tx < COLS and 0 <= chest_ty < ROWS and tf.at(level, chest_tx, chest_ty, tiles.B_COIN):
+        level.tile(chest_tx, chest_ty, 0)
         st.coins += 1
         st.score += 100
     # goal
-    gtx = int(st.px) // TILE
-    if tf.at(level, gtx, ROWS - 3, tiles.B_EXIT):
+    goal_tx = int(st.px) // TILE
+    if tf.at(level, goal_tx, ROWS - 3, tiles.B_EXIT):
         st.score += 1000
         new_game()
 

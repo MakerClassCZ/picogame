@@ -309,7 +309,7 @@ while True:
         st.cp_hit = True
     if st.cp_hit and st.prev_subx < FIN_X <= st.subx and FIN_Y0 <= st.suby < FIN_Y1:
         st.cp_hit = False
-        ct = st.lap_t
+        lap_time = st.lap_t
         prev_best = st.best_t
         finish_lap()
         if st.lap >= NLAPS:
@@ -318,10 +318,10 @@ while True:
             engine_silence()
         else:
             sfx(SFX_LAP)                          # chime crossing into the next lap
-            pb = (prev_best == 0) or (ct < prev_best)
+            pb = (prev_best == 0) or (lap_time < prev_best)
             if pb:
                 st.flash_t = 18                   # ~3 white blinks on a NEW BEST lap only
-            flash_banner("LAP %d  %02ds%s" % (st.lap, ct // 40, "  BEST!" if pb else ""), 70)
+            flash_banner("LAP %d  %02ds%s" % (st.lap, lap_time // 40, "  BEST!" if pb else ""), 70)
     st.prev_subx = st.subx
 
     # --- record this lap (decimated) ---

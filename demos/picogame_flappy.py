@@ -101,7 +101,8 @@ while True:
         d["x"] -= SPEED
         x = d["x"]
         if x < -PIPE_W:
-            place_pipe((t, b), max(pp[0].data["x"] for pp in pipes) + SPACING)
+            rightmost = max(pp[0].data["x"] for pp in pipes)   # x of the pipe currently furthest right
+            place_pipe((t, b), rightmost + SPACING)            # recycle this pipe one gap beyond it
             continue
         t.move(x, d["gap"] - PIPE_BM_H)
         b.move(x, d["gap"] + GAP)

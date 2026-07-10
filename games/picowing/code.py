@@ -101,11 +101,15 @@ HEAT_PER_SHOT = 9                                     # +9/shot, fires every 6f 
 COOL_IDLE = 2                                         # -2/frame when not firing (a 5-shot burst cools in <1s)
 COOL_LOCKED = 3                                       # -3/frame while locked -> ~0.8s lockout
 WARN_HEAT = 70                                        # bar turns red here (~0.8s telegraph before lock)
+WARM_HEAT = 40                                        # bar turns orange here (warming up)
 RESET_HEAT = 30                                       # gun unlocks once heat drains back to here
 
 # Player<->raider hit radius (px between sprite centres). Ships are 32px; smaller felt too forgiving
 # (wings overlapped with no hit). Lower = kinder, higher = stricter.
 HIT_R = 20
+
+# Bullet<->raider hit radius (px between centres). Generous so a shot near the raider still connects.
+SHOT_R = 16
 
 # --- HUD layout, derived from W so the left cluster (heat gauge + chain readout) never collides with
 # the W-anchored life/bomb icons on a narrow (240) screen. At W=320 this reproduces the original layout
@@ -199,7 +203,7 @@ l_score = hud.label(terminalio.FONT, 4, 4, TEXT, "SCORE 00000")
 l_chain = hud.label(terminalio.FONT, CHAIN_X, 4, C(250, 220, 120), "x99  CHAIN 999")
 # Lives + bombs shown as ICON sprites: the number VISIBLE = the count (toggled in hud_refresh).
 # right-anchored from W so they stay on-screen on narrow (240) and wide (320) displays
-life_icons = [hud.add(pg.Sprite(LIFE_ICON, W - 90 + i * 12, 4)) for i in range(3)]
+life_icons = [hud.add(pg.Sprite(LIFE_ICON, RIGHT_X + i * 12, 4)) for i in range(3)]
 bomb_icons = [hud.add(pg.Sprite(BOMB_ICON, W - 44 + i * 14, 5)) for i in range(3)]   # max 3 bombs
 # Gun-heat gauge: 5 segments in the gap between SCORE and the CHAIN readout (set in hud_refresh).
 heat_segs = [hud.add(pg.Sprite(HEAT_G, HEAT_X0 + i * HEAT_DX, 6)) for i in range(HEAT_SEGS)]
@@ -288,7 +292,7 @@ def hud_refresh():
     h = st.heat
     seg = HEAT_SEGS if locked else h * HEAT_SEGS // 100
     blink = locked and ((st.t // 4) & 1)
-    col = HEAT_R if (locked or h >= WARN_HEAT) else (HEAT_O if h >= 40 else HEAT_G)
+    col = HEAT_R if (locked or h >= WARN_HEAT) else (HEAT_O if h >= WARM_HEAT else HEAT_G)
     for i, s in enumerate(heat_segs):
         vis = (i < seg) and not blink
         s.visible = vis
@@ -438,7 +442,7 @@ def update_play():
             player_hit()
             return
         for b in bullets.items:
-            if b.visible and b.near(e, 16):
+            if b.visible and b.near(e, SHOT_R):
                 bullets.free(b)
                 enemies.free(e)
                 st.chain += 1

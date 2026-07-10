@@ -166,6 +166,11 @@ scene.add(bubbles)
 shaker = fx.Shake(scene, max_offset=5, decay=0.06)
 death_fade = fx.Fade(scene, W, H, color=pg.rgb565(0, 8, 36))   # neutral dark dip on death (smoother than invert)
 
+# --- oxygen model ---
+OX_MAX = 90.0                                # full tank (start / refill ceiling)
+OX_FLOOR = 60                                # empty: at/below this you drown (bar reads empty here)
+OX_SPAN = OX_MAX - OX_FLOOR                   # usable range mapped onto the bar (30)
+
 # --- HUD: oxygen bar (Canvas) + score digits + diver/life icons ---
 HUD_W = W - 52                               # oxygen band ends just before the right-anchored score
 OXB_W = HUD_W - 86                           # oxygen-bar width (from x84), derived from W -> responsive
@@ -230,7 +235,7 @@ class State:
         self.level = 1
         self.score = 0
         self.lives = 3
-        self.ox = 90.0
+        self.ox = OX_MAX
         self.divers = 0
         self.facing = 1
         self.torp_vx = 0
@@ -278,9 +283,14 @@ def level_setup():
             e.touch()                                  # mark the recolored fish dirty so it repaints
 
 
-def amount_sprites():
+def spawn_burst_count():
     lv = st.level
-    return 1 if lv <= 2 else (2 if lv <= 6 else 3)
+    if lv <= 2:
+        return 1
+    elif lv <= 6:
+        return 2
+    else:
+        return 3
 
 
 def speed():
@@ -295,7 +305,7 @@ def draw_score():
 
 
 def ox_barwidth():
-    return int((OXB_W - 2) * max(0.0, min(1.0, (st.ox - 60) / 30.0)))
+    return int((OXB_W - 2) * max(0.0, min(1.0, (st.ox - OX_FLOOR) / OX_SPAN)))
 
 
 def draw_oxygen():
@@ -305,7 +315,7 @@ def draw_oxygen():
         x = 4 + i * 9
         hud.fill_rect(x, 2, 7, 9, pg.rgb565(0, 210, 248) if i < d else pg.rgb565(35, 55, 85))
     hud.fill_rect(84, 3, OXB_W, 10, pg.rgb565(40, 80, 120))
-    col = pg.rgb565(0, 220, 120) if st.ox > 70 else pg.rgb565(230, 120, 40)
+    col = pg.rgb565(0, 220, 120) if st.ox > OX_FLOOR + 10 else pg.rgb565(230, 120, 40)
     hud.fill_rect(85, 4, ox_barwidth(), 8, col)
 
 
@@ -375,7 +385,7 @@ def lose_life():
     shaker.add(0.7)
     death_fade.pulse(14, speed=1.3)
     st.lives -= 1
-    st.ox = 90.0
+    st.ox = OX_MAX
     if st.lives < 0:
         game_over()                  # game over -> the start screen (press A to play again)
         return
@@ -403,13 +413,13 @@ def maybe_extra_life():
 
 
 def complete_level():
-    bonus = (int(st.ox) - 60) * 4                    # 0..120: a fast clear (more O2 left) scores more
+    bonus = (int(st.ox) - OX_FLOOR) * 4              # 0..120: a fast clear (more O2 left) scores more
     st.score += 160 + max(0, bonus)
     st.level = st.level + 1 if st.level < LEVELMAX else 1
     st.divers = 0
     level_setup()
     draw_level()
-    st.ox = 90.0
+    st.ox = OX_MAX
     st.surfaced = 1
     deliver_flash.pulse(14, speed=2.0)               # big white celebration flash
     shaker.add(1.0)
@@ -513,7 +523,7 @@ while True:
     torp_pt = (torp.x + 4, torp.y + 2)
 
     # --- spawn fish/divers, and (from level 3) enemy subs ---
-    if frame % max(9, 18 - st.level) == 0 and st.spawn_tick < amount_sprites():
+    if frame % max(9, 18 - st.level) == 0 and st.spawn_tick < spawn_burst_count():
         spawn_one()
         st.spawn_tick += 1
     if frame % 40 == 0:
@@ -611,22 +621,27 @@ while True:
         if not st.surfaced:
             st.surfaced = 1
             surface_divers()
-        if st.ox < 90.0:                              # O2 refills GRADUALLY; the tick's pitch rises with the tank
-            st.ox = min(90.0, st.ox + 2.5)
+        if st.ox < OX_MAX:                            # O2 refills GRADUALLY; the tick's pitch rises with the tank
+            st.ox = min(OX_MAX, st.ox + 2.5)
             if frame % 4 == 0:
-                sfx(REFILL_NOTES[min(6, max(0, int((st.ox - 60) / 5)))])
+                sfx(REFILL_NOTES[min(6, max(0, int((st.ox - OX_FLOOR) / 5)))])
     else:
         st.surfaced = 0
         st.ox_tick += 1
         if st.ox_tick >= 10:
             st.ox_tick = 0
             st.ox -= 1
-            if st.ox <= 60:
+            if st.ox <= OX_FLOOR:
                 sfx_seq(SEQ_DIE)
                 lose_life()
     ox = st.ox
     if ox < 72:                                          # accelerating TWO-TONE heartbeat as O2 drops
-        interval = 10 if ox < 62 else (20 if ox < 66 else 30)
+        if ox < OX_FLOOR + 2:
+            interval = 10
+        elif ox < OX_FLOOR + 6:
+            interval = 20
+        else:
+            interval = 30
         if frame % interval == 0:
             sfx(SND_OXLOW if (frame // interval) % 2 else SND_OXLOW2)
 

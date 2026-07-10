@@ -24,7 +24,6 @@ clock = picogame_clock.Clock(30)
 
 COLS = W // T                                   # 40
 ROWS = (H - BAR) // T                           # 28
-# tile frames: 0 hidden, 1 floor, 2 wall, 3 door, 4 player
 TILES = shp.tileset_colors(T, T, [
     pg.rgb565(10, 10, 16),                      # 0 hidden (fog)
     pg.rgb565(44, 44, 60),                      # 1 floor

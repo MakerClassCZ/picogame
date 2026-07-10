@@ -24,6 +24,8 @@ btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
 TILE = 10
+# Tileset frame indices: 0 empty, 1 wall, 2 pellet, 3 power.
+EMPTY, WALL, PELLET, POWER = 0, 1, 2, 3
 # Compact maze: # wall, . pellet, o power, space = empty path, P pac, G ghost home.
 MAZE = [
     "###################",
@@ -52,7 +54,10 @@ ROWS = len(MAZE)
 COLS = len(MAZE[0])
 XOFF = (board.DISPLAY.width - COLS * TILE) // 2   # centre the maze horizontally at any width
 YOFF = 22                                         # maze is ROWS*TILE=210 px -> +22 fits a 240-tall screen
-SPEED = 2                      # must divide TILE
+SPEED = 2                      # px per step pac/ghosts advance; must divide TILE so that
+                               # px/py can hit an exact multiple of TILE -> aligned()'s
+                               # `px % TILE == 0` can ever be true (turns/eats only fire there)
+FRIGHT_FRAMES = 180            # ~6s at 30fps that ghosts stay frightened after a power pellet
 
 
 def dot_mask(big):
@@ -89,10 +94,10 @@ def fill_pellets():
         for tx in range(COLS):
             ch = MAZE[ty][tx]
             if ch == ".":
-                maze.tile(tx, ty, 2)
+                maze.tile(tx, ty, PELLET)
                 n += 1
             elif ch == "o":
-                maze.tile(tx, ty, 3)
+                maze.tile(tx, ty, POWER)
                 n += 1
     return n
 
@@ -102,9 +107,9 @@ for ty in range(ROWS):
     for tx in range(COLS):
         ch = MAZE[ty][tx]
         if ch == "#":
-            maze.tile(tx, ty, 1)
+            maze.tile(tx, ty, WALL)
         elif ch not in (".", "o"):
-            maze.tile(tx, ty, 0)
+            maze.tile(tx, ty, EMPTY)
         if ch == "P":
             pac_start = (tx, ty)
         elif ch == "G":
@@ -158,7 +163,7 @@ st = State()
 def tile_is_wall(tx, ty):
     if tx < 0 or tx >= COLS or ty < 0 or ty >= ROWS:
         return True
-    return maze.tile(tx, ty) == 1
+    return maze.tile(tx, ty) == WALL
 
 
 def reset_positions():
@@ -246,14 +251,14 @@ while True:
             st.pac_dir = (0, 0)
         # eat
         cell = maze.tile(tx, ty)
-        if cell == 2:
-            maze.tile(tx, ty, 0)
+        if cell == PELLET:
+            maze.tile(tx, ty, EMPTY)
             st.score += 10
             st.pellets_left -= 1
-        elif cell == 3:
-            maze.tile(tx, ty, 0)
+        elif cell == POWER:
+            maze.tile(tx, ty, EMPTY)
             st.score += 50
-            st.fright = 180
+            st.fright = FRIGHT_FRAMES
             st.pellets_left -= 1
         st.pac_tx, st.pac_ty = tx, ty
     d = st.pac_dir

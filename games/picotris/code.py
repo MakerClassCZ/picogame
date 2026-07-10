@@ -14,19 +14,57 @@ import picogame_clock
 import picogame_rand
 import picogame_ui as ui
 
+# --- audio: WARM synthio SFX (picogame_synth), built ONCE at import (~0 sample RAM). Warmth =
+# a rounded odd-harmonic wavetable (a softened square, kin to the old tone() voice) + a Biquad
+# LOW_PASS per note + percussive envelopes; the line-clear is a small rising arpeggio scheduled
+# through _seq (drained one note per few frames in the loop). Guarded: no synthio (the sim) =
+# silent no-ops.
+_frame = 0
+_seq = []                                  # pending arpeggio notes [play_frame, note]
 try:
-    import picogame_audio
-    audio = picogame_audio.Audio()
-    SFX = {"move": picogame_audio.tone(220, 35), "rot": picogame_audio.tone(330, 35),
-           "lock": picogame_audio.tone(170, 60), "clear": picogame_audio.tone(880, 130)}
+    import math
+    import synthio                         # noqa: F401  (device-only; ImportError in the sim)
+    import picogame_synth as snd
+
+    _synth = snd.Synth(sfx_level=0.7)
+
+    def _wave(harmonics):                  # summed harmonics with rolloff = a baked low-pass
+        acc = [0.0] * 256
+        for h, a in harmonics:
+            w = 2 * math.pi * h / 256
+            for i in range(256):
+                acc[i] += a * math.sin(w * i)
+        m = max(abs(v) for v in acc) or 1.0
+        return array.array("h", [int(28000 * v / m) for v in acc])
+
+    _SOFT = _wave([(n, (1.0 / n) / (1 + (n / 7.0) ** 2)) for n in range(1, 13, 2)])  # rounded square
+
+    def _n(m, dec=0.04, amp=0.5, cut=1600, rel=0.08, bend=None):
+        return snd.note(m, _SOFT, attack=0.005, decay=dec, release=rel, amplitude=amp,
+                        cutoff=cut, bend=snd.pitch_bend(bend[0], bend[1]) if bend else None)
+
+    SND_MOVE = _n(69, 0.025, 0.30, 1500)                        # soft tick (was tone(220, 35))
+    SND_ROT = _n(73, 0.03, 0.35, 1800, bend=(2, 30))            # brighter tick + tiny up-chirp (was 330 Hz)
+    SND_LOCK = _n(41, 0.08, 0.65, 800, rel=0.2, bend=(-2, 70))  # firm low thunk (was tone(170, 60))
+    SEQ_CLEAR = (_n(72, 0.04, 0.5, 2200), _n(76, 0.04, 0.5, 2200),      # rising clear arpeggio
+                 _n(79, 0.05, 0.55, 2400), _n(84, 0.12, 0.6, 2400, rel=0.2))  # (was tone(880, 130))
+
+    def sfx(n):
+        if n is not None:
+            _synth.sfx(n)                  # monophonic one-shot; retriggers its bend LFO
+
+    def sfx_seq(notes):
+        for i, nn in enumerate(notes):
+            _seq.append([_frame + i * 2, nn])
 except Exception:
-    audio = None
-    SFX = {}
+    SND_MOVE = SND_ROT = SND_LOCK = None
+    SEQ_CLEAR = ()
 
+    def sfx(n):
+        pass
 
-def sfx(name):
-    if audio:
-        audio.sfx(SFX[name])
+    def sfx_seq(notes):
+        pass
 
 
 W, H = board.DISPLAY.width, board.DISPLAY.height
@@ -67,7 +105,7 @@ bag = picogame_rand.Bag(NAMES, rng)
 # tileset frames: 0 empty | 1..7 piece colours (dark edge idx 8) | 8 white clear-flash | 9 ghost outline.
 RGB = [(0, 0, 0), (60, 200, 220), (230, 220, 60), (190, 90, 220), (70, 200, 90),
        (220, 70, 70), (70, 110, 230), (230, 150, 50),
-       (20, 20, 30), (78, 86, 120), (245, 248, 255)]   # 8=edge, 9=ghost dim, 10=white
+       (20, 20, 30), (78, 86, 120), (245, 248, 255)]   # palette idx 8=edge, 9=ghost, 10=white
 pal = array.array("H", [pg.rgb565(*c) for c in RGB])
 FRAMES = 10
 stride = TILE * FRAMES
@@ -188,11 +226,11 @@ def lock_piece():
         row = grid[ry]
         for rx in range(COLS):
             well.tile(rx, ry, row[rx])
-    sfx("lock")
+    sfx(SND_LOCK)
     full = [r for r in range(ROWS) if all(grid[r])]
     if full:
         flash = [full, 12]                              # blink the full rows (handled in the loop), then clear
-        sfx("clear")
+        sfx_seq(SEQ_CLEAR)                              # the reward: a rising arpeggio over the flash
     else:
         spawn()
 
@@ -204,6 +242,7 @@ def resolve_flash():
         del grid[r]
         grid.insert(0, [0] * COLS)
     lines += len(full)
+    # points by lines cleared 0/1/2/3/4 (Tetris) x (level+1)
     score += (0, 40, 100, 300, 1200)[len(full)] * (level + 1)
     level = lines // 10
     flash = None
@@ -246,6 +285,14 @@ grav = 0
 print("L/R move | A rotate | Down soft-drop")
 while True:
     btn.poll()
+    _frame += 1
+    _i = 0                                    # drain scheduled arpeggio notes due this frame
+    while _i < len(_seq):
+        if _seq[_i][0] <= _frame:
+            sfx(_seq[_i][1])
+            _seq.pop(_i)
+        else:
+            _i += 1
     if flash:                                           # line-clear: blink the full rows, then clear them
         flash[1] -= 1
         white = (flash[1] // 3) % 2 == 1
@@ -259,17 +306,17 @@ while True:
         if btn.just_pressed(btn.LEFT) and fits(cur["name"], cur["rot"], cur["x"] - 1, cur["y"]):
             cur["x"] -= 1
             changed = True
-            sfx("move")
+            sfx(SND_MOVE)
         if btn.just_pressed(btn.RIGHT) and fits(cur["name"], cur["rot"], cur["x"] + 1, cur["y"]):
             cur["x"] += 1
             changed = True
-            sfx("move")
+            sfx(SND_MOVE)
         if btn.just_pressed(btn.A):
             nr = (cur["rot"] + 1) % len(SHAPES[cur["name"]][1])
             if fits(cur["name"], nr, cur["x"], cur["y"]):
                 cur["rot"] = nr
                 changed = True
-                sfx("rot")
+                sfx(SND_ROT)
         grav += 1
         interval = 1 if btn.is_pressed(btn.DOWN) else INTERVALS[min(level, len(INTERVALS) - 1)]
         if grav >= interval:
