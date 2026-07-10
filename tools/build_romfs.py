@@ -146,6 +146,13 @@ def main():
 
     with open(args.output, "wb") as f:
         f.write(img)
+    # sidecar manifest (input names + sha1): lets tools/sync.py flag a STALE image when a
+    # .bin changes after packing (content-based, matching the sync.py philosophy)
+    import hashlib
+    with open(args.output + ".manifest", "w") as mf:
+        for name, path in files:
+            with open(path, "rb") as f:
+                mf.write("%s %s\n" % (hashlib.sha1(f.read()).hexdigest(), name))
     print("wrote %s: %d files, %d B payload -> %d B image (%.0f%% of the %d KB region)" % (
         args.output, len(files), total, len(img), 100.0 * len(img) / limit, args.region_kb))
 
