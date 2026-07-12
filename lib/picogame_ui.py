@@ -8,10 +8,10 @@
 #   score.set("SCORE 1200")                                    # drawn by scene.refresh()
 #
 #   box = ui.TextBox(pg, font, 8, 180, 304, 52, white, navy)
-#   box.draw(board.DISPLAY, bufA, ["Villager:", "Beware the slimes."])
+#   box.draw(scene.display, bufA, ["Villager:", "Beware the slimes."])
 #
 #   menu = ui.Menu(pg, font, 8, 160, ["ATTACK", "MAGIC", "FLEE"], white, navy)
-#   pick = menu.tick(btn); menu.draw(board.DISPLAY, bufA)      # pick>=0 on confirm
+#   pick = menu.tick(btn); menu.draw(scene.display, bufA)      # pick>=0 on confirm
 #
 # Lifecycle rule for the Scene* widgets: RECURRING UI (a HUD label, the battle menu) = build ONCE
 # and toggle with set("")/hide()/show() - never re-create per visit. ONE-SHOT UI (a tutorial hint,

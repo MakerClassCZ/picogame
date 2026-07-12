@@ -199,7 +199,7 @@ while True:
     if st.mode == WON:
         if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
             scene.refresh()
-            dlg.draw(board.DISPLAY, buffer_a, ["You reached the shrine!", "", "QUEST COMPLETE", "(press A)"])
+            dlg.draw(scene.display, buffer_a, ["You reached the shrine!", "", "QUEST COMPLETE", "(press A)"])
             st.overlay_shown = True
         if btn.just_pressed(btn.A):
             st.mode = EXPLORE; scene.invalidate()
@@ -209,7 +209,7 @@ while True:
     if st.mode == DIALOG:
         if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
             scene.refresh()
-            dlg.draw(board.DISPLAY, buffer_a, dialog_lines(st))
+            dlg.draw(scene.display, buffer_a, dialog_lines(st))
             st.overlay_shown = True
         if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
             if st.stage == 0:

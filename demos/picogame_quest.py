@@ -307,18 +307,18 @@ while True:
         # change we just let bmenu.draw() repaint its two affected rows (cheap, no wipe).
         if st.battle_dirty:
             st.battle_dirty = False
-            pg.render(board.DISPLAY, _ENEMY_LIST, bufA, 0, 0, W, H, background=pg.rgb565(8, 8, 24))
-            enemy_box.draw(board.DISPLAY, bufA,
+            pg.render(scene.display, _ENEMY_LIST, bufA, 0, 0, W, H, background=pg.rgb565(8, 8, 24))
+            enemy_box.draw(scene.display, bufA,
                            ["Lv%d slime  HP %d/%d" % (e["lv"], e["hp"], e["hpmax"])], force=True)
             if st.msg_t > 0:
-                msg_box.draw(board.DISPLAY, bufA, [st.msg], force=True)
+                msg_box.draw(scene.display, bufA, [st.msg], force=True)
             else:
-                stats_box.draw(board.DISPLAY, bufA,
+                stats_box.draw(scene.display, bufA,
                                ["HP %d/%d  MP %d/%d  Lv%d" % (st.hp, st.hpmax, st.mp, st.mpmax, st.level)],
                                force=True)
-                bmenu.draw(board.DISPLAY, bufA, force=True)
+                bmenu.draw(scene.display, bufA, force=True)
         elif st.msg_t <= 0:
-            bmenu.draw(board.DISPLAY, bufA)         # selection moved: per-row repaint, no wipe/blink
+            bmenu.draw(scene.display, bufA)         # selection moved: per-row repaint, no wipe/blink
         if st.msg_t > 0:
             st.msg_t -= 1
             if st.msg_t == 0:

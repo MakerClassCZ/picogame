@@ -215,5 +215,5 @@ while True:
     if st.score != _shown_score or shown_lives != _shown_lives:
         _shown_score, _shown_lives = st.score, shown_lives
         hud.set("SCORE %05d   SHIPS %d" % (st.score, shown_lives))
-    hud.draw(board.DISPLAY, bufA)
+    hud.draw(scene.display, bufA)
     clock.tick()

@@ -278,7 +278,7 @@ while True:
     if st.mode == DIALOG:
         if not st.dlg_shown:                  # draw ONCE -> no per-frame flicker
             scene.refresh()                   # world frozen under the box
-            dialog.draw(board.DISPLAY, buffer_a, LINES)
+            dialog.draw(scene.display, buffer_a, LINES)
             st.dlg_shown = True
         if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
             st.mode = EXPLORE

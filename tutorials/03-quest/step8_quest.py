@@ -323,7 +323,7 @@ while True:
     if st.mode == WON:
         if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
             scene.refresh()
-            dialog.draw(board.DISPLAY, buffer_a, ["You reached the shrine!", "", "QUEST COMPLETE", "(press A)"])
+            dialog.draw(scene.display, buffer_a, ["You reached the shrine!", "", "QUEST COMPLETE", "(press A)"])
             if audio:
                 audio.sfx(snd_win)            # bright chime on the win
             st.overlay_shown = True
@@ -336,7 +336,7 @@ while True:
     if st.mode == DIALOG:
         if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
             scene.refresh()
-            dialog.draw(board.DISPLAY, buffer_a, dialog_lines(st))
+            dialog.draw(scene.display, buffer_a, dialog_lines(st))
             st.overlay_shown = True
         if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
             if audio:
