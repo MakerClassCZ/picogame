@@ -43,8 +43,12 @@ class OptionsMenu:
                 if not r.get("choices"):                      # fail fast here, not mid-render in _vtext/
                     raise ValueError("choice row needs a non-empty 'choices' list")   # _change/value
                 r.setdefault("i", 0)
+                r["i"] = max(0, min(r["i"], len(r["choices"]) - 1))   # clamp a stale persisted index
+                #   (choices shrank between versions) so show()/value() can't IndexError
             elif r["kind"] == "stepper":
                 r.setdefault("value", r.get("min", 0))
+                lo, hi = r.get("min", 0), r.get("max", r["value"])    # clamp a stale persisted value
+                r["value"] = max(lo, min(r["value"], hi))             # into the declared range
             elif r["kind"] == "toggle":
                 r.setdefault("value", False)
         n = len(rows) + self._t

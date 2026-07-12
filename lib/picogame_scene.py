@@ -50,7 +50,7 @@ class View:
         return self.points.get(name)
 
     def in_zone(self, x, y, tag=None):
-        """First zone (tag, x1, y1, x2, y2) containing (x, y) [matching tag], or None."""
+        """First zone (tag, x, y, w, h) containing (px, py) [matching tag], or None."""
         for z in self.zones:
             if tag is not None and z[0] != tag:
                 continue

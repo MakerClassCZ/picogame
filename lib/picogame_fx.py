@@ -147,8 +147,12 @@ class Fade:
         # The smooth fxdemo-style flash: ramp the dither UP to `level` then back DOWN at `speed`
         # (levels/frame), instead of SNAPPING on (which read as too abrupt/strong). peak<16 keeps
         # it a see-through dither even at its strongest - never a solid wall of colour.
-        self._pulse = self.LEVELS if level is None else level
-        return self.to(self._pulse, speed)
+        # CLAMP the stored peak to the achievable range: to() caps target at LEVELS, so an
+        # out-of-range peak (pulse(20)) would never satisfy `level >= _pulse` and the flash
+        # would stay opaque forever. speed is clamped positive for the same reason.
+        peak = self.LEVELS if level is None else max(0.0, min(float(self.LEVELS), float(level)))
+        self._pulse = peak
+        return self.to(peak, max(0.01, speed))
 
     @property
     def is_done(self):
@@ -307,19 +311,20 @@ class Sky:
         self.h = max(1, h)
         self.top = top
         self.bottom = bottom
-        self._key = None                               # row-colour LUT, rebuilt only when top/bottom change
-        self._lut = array.array("H", bytes(2 * self.h))
+        self._ktop = self._kbot = None                 # last LUT-built colours (two scalars, no tuple
+        self._lut = array.array("H", bytes(2 * self.h))  # allocated per frame just to compare)
         self.sd = pg.StripDraw(self._draw, x, y, w, h)
         scene.add(self.sd, fixed=True)
 
     def _draw(self, view, vx, vy, vw, vh):
-        key = (self.top, self.bottom)
-        if key != self._key:                           # rebuild only on a colour change (day-night stays mutable)
-            self._key = key
+        if self.top != self._ktop or self.bottom != self._kbot:   # rebuild only on a colour change
+            self._ktop = self.top
+            self._kbot = self.bottom
             lut = self._lut
             hh = self.h
+            den = hh - 1 if hh > 1 else 1               # so the last row reaches `bottom` exactly
             for r in range(hh):
-                lut[r] = _lerp565(self.top, self.bottom, r / hh)
+                lut[r] = _lerp565(self.top, self.bottom, r / den)
         lut = self._lut
         fill = view.fill_rect
         y0 = self.y

@@ -96,7 +96,9 @@ class SceneLabel:
         need = fw * max(1, chars) * fh * 2
         if self._buf is None or len(self._buf) < need:
             self._buf = bytearray(need)
-        self.sprite.visible = False         # nothing is shown
+        self.sprite.visible = False         # nothing is shown...
+        self._text = None                   # ...and forget the cached text, so a later set() of the
+        #                                     SAME string re-renders instead of short-circuiting hidden
 
     def destroy(self):
         """TRANSIENT label teardown: detach from the scene + drop the text buffer, so GC reclaims
@@ -396,15 +398,16 @@ class Menu:
 
 
 class SceneMenu:
-    """A cursor menu that lives IN the scene (built on `SceneBox` - a Canvas + SceneLabel rows as FIXED
-    layers). Use it OVER a LIVE scene - one that calls `scene.refresh()` every frame (battle
-    actions, an in-game choice popup). Because the scene paints it, the fast Display can't push its
-    strips over it and erase it (the trap that makes an immediate `Menu` vanish over a live scene).
+    """A cursor menu that lives IN the scene (built on `SceneBox` - a single buffer-less StripDraw
+    that composites panel + border + text straight into the live strip, 0 retained RAM). Use it
+    OVER a LIVE scene - one that calls `scene.refresh()` every frame (battle actions, an in-game
+    choice popup). Because the scene paints it, the fast Display can't push its strips over it and
+    erase it (the trap that makes an immediate `Menu` vanish over a live scene).
 
         m = ui.SceneMenu(scene, pg, font, 96, 64, ["Fireball", "Rally"], WHITE, NAVY, title="CAST")
-        m.show()                          # show it
+        m.show()                          # reveal it
         ...each frame:  pick = m.tick(btn)     # >=0 index on A, ui.CANCEL on B, None navigating
-        if pick is not None: m.hide()          # hide on confirm/cancel
+        if pick is not None: m.hide()          # hide() to dismiss (destroy() to free the slot)
         # scene.refresh() paints it - no draw() call.
 
     Same navigation/paging as `Menu` (shared `_menu_step`). Pick `Menu` instead for a STATIC screen
@@ -437,7 +440,7 @@ class SceneMenu:
         self.panel.show(lines)
 
     def show(self, sel=0):
-        """Reveal the menu (resets the cursor). The scene paints it from now until close()."""
+        """Reveal the menu (resets the cursor). The scene paints it until hide()/destroy()."""
         self.active = True
         self.sel = self._clamp(sel)
         self.top = (self.sel // self.rows) * self.rows if self.paged else max(0, min(self.sel, len(self.items) - self.rows))

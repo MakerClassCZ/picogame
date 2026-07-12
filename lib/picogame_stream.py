@@ -24,23 +24,35 @@
 
 class StreamSheet:
     def __init__(self, pg, path, w, h, frames, palette, transparent=None):
+        if frames <= 0:
+            raise ValueError("frames must be > 0")
         self.f = open(path, "rb")
-        self.frame_bytes = w * h
-        self.buf = bytearray(self.frame_bytes)     # the only RAM the sheet costs (one frame)
-        self.frames = frames
-        self.bitmap = pg.Bitmap(self.buf, w, h, format=pg.PAL8, palette=palette,
-                                frames=1, stride=w, transparent=transparent)
-        self._cur = -1
-        self.use(0)
+        try:
+            self.frame_bytes = w * h
+            self.buf = bytearray(self.frame_bytes)     # the only RAM the sheet costs (one frame)
+            self.frames = frames
+            self.bitmap = pg.Bitmap(self.buf, w, h, format=pg.PAL8, palette=palette,
+                                    frames=1, stride=w, transparent=transparent)
+            self._cur = -1
+            self.use(0)
+        except Exception:
+            self.f.close()                             # don't leak the file if setup fails
+            raise
 
     def use(self, i):
         """Load frame `i` into the shared buffer (cached: re-reads only when it changes) and
         return the bitmap. After this, call `sprite.touch()` so the scene repaints the sprite
-        (the bitmap's pixels changed in place; that isn't otherwise detected as dirty)."""
+        (the bitmap's pixels changed in place; that isn't otherwise detected as dirty).
+        A short read (truncated file / bad frame index past EOF) raises instead of caching a
+        half-old/half-new frame as if it succeeded."""
         i %= self.frames
         if i != self._cur:
             self.f.seek(i * self.frame_bytes)
-            self.f.readinto(self.buf)
+            n = self.f.readinto(self.buf)
+            if n != self.frame_bytes:                  # incomplete -> do NOT mark it cached
+                self._cur = -1
+                raise OSError("StreamSheet: short read for frame %d (%d/%d bytes)"
+                              % (i, n or 0, self.frame_bytes))
             self._cur = i
         return self.bitmap
 

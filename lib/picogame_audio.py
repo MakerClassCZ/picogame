@@ -17,6 +17,9 @@ import audiomixer
 class Audio:
     def __init__(self, pin=None, voices=4, sample_rate=22050, channels=1,
                  bits=16, signed=True):
+        if voices < 2:                                     # voice 0 is music, 1.. are sfx; with
+            raise ValueError("Audio needs voices >= 2 "    # only 1 voice the default sfx path
+                             "(voice 0 = music, 1.. = sfx)")  # would index a nonexistent voice
         # Boards name the PWM speaker pin inconsistently: AUDIO (PicoPad/PicoSystem) is rare; SPEAKER
         # is by far the most common, BUZZER next. Try them in turn so Audio() "just works" across
         # boards without the game passing a pin. (I2S-only boards have no single PWM pin -> pass one.)
@@ -37,10 +40,14 @@ class Audio:
                 raise ValueError("no PWM audio pin (set PICOGAME_AUDIO in settings.toml, or the board "
                                  "has no AUDIO/SPEAKER/BUZZER); or pass one: picogame_audio.Audio(board.GP15)")
         self.out = audiopwmio.PWMAudioOut(pin)
-        self.mixer = audiomixer.Mixer(
-            voice_count=voices, sample_rate=sample_rate, channel_count=channels,
-            bits_per_sample=bits, samples_signed=signed)
-        self.out.play(self.mixer)
+        try:                                               # if the mixer alloc / play() raises
+            self.mixer = audiomixer.Mixer(                 # (MemoryError on a tight heap), release
+                voice_count=voices, sample_rate=sample_rate, channel_count=channels,  # the PWM pin
+                bits_per_sample=bits, samples_signed=signed)  # so a later Audio()/Synth() can claim
+            self.out.play(self.mixer)                      # it (the caller has no object to deinit).
+        except Exception:
+            self.out.deinit()
+            raise
         self.voices = voices
         self.music_voice = 0      # voice 0 reserved for background music
         self._sfx_next = 1        # round-robin over voices 1..voices-1
@@ -89,7 +96,10 @@ class Audio:
 
     @property
     def is_playing(self):
-        return any(v.playing for v in self.mixer.voice)
+        for v in self.mixer.voice:           # a plain loop - no generator object per poll
+            if v.playing:
+                return True
+        return False
 
 
 def tone(frequency=440, ms=120, sample_rate=22050, volume=0.6):

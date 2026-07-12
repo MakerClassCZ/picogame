@@ -71,6 +71,10 @@ def show(pg, display, buffer, path, pal=None, w=320, h=240, scale=None, band=24,
         scale = dst.width // w
         if scale < 1 or dst.width % w:
             raise ValueError("no integer scale: image w=%d vs display w=%d" % (w, dst.width))
+        if h * scale != dst.height:                    # fullscreen contract: must fill BOTH axes
+            raise ValueError("image %dx%d at %dx doesn't fill the %dx%d screen (%d rows left); "
+                             "re-bake at a size that divides the display, or pass an explicit scale"
+                             % (w, h, scale, dst.width, dst.height, dst.height - h * scale))
     elif scale < 1 or int(scale) != scale:
         raise ValueError("scale must be a positive integer, got %r" % (scale,))
     if pal is not None:
@@ -83,23 +87,24 @@ def show(pg, display, buffer, path, pal=None, w=320, h=240, scale=None, band=24,
     spr = pg.Sprite(bmp, 0, 0)
     if scale != 1:
         spr.scale = scale
-    lim = h * scale                                    # don't render a short band past the image
+    row_bytes = w * bpp
     with open(path, "rb") as f:
         sy = 0
         while sy < h:
-            r = f.readinto(rowbuf)
-            if not r:
-                break
-            if r < len(rowbuf):                        # short final read -> clear the stale tail
-                for i in range(r, len(rowbuf)):
+            rows = band if sy + band <= h else h - sy   # this band (the last may be shorter)
+            want = rows * row_bytes                      # EXACT bytes for those rows
+            r = f.readinto(memoryview(rowbuf)[:want])
+            if r != want:                                # truncated file -> fail, don't leave it stale
+                raise OSError("cutscene: %s truncated at row %d (%d/%d bytes)"
+                              % (path, sy, r or 0, want))
+            if want < len(rowbuf):                        # a short final band: clear the unused tail
+                for i in range(want, len(rowbuf)):
                     rowbuf[i] = bg
             dy = sy * scale
             spr.move(0, dy)
-            spr.touch()                                # pixels changed in place -> force the blit
-            y1 = dy + band * scale
-            pg.render(dst, [spr], buffer, 0, dy, w * scale,
-                      y1 if y1 < lim else lim, background=0)
-            sy += band
+            spr.touch()                                   # pixels changed in place -> force the blit
+            pg.render(dst, [spr], buffer, 0, dy, w * scale, dy + rows * scale, background=0)
+            sy += rows
     return scale
 
 

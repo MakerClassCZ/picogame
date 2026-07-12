@@ -47,6 +47,8 @@ class Save:
     def __init__(self, key, schema, *, offset=0):
         if _NVM is None:
             raise RuntimeError("NVM not available on this build")
+        if offset < 0:                       # a negative offset slices NVM from the end on some
+            raise ValueError("offset must be >= 0")   # ports -> could clobber unrelated data
         self.schema = schema
         self.offset = offset
         self._names = list(schema.keys())
