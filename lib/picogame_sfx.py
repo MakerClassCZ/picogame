@@ -118,6 +118,15 @@ if AVAILABLE:
             pass                       # older firmware: a plain falling sine body
         return n
 
+    def _smear(decay, amplitude, hi, lo, ms, scale=0.45):
+        """De-buzz NOISE body: a free-running bend keeps shifting the table repeat rate (the ear
+        never locks to a pitch) under a falling LP sweep. NO ring modulation, so it stays natural
+        on a full-range speaker - the ring-mod _body is inaudible on the piezo but metallic on
+        headphones. Same technique as the explosion. Inaudible-body corner on the piezo = free."""
+        return synthio.Note(frequency=659.0, waveform=snd.NOISE,
+                            envelope=_env(0.0, decay, decay * 0.5), amplitude=amplitude,
+                            bend=synthio.LFO(rate=3.1, scale=scale), filter=_sweep_lp(hi, lo, ms))
+
     # ---- the arcade theme (default palette) ----
     def _fat_table():
         """Square lead + saw an octave below, baked into ONE 256-sample cycle."""
@@ -139,7 +148,11 @@ if AVAILABLE:
                                 envelope=_env(0.001, decay, decay * 0.65),
                                 amplitude=amplitude, bend=bend, filter=_lp(cutoff))
 
-        hit_body = _body(210.0, 0.09, 0.75, 5, 40)     # kept for pitch rotation
+        # hit (headphone rework): a bright noise crack + a tiny smear-noise flick - the SAME noise
+        # family as boom/explosion (signature cohesion), NO ring-mod body (that was metallic on
+        # headphones). On the piezo the crack carries it. Anti-fatigue: the crack's cutoff rotates
+        # over 3 steps per fire (audible brightness jitter, replacing the old +-2 st pitch rotation).
+        hit_crack = _crack(0.036, 2300, 0.66, q=1.05)
         return {
             "blip": [(0, _fat_note(84, 0.05, 0.55, 3000))],
             "coin": [(0, _fat_note(79, 0.10, 0.80, 3400)),          # G5 -> C6, 2 frames
@@ -159,24 +172,23 @@ if AVAILABLE:
             # ("jG", 2026-07-12). Same voice cost as zap (1 note + 1 bend LFO).
             "jump": [(0, _fat_note(62, 0.13, 0.60, 3300,
                                    bend=_curve([0.0, 0.30, 0.34, 0.63, 0.67, 1.0], 12, 120)))],
-            "hit": [(0, (_crack(0.036, 2300, 0.68, q=1.05), hit_body))],     # high ring body, short
+            "hit": [(0, (hit_crack, _smear(0.05, 0.5, 4000, 1500, 60, scale=0.3)))],   # crack + flick
             # hurt = "the hit was ON YOU": a crack + a FAT tone that GLIDES DOWN ~10 st. The
             # falling contour (negative = damage) makes it structurally unlike hit's short snap -
             # on the piezo a mere pitch-transpose of hit was too close to tell apart. Same 2-voice
             # budget as hit (and cheaper: a plain falling note, no ring-mod body).
             "hurt": [(0, (_crack(0.04, 1800, 0.55, q=1.05),
                           _fat_note(57, 0.17, 0.60, 2400, bend=_curve([0.0, -1.0], 10, 170))))],
-            "boom": [(0, (_crack(0.06, 1750, 0.62, q=1.05),                  # low body, stretched
-                          _body(112.0, 0.42, 0.90, 10, 140)))],
+            "boom": [(0, (_crack(0.06, 1750, 0.62, q=1.05),                  # crack + low smear-noise
+                          _smear(0.28, 0.85, 3200, 120, 260, scale=0.40)))],
             "explosion": [(0, synthio.Note(                                 # 5h: aperiodic bend-smear
                 frequency=659.0, waveform=snd.NOISE,
                 envelope=_env(0.0, 0.70, 0.35), amplitude=0.85,
                 bend=synthio.LFO(rate=3.1, scale=0.45),
                 filter=_sweep_lp(5500, 250, 580)))],
-            # rotation hook: the note whose pitch rotates + the (carrier, ring) pairs at
-            # -2/0/+2 st. A theme without this key simply gets no hit rotation.
-            "_hit_rot": (hit_body, tuple((210.0 * f * 2.5, 210.0 * f * 0.5)
-                                         for f in (0.8909, 1.0, 1.1225))),
+            # rotation hook: the crack note whose FILTER CUTOFF rotates over 3 steps (brightness
+            # jitter, anti-fatigue on rapid fire). A theme without this key gets no hit rotation.
+            "_hit_rot": (hit_crack, (2000.0, 2300.0, 2650.0)),
         }
 
     class Kit:
@@ -193,7 +205,7 @@ if AVAILABLE:
             self._v = _build_voices(synth)
             rot = self._v.get("_hit_rot")
             if rot:
-                self._rot_note, self._rot_freqs = rot
+                self._rot_note, self._rot_cuts = rot
 
         def _play(self, name):
             """Fire slot `name`; returns True if the channel accepted it (False if dropped
@@ -226,17 +238,15 @@ if AVAILABLE:
             self._play("jump")
 
         def hit(self, rotate=True):
-            """Feedback: "a hit landed on an enemy/object". Short high ring snap; pitch
-            rotates +-2 st per fire (anti-fatigue) unless rotate=False."""
+            """Feedback: "a hit landed on an enemy/object". Short bright noise snap; the crack's
+            cutoff rotates over 3 steps per fire (anti-fatigue) unless rotate=False."""
             if not self.available:
                 return
             if rotate and self._rot_note is not None:
-                nxt = (self._rot + 1) % 3        # set the pitch, fire, and ADVANCE the rotation
-                c, r = self._rot_freqs[nxt]      # counter ONLY if the channel accepted it - a hit
-                self._rot_note.frequency = c     # dropped inside an explosion window must not
-                try:                             # burn a rotation step.
-                    self._rot_note.ring_frequency = r
-                except Exception:
+                nxt = (self._rot + 1) % 3        # rotate the crack cutoff, fire, and ADVANCE the
+                try:                             # rotation ONLY if the channel accepted it - a hit
+                    self._rot_note.filter.frequency = self._rot_cuts[nxt]   # dropped in a window
+                except Exception:                # must not burn a rotation step.
                     pass
                 if self._play("hit"):
                     self._rot = nxt
