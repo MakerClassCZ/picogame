@@ -14,6 +14,8 @@ import picogame_input
 import picogame_clock
 import picogame_font
 import picogame_shapes as shp
+import picogame_synth as snd
+import picogame_sfx
 import picogame_math as m
 import picogame_pool
 
@@ -104,6 +106,7 @@ def new_game():
 
 
 new_game()
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 print("LEFT/RIGHT rotate, UP thrust, B fire. Clear the asteroids.")
 frame = 0
 _shown_score, _shown_lives = -1, -1
@@ -150,6 +153,7 @@ while True:
             d["y"] = st.sy
             b.move(int(st.sx), int(st.sy))
             st.fire_cd = 6
+            kit.zap()                  # fire
 
     # bullets
     for b in bullets.items:
@@ -182,6 +186,7 @@ while True:
                 bullets.free(b)
                 rocks.free(r)
                 st.score += (3 - sz) * 20
+                kit.boom()                   # asteroid destroyed
                 if sz < 2:                       # split into two smaller
                     for s in (-1, 1):
                         spawn_rock(sz + 1, rx, ry, rvx + s * 0.8, rvy - s * 0.8)
@@ -193,12 +198,17 @@ while True:
             st.sx, st.sy = float(W // 2), float(H // 2)
             st.vx = st.vy = 0.0
             if st.lives < 0:
+                kit.explosion()
                 new_game()
+            else:
+                kit.hurt()
 
     if rocks.count() == 0:
         st.wave += 1
+        kit.powerup()                # wave cleared
         new_wave(st.wave)
 
+    kit.tick()
     exhaust.tick()
     scene.refresh()
     shown_lives = max(0, st.lives)

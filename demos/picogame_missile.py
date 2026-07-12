@@ -11,15 +11,15 @@ import picogame_game
 import picogame_input
 import picogame_clock
 import picogame_ui as ui
-import picogame_audio
+import picogame_synth as snd
+import picogame_sfx
 import picogame_pool
 import picogame_shapes as shp
 
 scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(10, 8, 30))
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
-audio = picogame_audio.Audio()
-boom_sfx = picogame_audio.tone(120, 180)
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 
 W, H = board.DISPLAY.width, board.DISPLAY.height
 GROUND = H - 14
@@ -118,7 +118,7 @@ while True:
         ex, ey = crosshair.x + 3, crosshair.y + 3
         beam[0], beam[1], beam[2], beam[3], beam[4] = BATTERY[0], BATTERY[1], ex, ey, 4
         particles.emit(ex, ey, 26, 5, 24, pg.rgb565(255, 200, 60))
-        audio.sfx(boom_sfx)
+        kit.boom()                 # blast detonation
         for m in incoming.items:
             if not m.visible:
                 continue
@@ -145,12 +145,14 @@ while True:
                     best = c
             if best is not None:
                 best.visible = False
+                kit.hurt()             # a city lost
                 particles.emit(best.x + 12, GROUND, 20, 4, 22, pg.rgb565(90, 200, 120))
         else:
             m.move(int(m.data[0]), int(m.data[1]))
 
     n_cities = count_live_cities()
     if n_cities == 0:            # all gone -> restart
+        kit.explosion()
         score = 0
         for c in cities:
             c.visible = True
@@ -159,6 +161,7 @@ while True:
 
     if beam[4] > 0:                          # the firing beam is a brief flash
         beam[4] -= 1
+    kit.tick()
     particles.tick()
     if score != _h_score or n_cities != _h_cities:   # before refresh -> painted by it
         _h_score, _h_cities = score, n_cities

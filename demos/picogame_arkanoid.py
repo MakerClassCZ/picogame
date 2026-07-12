@@ -16,6 +16,8 @@ import picogame_input
 import picogame_clock
 import picogame_shapes as shp
 import picogame_ui as ui
+import picogame_synth as snd
+import picogame_sfx
 
 BG = pg.rgb565(8, 10, 24)
 scene, bufA, bufB = picogame_game.setup(background=BG)
@@ -74,6 +76,7 @@ def reset_ball():
     ball.move(int(bx), int(by))
 
 
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if the board has no audio
 print("D-pad / L-R: move the paddle. Break all the bricks!")
 while True:
     btn.poll()
@@ -96,6 +99,7 @@ while True:
         vy = -abs(vy)
         vx += (bx + BALL / 2 - (paddle.x + PADDLE_W / 2)) * 0.06
         vx = max(-4.0, min(4.0, vx))
+        kit.blip()                                 # paddle bounce (light tick)
 
     # Brick hit - test the tile under the ball centre.
     tx = int((bx + BALL / 2) // BW)
@@ -110,15 +114,20 @@ while True:
             cx = tx * BW + BW // 2
             cy = BRICK_Y + ty * BH + BH // 2
             particles.emit(cx, cy, 14, 3, 22, pal[cell])
+            kit.hit()                              # brick break (rotates pitch on a fast rally)
 
     if by > H:                                     # missed the ball
         lives -= 1
         if lives <= 0:                             # game over -> restart
+            kit.explosion()
             score, lives = 0, 3
             bricks_left = fill_wall()
+        else:
+            kit.hurt()                             # lost a life
         reset_ball()
 
     if bricks_left == 0:                           # wall cleared -> a fresh one
+        kit.powerup()                              # milestone
         bricks_left = fill_wall()
         reset_ball()
 
@@ -127,5 +136,6 @@ while True:
     if score != _shown_score or lives != _shown_lives:
         _shown_score, _shown_lives = score, lives
         score_label.set("SCORE %05d  LIVES %d" % (score, lives))    # re-renders only on change
+    kit.tick()
     scene.refresh()                                             # paints the world + the fixed HUD layer
     clock.tick()

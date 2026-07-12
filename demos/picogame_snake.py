@@ -16,6 +16,8 @@ import picogame_clock
 import picogame_rand
 import picogame_shapes as shp
 import picogame_ui as ui
+import picogame_synth as snd
+import picogame_sfx
 
 W, H = board.DISPLAY.width, board.DISPLAY.height
 TILE = 10
@@ -77,6 +79,7 @@ def new_game():
     place_food()
 
 
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if the board has no audio
 new_game()
 print("D-pad to steer. Eat the red food, don't bite yourself or the walls.")
 _shown_score, _shown_len = -1, -1
@@ -99,7 +102,8 @@ while True:
         nx, ny = hx + st.direction[0], hy + st.direction[1]
         cell = grid.tile(nx, ny) if 0 <= nx < COLS and 0 <= ny < ROWS else BODY
         if cell == BODY or cell == HEAD:       # out-of-bounds already maps to BODY above
-            new_game()                     # crash -> restart
+            kit.explosion()                # crash
+            new_game()                     # -> restart
         else:
             grid.tile(hx, hy, BODY)        # old head becomes body
             grid.tile(nx, ny, HEAD)        # new head
@@ -107,6 +111,7 @@ while True:
             if cell == FOOD:
                 st.score += 10
                 st.grow += 2
+                kit.coin()                 # ate the food
                 place_food()
             if st.grow > 0:
                 st.grow -= 1
@@ -118,5 +123,6 @@ while True:
     if st.score != _shown_score or body_len != _shown_len:
         _shown_score, _shown_len = st.score, body_len
         hud.set("SCORE %04d   LEN %d" % (st.score, body_len))
+    kit.tick()                             # drive the SFX sequencer (coin is a 2-note rise)
     scene.refresh()
     clock.tick()

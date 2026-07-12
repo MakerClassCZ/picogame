@@ -18,6 +18,8 @@ import terminalio
 import picogame_ui as ui
 import picogame_shapes as shp
 import picogame_tiles as tiles
+import picogame_synth as snd
+import picogame_sfx
 
 W, H = board.DISPLAY.width, board.DISPLAY.height
 TILE = 16
@@ -181,6 +183,7 @@ def new_game():
 
 
 new_game()
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 print("LEFT/RIGHT run, UP/B jump. Stomp enemies, grab coins, reach the green flag.")
 _shown_coins, _shown_lives, _shown_score = -1, -1, -1
 while True:
@@ -199,6 +202,7 @@ while True:
     if jfired:
         st.vy = -11.0
         st.landed = False
+        kit.jump()
         coyote.t = 0                                                 # one jump per ledge window
 
     if DEBUG:
@@ -223,8 +227,10 @@ while True:
     if st.py > H + 20:
         st.lives -= 1
         if st.lives < 0:
+            kit.explosion()
             new_game()
         else:
+            kit.hurt()
             reset_player()
         follow()
         continue
@@ -235,10 +241,12 @@ while True:
         level.tile(chest_tx, chest_ty, 0)
         st.coins += 1
         st.score += 100
+        kit.coin()
     # goal
     goal_tx = int(st.px) // TILE
     if tf.at(level, goal_tx, ROWS - 3, tiles.B_EXIT):
         st.score += 1000
+        kit.powerup()
         new_game()
 
     # enemies
@@ -260,11 +268,14 @@ while True:
                 e.visible = False
                 st.vy = -7.0
                 st.score += 200
+                kit.boom()
             else:                                              # hurt
                 st.lives -= 1
                 if st.lives < 0:
+                    kit.explosion()
                     new_game()
                 else:
+                    kit.hurt()
                     reset_player()
                 follow()
                 break
@@ -274,5 +285,6 @@ while True:
     if st.coins != _shown_coins or shown_lives != _shown_lives or st.score != _shown_score:
         _shown_coins, _shown_lives, _shown_score = st.coins, shown_lives, st.score
         hud.set("COINS %d/%d  LIVES %d  %05d" % (st.coins, st.coins_total, shown_lives, st.score))
+    kit.tick()
     scene.refresh()
     clock.tick()

@@ -17,6 +17,8 @@ import picogame_clock
 import picogame_ui as ui
 import picogame_shapes as shp
 import picogame_fx as fx
+import picogame_synth as snd
+import picogame_sfx
 
 BG = pg.rgb565(0, 0, 0)
 scene, bufA, bufB = picogame_game.setup(background=BG)
@@ -214,6 +216,7 @@ def ghost_choose(g):
 
 
 new_game()
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 # HUD shadow: only reformat+draw the Label when SCORE/LIVES actually change.
 _hud_score = -1
 _hud_lives = -2
@@ -255,11 +258,13 @@ while True:
             maze.tile(tx, ty, EMPTY)
             st.score += 10
             st.pellets_left -= 1
+            kit.blip()                 # chomp
         elif cell == POWER:
             maze.tile(tx, ty, EMPTY)
             st.score += 50
             st.fright = FRIGHT_FRAMES
             st.pellets_left -= 1
+            kit.powerup()              # power pellet
         st.pac_tx, st.pac_ty = tx, ty
     d = st.pac_dir
     px += d[0] * SPEED
@@ -285,6 +290,7 @@ while True:
         if pac.overlaps(gspr):
             if st.fright > 0:
                 st.score += 200
+                kit.boom()             # ate a frightened ghost
                 hx, hy = ghost_home[g["i"] % len(ghost_home)]
                 g["px"], g["py"] = hx * TILE, hy * TILE
                 g["dir"] = (0, -1)
@@ -292,12 +298,15 @@ while True:
                 st.lives -= 1
                 flash.pulse()           # juice: flash the screen when caught
                 if st.lives < 0:
+                    kit.explosion()
                     new_game()
                 else:
+                    kit.hurt()
                     reset_positions()
                 break
 
     if st.pellets_left <= 0:           # cleared -> rebuild pellets
+        kit.powerup()                  # maze cleared
         st.pellets_left = fill_pellets()
         reset_positions()
 
@@ -305,5 +314,6 @@ while True:
         _hud_score = st.score
         _hud_lives = st.lives
         hud.set("SCORE %05d   LIVES %d" % (st.score, max(0, st.lives)))
+    kit.tick()
     scene.refresh()
     clock.tick()

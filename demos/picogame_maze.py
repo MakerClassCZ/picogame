@@ -13,6 +13,8 @@ import picogame_input
 import picogame_clock
 import picogame_shapes as shp
 import picogame_ui as ui
+import picogame_synth as snd
+import picogame_sfx
 import picogame_rand
 
 W, H = board.DISPLAY.width, board.DISPLAY.height
@@ -121,6 +123,7 @@ def new_level():
 
 new_level()
 hud.draw()
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 print("Maze - arrows move, A reveals the door. Find the exit.")
 
 while True:
@@ -141,6 +144,7 @@ while True:
             st.level += 1
             title.set("MAZE  LVL %d" % st.level)
             hud.draw()
+            kit.powerup()              # reached the exit
             new_level()
         else:
             reveal(st.px, st.py)
@@ -149,6 +153,7 @@ while True:
     # A = flash the hidden door location as a hint, then restore it
     if btn.just_pressed(btn.A):
         st.reveal_door = 24
+        kit.blip()                 # door hint
     if st.reveal_door > 0:
         st.reveal_door -= 1
         if st.reveal_door == 0:
@@ -156,5 +161,6 @@ while True:
         else:
             tm.tile(st.dx, st.dy, DOOR if (st.reveal_door // 4) % 2 else HIDDEN)   # blink
 
+    kit.tick()
     scene.refresh()
     clock.tick()

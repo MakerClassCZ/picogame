@@ -6,7 +6,7 @@
 #  * core verb = catch; genre = endless/arcade; target feeling = quick tense reflexes.
 #  * readability: gems are green CIRCLES, bombs are red SQUARES (shape + colour, not colour
 #    alone) so it's colourblind-fair on a small screen.
-#  * juice: a white pop-ring + a beep on catch; the tray flashes + screen shakes on a hit.
+#  * juice: a white pop-ring + a coin on catch; the tray flashes + screen shakes on a hit.
 #  * difficulty: fall speed and spawn rate ramp with score, but stay fair (telegraphed fall).
 #  * fits RP2040: a fixed pool of sprites (no per-frame alloc), generated shapes (no art).
 #
@@ -23,12 +23,8 @@ import picogame_shapes as shp
 import picogame_ui as ui
 import picogame_pool
 import picogame_rand
-
-try:
-    import picogame_audio
-    audio = picogame_audio.Audio()
-except Exception:
-    audio = None                                   # audio is optional (no-op if unavailable)
+import picogame_synth as snd
+import picogame_sfx
 
 W, H = board.DISPLAY.width, board.DISPLAY.height
 BAR = 16
@@ -113,19 +109,13 @@ def spawn():
     d["suby"] = float(BAR + 6)
 
 
-def beep(f, ms):
-    if audio:
-        try:
-            audio.tone(f, ms)
-        except Exception:
-            pass
-
-
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 reset()
 print("Starfall - LEFT/RIGHT catch gems, dodge bombs. A restarts when over.")
 
 while True:
     btn.poll()
+    kit.tick()                                   # drive the SFX sequencer every frame
 
     if st.over:
         if btn.just_pressed(btn.A):
@@ -185,15 +175,16 @@ while True:
                     st.freeze = 3                    # hit-stop (deep-game-feel C2)
                     st.mercy = 24
                     tray.flash = TRAY_HIT_COLOR
-                    beep(120, 120)
+                    kit.hurt()
                     if st.lives <= 0:
+                        kit.explosion()
                         st.over = True
                         st.last_score = -1            # force one HUD redraw on the game-over transition
                         fader.out(speed=2)           # fade to black on game over
             else:
                 st.score += 1
                 shaker.add(0.12)                     # tiny kick on catch
-                beep(880, 40)
+                kit.coin()
                 pop.move(s.x, s.y); pop.visible = True
                 st.pop_t = 5
         elif d["suby"] > H + 8:                        # fell off the bottom

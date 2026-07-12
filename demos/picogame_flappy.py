@@ -17,6 +17,8 @@ import picogame_clock
 import picogame_ui as ui
 import picogame_shapes as shp
 import picogame_pool
+import picogame_synth as snd
+import picogame_sfx
 
 W, H = board.DISPLAY.width, board.DISPLAY.height
 BG = pg.rgb565(90, 180, 230)
@@ -80,18 +82,21 @@ def new_game():
 
 new_game()
 _hud_score = -1        # HUD shadow: reformat+draw the Label only when SCORE changes
+kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 print("Press B (or A) to flap. Thread the gaps.")
 while True:
     btn.poll()
 
     if btn.just_pressed(btn.B) or btn.just_pressed(btn.A):
         vy = -6.0
+        kit.jump()                 # flap
     vy = min(8.0, vy + 0.5)
     by += vy
     if by < 8:
         by = 8
         vy = 0
     if by > H - 8:                 # hit ground -> restart
+        kit.explosion()
         new_game()
         continue
     bird.move(BIRD_X, int(by))
@@ -110,12 +115,15 @@ while True:
         if not d["scored"] and x + PIPE_W < BIRD_X:
             d["scored"] = True
             score += 1
+            kit.coin()             # passed a pipe
         # collision: the bird's box touches either pipe; the gap between them is safe
         if bird.overlaps(t) or bird.overlaps(b):
+            kit.explosion()
             new_game()
             break
 
     scene.refresh()
+    kit.tick()
     if score != _hud_score:
         _hud_score = score
         hud.set("SCORE %d" % score)

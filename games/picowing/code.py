@@ -34,48 +34,26 @@ import picogame_fx as fx
 import plane                                       # Kenney Pixel Shmup ship (CC0), 32x32 PAL8
 import enemy                                       # Kenney Pixel Shmup enemy (CC0), 32x32 PAL8
 
-# Warm synthio SFX (guarded: synthio is device-only; the sim / a bare build runs SILENT).
-# Replaces the old raw square tone() blips: custom wavetables (summed harmonics = a baked
-# low-pass) + a Biquad LOW_PASS cutoff + percussive envelopes = rounded, non-piercing hits.
-# All notes are built ONCE here at import - no per-frame allocation.
-try:
-    import synthio                                    # noqa: F401 (probe - device-only module)
-    import array
-    import math
-    import picogame_synth as snd
+# Sound uses the signature SFX kit (picogame_sfx). The game keeps its own sfx("name") call
+# sites; each name maps to a kit voice, and sfx_tick() runs once per frame in the loop.
+import picogame_synth as snd
+import picogame_sfx
 
-    _synth = snd.Synth(sfx_level=0.7)
+_kit = picogame_sfx.Kit(snd.Synth())                 # silent no-op if the board has no audio
+_SFX = {"shot": _kit.zap,        # player fire
+        "hurt": _kit.hurt,       # player hit
+        "kill": _kit.boom,       # raider destroyed
+        "bomb": _kit.explosion,  # smart-bomb blast
+        "jam": _kit.blip,        # gun overheated/locked (denied tick)
+        "extra": _kit.powerup}   # extra life / milestone
 
-    def _wt(hs):                                      # warm wavetable: harmonics with rolloff
-        acc = [0.0] * 256
-        for h, a in hs:
-            w = 2 * math.pi * h / 256
-            for i in range(256):
-                acc[i] += a * math.sin(w * i)
-        m = max(abs(v) for v in acc) or 1.0
-        return array.array("h", [int(28000 * v / m) for v in acc])
 
-    _PAD = _wt(((1, 1.0), (2, 0.42), (3, 0.20), (4, 0.09)))   # dark + round: thuds/booms
-    _REED = _wt(tuple((n, (1.0 / n) / (1 + (n / 6.0) ** 2)) for n in range(1, 9)))  # warm lead
+def sfx(name):
+    _SFX[name]()
 
-    def _n(m, w, dec=0.06, amp=0.5, att=0.01, rel=0.2, cut=None, bend=None):
-        return snd.note(m, w, attack=att, decay=dec, release=rel, amplitude=amp, cutoff=cut,
-                        bend=snd.pitch_bend(bend[0], bend[1]) if bend else None)
 
-    SFX = {                                           # old tone(Hz, ms) -> warm note, same pitch
-        "hurt": _n(52, _PAD, dec=0.09, amp=0.6, cut=800, bend=(-4, 90)),           # was 180Hz/90ms
-        "bomb": _n(40, _PAD, dec=0.2, rel=0.3, amp=0.85, cut=600, bend=(-5, 160)),  # was 90Hz/160ms
-        "shot": _n(81, _REED, dec=0.03, rel=0.08, att=0.003, amp=0.32, cut=2000, bend=(-2, 30)),
-        "kill": _n(50, _PAD, dec=0.07, amp=0.55, cut=900, bend=(-3, 60)),          # was 150Hz/70ms
-        "jam": _n(38, snd.SQUARE, dec=0.06, amp=0.45, cut=500),   # low buzz: gun overheats/locks
-        "extra": _n(86, _REED, dec=0.06, rel=0.25, amp=0.6, cut=2400, bend=(3, 70)),  # rising ding
-    }
-
-    def sfx(name):
-        _synth.sfx(SFX[name])
-except Exception:
-    def sfx(name):                                    # no synthio -> silent no-op, game still runs
-        pass
+def sfx_tick():
+    _kit.tick()
 
 try:
     import picogame_save
@@ -497,5 +475,6 @@ while True:
         last_blink = blink
         st.hud_dirty = False
         hud_refresh()
+    sfx_tick()
     scene.refresh()
     clock.tick()
