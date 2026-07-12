@@ -117,6 +117,15 @@ def resolve_display(display=None):
         except TypeError:
             raise RuntimeError("this firmware's picogame.Framebuffer lacks native_rgb565 - "
                                "flash a newer picogame build")
+        # Tear-free full repaints: let the Scene wait for the DVI frame boundary before a
+        # large/full-screen composite (e.g. a camera move). Opt-in + best-effort: absent on SPI
+        # panels and older firmware, where it simply stays off (no sync).
+        waiter = getattr(raw, "wait_for_vblank", None)
+        if waiter is not None:
+            try:
+                fb.sync = waiter
+            except AttributeError:
+                pass
         return fb, True
     return display, False
 
