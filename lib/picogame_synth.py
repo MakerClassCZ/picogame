@@ -23,6 +23,7 @@
 
 import array
 import math
+import os
 
 try:
     import board
@@ -32,6 +33,28 @@ try:
     AVAILABLE = True
 except ImportError:            # audio-less firmware (or desktop Python) -> silent no-op mode
     AVAILABLE = False
+
+
+def _resolve_pin(pin):
+    """The PWM audio pin. Same policy as picogame_audio.Audio (kept in sync by hand - both
+    are audio libs, neither depends on the other): an explicit pin wins; else settings.toml
+    PICOGAME_AUDIO; else the common board names AUDIO/SPEAKER/BUZZER. None if nothing matches
+    (Synth then degrades to a silent no-op, unlike Audio which raises)."""
+    if pin is not None:
+        return pin
+    name = os.getenv("PICOGAME_AUDIO")
+    if name:
+        pin = getattr(board, name, None)
+        if pin is None:
+            try:
+                import microcontroller
+                pin = getattr(microcontroller.pin, name, None)
+            except ImportError:
+                pass
+        if pin is not None:
+            return pin
+    return (getattr(board, "AUDIO", None) or getattr(board, "SPEAKER", None)
+            or getattr(board, "BUZZER", None))
 
 try:
     from micropython import const
@@ -56,8 +79,11 @@ def triangle():
     return array.array("h", [int(_AMP * (2.0 * abs(2.0 * i / _LEN - 1.0) - 1.0)) for i in range(_LEN)])
 
 
-def square():
-    return array.array("h", [_AMP if i < _LEN // 2 else -_AMP for i in range(_LEN)])
+def square(duty=0.5):
+    """Square/pulse wave. `duty` = high fraction of the cycle: 0.5 = classic square,
+    0.25 / 0.125 = the thinner NES pulse timbres - same note, audibly different colour."""
+    hi = max(1, min(_LEN - 1, int(_LEN * duty)))
+    return array.array("h", [_AMP if i < hi else -_AMP for i in range(_LEN)])
 
 
 def noise():
@@ -69,12 +95,21 @@ def noise():
     return out
 
 
-# Prebuilt singletons (share one waveform across notes - they're read-only).
-SINE = sine()
-SAW = saw()
-TRIANGLE = triangle()
-SQUARE = square()
-NOISE = noise()
+# Prebuilt singletons (share one waveform across notes - they're read-only). Built ONLY
+# on an audio-capable build: an audio-less firmware can't play them, so it keeps inert
+# None placeholders (~2.5 KiB saved) while `snd.SQUARE` etc. still resolve (games alias
+# them at import; the no-op note() ignores the waveform anyway).
+# RAMP: a 2-sample LFO shape; with once=True the LFO interpolates max->min LINEARLY over
+# 1/rate seconds - a clean ramp (pitch_bend(waveform=RAMP) = straight glide vs sine wobble).
+if AVAILABLE:
+    SINE = sine()
+    SAW = saw()
+    TRIANGLE = triangle()
+    SQUARE = square()
+    NOISE = noise()
+    RAMP = array.array("h", [32767, -32768])
+else:
+    SINE = SAW = TRIANGLE = SQUARE = NOISE = RAMP = None
 
 
 class _Null:
@@ -108,7 +143,8 @@ def note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.0
 
 
 def pitch_bend(semitones, ms, waveform=None, once=True):
-    """An LFO for note `bend`: slide by `semitones` over `ms` ms (e.g. a laser zap)."""
+    """An LFO for note `bend`: slide by `semitones` over `ms` ms (e.g. a laser zap).
+    Default LFO shape is a sine (a wobble); pass waveform=RAMP for a straight glide."""
     return synthio.LFO(waveform=waveform, rate=1000.0 / ms, scale=semitones / 12.0, once=once)
 
 
@@ -122,10 +158,19 @@ class Synth:
     def __init__(self, pin=None, sample_rate=22050, buffer_size=2048,
                  music_level=0.4, sfx_level=0.7):
         self.sample_rate = sample_rate
+        self.music_level = music_level    # remembered DESIRED levels (mute keeps them, so
+        self.sfx_level = sfx_level         # set_levels() while muted stays silent until unmute)
+        self._muted = False
         self._last_sfx = None        # last one-shot SFX; released on the next sfx so HELD notes
         #                              (a Drone engine/siren) and the music voice are never cut off
+        self._seq = None             # the ACTIVE sequence (the caller's own event list; reused,
+        self._seq_i = 0              # never copied) + read cursor + fire frame -> zero per-fire
+        self._seq_base = 0           # allocation (monophonic: only one sequence pending at a time)
+        self._frame = 0
+        self._win = 0                # protected-window frames left; _winp = its priority
+        self._winp = 0
         try:
-            self.audio = PWMAudioOut(pin if pin is not None else board.AUDIO)
+            self.audio = PWMAudioOut(_resolve_pin(pin))   # None -> the except below runs silent
             self.mixer = Mixer(voice_count=2, sample_rate=sample_rate, channel_count=1,
                                bits_per_sample=16, buffer_size=buffer_size)
             self.audio.play(self.mixer)
@@ -144,18 +189,76 @@ class Synth:
             self.audio = self.mixer = self.synth = _Null()
             self.available = False
 
-    def sfx(self, n):
-        """Play a one-shot SFX note (monophonic: cuts off the PREVIOUS sfx, but leaves HELD notes -
-        a Drone engine/siren - and the music voice playing). Retriggers its LFOs so repeats sound
-        identical. (Was release_all_then_press, which silenced a held Drone on every SFX.)"""
-        for lfo in (n.bend, n.amplitude,
-                    n.filter.frequency if isinstance(n.filter, synthio.Biquad) else None):
-            if isinstance(lfo, synthio.LFO):
-                lfo.retrigger()
+    @staticmethod
+    def _retrigger(nn):
+        """Retrigger a note's LFOs so a repeat sounds identical. Reads fields directly -
+        no aggregate tuple built (this runs on every SFX / hit spam)."""
+        b = nn.bend
+        if isinstance(b, synthio.LFO):
+            b.retrigger()
+        a = nn.amplitude
+        if isinstance(a, synthio.LFO):
+            a.retrigger()
+        f = nn.filter
+        if isinstance(f, synthio.Biquad) and isinstance(f.frequency, synthio.LFO):
+            f.frequency.retrigger()
+
+    def _emit(self, n):
+        """Raw monophonic press: retrigger the voice's LFOs, release the previous SFX
+        (never held drones / music), press. No arbitration - used by sfx() after it
+        wins, and by tick() for the tail notes of a sequence (which already won)."""
+        if isinstance(n, tuple):                 # a layered voice: retrigger each note
+            for nn in n:
+                self._retrigger(nn)
+        else:
+            self._retrigger(n)                   # single note - no (n,) allocation
         if self._last_sfx is not None:           # release only the previous SFX, never held drones
             self.synth.release(self._last_sfx)
-        self.synth.press(n)
+        self.synth.press(n)                      # synthio takes a Note or an iterable of Notes
         self._last_sfx = n
+
+    def sfx(self, n, priority=0, window=0):
+        """Play a one-shot SFX - a Note or a TUPLE of Notes (a layered voice). Monophonic
+        last-wins: cuts the previous SFX (leaves held drones + music). `priority`/`window`
+        add channel arbitration: while a higher-priority sound holds a protected `window`
+        (frames), a LOWER-priority call is DROPPED (returns False) - spam can't erase it.
+        Firing cancels any pending sequence tail. Defaults (0,0) = plain last-wins."""
+        if not self.available:                   # a failed-init Synth is a true no-op
+            return False
+        if self._win > 0 and priority < self._winp:
+            return False                         # dropped inside a higher sound's window
+        self._seq = None                         # a new discrete sound cancels a pending sequence
+        self._emit(n)
+        self._win = window                       # ALWAYS reset (window=0 clears a stale window,
+        self._winp = priority                    # so a replaced sound's window can't leak forward)
+        return True
+
+    def sfx_seq(self, events, priority=0, window=0):
+        """Fire a timed sequence: events = [(delay_frames, voice), ...] (delays relative to
+        now; events[0] is the trigger). The trigger goes through sfx() arbitration; the tail
+        is read straight from `events` by tick() (no copy, no per-fire allocation). Dropped
+        trigger -> nothing scheduled."""
+        if not self.available or not events or not self.sfx(events[0][1], priority, window):
+            return False
+        self._seq = events                       # reuse the caller's immutable list as-is
+        self._seq_i = 1
+        self._seq_base = self._frame
+        return True
+
+    def tick(self):
+        """Advance the protected window + release due sequence notes - call once per frame.
+        Tail notes bypass arbitration (they belong to the sound that already won)."""
+        if self._win > 0:
+            self._win -= 1
+        self._frame += 1
+        s = self._seq
+        if s is None:
+            return
+        while self._seq_i < len(s) and self._frame - self._seq_base >= s[self._seq_i][0]:
+            self._emit(s[self._seq_i][1])
+            self._seq_i += 1
+        if self._seq_i >= len(s):
+            self._seq = None
 
     def press(self, n):
         self.synth.press(n)
@@ -169,6 +272,30 @@ class Synth:
     def stop_music(self):
         self.mixer.voice[0].stop()
 
+    def set_levels(self, music=None, sfx=None):
+        """Runtime volume (0.0-1.0). This is the knob; the Synth owns no settings. A game
+        builds a volume row with picogame_options, reads it (`m.value("vol")`), optionally
+        persists it with picogame_save, and calls set_levels itself - no coupling either way.
+        Updating a level while muted changes only the REMEMBERED level, not the live output."""
+        if music is not None:
+            self.music_level = music
+        if sfx is not None:
+            self.sfx_level = sfx
+        if not self._muted:                  # muted output stays silent until unmute
+            self._apply_levels()
+
+    def _apply_levels(self):
+        try:
+            self.mixer.voice[0].level = 0.0 if self._muted else self.music_level
+            self.mixer.voice[1].level = 0.0 if self._muted else self.sfx_level
+        except (AttributeError, IndexError):
+            pass                             # _Null mixer on a failed-init Synth
+
+    def mute(self, on):
+        """Silence both voices (on=True) or restore the remembered levels (on=False)."""
+        self._muted = on
+        self._apply_levels()
+
 
 class Drone:
     """A continuously-HELD note for engine / siren / drone sounds. Press it once, then call
@@ -177,9 +304,9 @@ class Drone:
     Cheap - one held note on the SFX voice.
 
         eng = snd.Drone(s, waveform=snd.SAW)
-        eng.start()                                   # at race start
-        eng.set(70 + 270 * rev, amp=0.2 + 0.5 * rev)  # each frame, rev = speed/max in 0..1
-        eng.stop()                                    # on the title / results screen
+        eng.start()                                         # at race start
+        eng.set(70 + 270 * rev, amplitude=0.2 + 0.5 * rev)  # each frame, rev = speed/max 0..1
+        eng.stop()                                          # on the title / results screen
     """
 
     def __init__(self, synth, waveform=None, amplitude=0.35, attack=0.03, release=0.12):
@@ -225,7 +352,7 @@ def load_midi(path, sample_rate=22050, waveform=None, envelope=None, tempo=120, 
 # note/pitch_bend/Synth/Drone/load_midi above (which stay byte-identical for the normal
 # path). Same signatures, no audio hardware touched, no mixers/buffers allocated - every
 # call is a cheap no-op so game audio code runs unchanged, just silently. The waveform
-# constants above are pure array/math and stay real either way.
+# constants above are None placeholders on this path (nothing can play them).
 
 if not AVAILABLE:
 
@@ -247,13 +374,22 @@ if not AVAILABLE:
         def __init__(self, pin=None, sample_rate=22050, buffer_size=2048,
                      music_level=0.4, sfx_level=0.7):
             self.sample_rate = sample_rate
+            self.music_level = music_level   # parity with the real Synth: reading synth.sfx_level
+            self.sfx_level = sfx_level        # must work on an audio-less build, not AttributeError
+            self._muted = False
             self.audio = _Null()
             self.mixer = _Null()
             self.synth = _Null()
             self._last_sfx = None
             self.available = False
 
-        def sfx(self, n):
+        def sfx(self, n, priority=0, window=0):
+            return False
+
+        def sfx_seq(self, events, priority=0, window=0):
+            return False
+
+        def tick(self):
             pass
 
         def press(self, n):
@@ -267,6 +403,15 @@ if not AVAILABLE:
 
         def stop_music(self):
             pass
+
+        def set_levels(self, music=None, sfx=None):
+            if music is not None:
+                self.music_level = music
+            if sfx is not None:
+                self.sfx_level = sfx
+
+        def mute(self, on):
+            self._muted = on
 
     class Drone:
         """No-op Drone: keeps the .note / .playing surface so per-frame set() calls work."""

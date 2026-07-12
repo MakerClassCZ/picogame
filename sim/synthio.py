@@ -16,10 +16,11 @@ class Envelope:
 
 
 class LFO:
-    def __init__(self, waveform=None, rate=1.0, scale=1.0, once=False):
+    def __init__(self, waveform=None, rate=1.0, scale=1.0, offset=0.0, once=False):
         self.waveform = waveform
         self.rate = rate
         self.scale = scale
+        self.offset = offset
         self.once = once
 
     def retrigger(self):
@@ -28,23 +29,30 @@ class LFO:
 
 class FilterMode:
     LOW_PASS = "low_pass"
+    HIGH_PASS = "high_pass"
 
 
 class Biquad:
-    def __init__(self, mode, frequency):
+    def __init__(self, mode, frequency, Q=0.7071):
         self.mode = mode
-        self.frequency = frequency
+        self.frequency = frequency          # device: BlockInput (an LFO sweeps the cutoff)
+        self.Q = Q
 
 
 class Note:
     def __init__(self, frequency=440.0, waveform=None, envelope=None, amplitude=1.0,
-                 bend=None, filter=None):
+                 bend=None, filter=None, ring_frequency=0.0, ring_waveform=None,
+                 ring_bend=None, panning=0.0):
         self.frequency = frequency
         self.waveform = waveform
         self.envelope = envelope or Envelope()
         self.amplitude = amplitude
         self.bend = bend
         self.filter = filter
+        self.ring_frequency = ring_frequency   # device: ring modulation (bell/metal timbres)
+        self.ring_waveform = ring_waveform
+        self.ring_bend = ring_bend
+        self.panning = panning
 
 
 def _parse_events(data):
@@ -102,7 +110,8 @@ class Synthesizer:
 
     def press(self, note):
         lvl = self._voice.level if self._voice is not None else 0.7
-        _simaudio.play_note(note, lvl)
+        for n in note if isinstance(note, (tuple, list)) else (note,):
+            _simaudio.play_note(n, lvl)        # a drum() voice is a tuple of notes
 
     def release(self, note):
         pass                                   # one-shot clips self-terminate
