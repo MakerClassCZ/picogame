@@ -22,7 +22,7 @@ screen). `shp.tileset_colors` builds the tileset (grass/path/water/tree/wall/doo
 patch of world with the hero centred. **Try it:** edit the `MAP` strings.
 
 ### step 2 — `step2_walk.py` · walk, camera follows
-4-direction movement; after each move `follow()` re-centres the camera, **clamped** to the
+4-direction movement; after each move `camera_follow()` re-centres the camera, **clamped** to the
 world so you never see past the edges (near an edge the hero walks toward the screen edge
 instead). The hero faces its movement direction (`sprite.frame`). No wall collision yet —
 you can walk over water. **Try it:** change `SPEED`.
@@ -34,10 +34,11 @@ along a wall instead of sticking when pushing diagonally into it. **You see:** w
 and walls now block you. **Try it:** add a tile value to `SOLID` (or remove one).
 
 ### step 4 — `step4_anim.py` · walk animation
-The hero becomes an 8-frame sheet (2 steps × 4 facings), driven by
-`picogame_anim.AnimatedSprite`: `play(name)` picks the facing's animation, `tick(dt)`
-advances it using the real `dt` from `clock.tick()` (so the walk speed is frame-rate
-independent). Standing still shows the rest frame. **Try it:** change the animation `fps`.
+The placeholder becomes six hand-drawn bitmaps: two poses facing down, two facing up,
+and two facing sideways. LEFT mirrors the side art with `flip_x`.
+`picogame_anim.AnimatedSprite` swaps the bitmaps: `play(name)` picks the direction and
+`tick(dt)` advances it using the real `dt` from `clock.tick()` (so the walk speed is
+frame-rate independent). Standing still shows the first pose. **Try it:** change `WALK_FPS`.
 
 ### step 5 — `step5_items.py` · items + a fixed HUD
 Coins are sprites placed from the map; being normal scene items, they **scroll with the
