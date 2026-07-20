@@ -300,8 +300,9 @@ def _lerp565(a, b, t):
 
 class Sky:
     """A vertical gradient band (sky / background / day-night), drawn per-scanline via StripDraw
-    - the classic Game Boy/raster trick. ZERO RAM (no buffer). Change `top`/`bottom` over time
-    for day-night. Add it FIRST (it's a background layer).
+    - the classic Game Boy/raster trick. No retained full-screen buffer: it keeps only a small
+    per-scanline colour LUT (`h` entries x 2 B), rebuilt only when `top`/`bottom` change. Change
+    `top`/`bottom` over time for day-night. Add it FIRST (it's a background layer).
 
         sky = Sky(scene, 0, 0, W, HORIZON, pg.rgb565(60,120,240), pg.rgb565(200,230,255))
     """
@@ -336,8 +337,9 @@ class Sky:
 
 
 class Scanlines:
-    """A CRT-style scanline overlay: darken every Nth row. StripDraw, ZERO RAM. Add it LAST
-    (on top). `step`=2 darkens every other line; `dark` is the checker colour written on those rows."""
+    """A CRT-style scanline overlay: darken every Nth row via StripDraw - no retained full-screen
+    buffer, just a reused 1-row PAL8 bitmap (`w` B + a 2-colour palette). Add it LAST (on top).
+    `step`=2 darkens every other line; `dark` is the checker colour written on those rows."""
 
     def __init__(self, scene, x, y, w, h, step=2, dark=pg.rgb565(0, 0, 0)):
         self.y = y
@@ -381,17 +383,36 @@ class InvertFlash:
         # PicoPad); a custom-board launcher sets that from its INVERT, so games need not pass `normal`.
         self.display = display
         self.frames = frames
-        self.normal = PANEL_INVERTED if normal is None else normal
+        if normal is not None:
+            self.normal = normal
+        elif type(display).__name__ == "Framebuffer":
+            # A RAM framebuffer (RP2350 DVI / Fruit Jam / the WASM playground) has NO panel INVON, so
+            # its resting state is un-inverted - regardless of PANEL_INVERTED, which tracks an ST7789
+            # panel's init (INVON). Without this a framebuffer board would "restore" to invert-on.
+            self.normal = False
+        else:
+            self.normal = PANEL_INVERTED
         self.t = 0
+        self._ok = True       # cleared if the target has no hardware invert (a Framebuffer/DVI panel
+                              # or the WASM playground) -> pulse() degrades to a silent no-op there
 
     def pulse(self, frames=None):
+        if not self._ok:
+            return
         if self.t == 0:
-            pg.invert(self.display, not self.normal)      # flip AWAY from the resting state
+            try:
+                pg.invert(self.display, not self.normal)  # flip AWAY from the resting state
+            except (TypeError, AttributeError, NotImplementedError, ValueError):
+                self._ok = False                          # no INVON/INVOFF on this target -> disable
+                return
         self.t = frames if frames is not None else self.frames
 
     def tick(self):
-        if self.t > 0:
+        if self._ok and self.t > 0:
             self.t -= 1
             if self.t == 0:
-                pg.invert(self.display, self.normal)      # restore the resting (normal) state
+                try:
+                    pg.invert(self.display, self.normal)  # restore the resting (normal) state
+                except (TypeError, AttributeError, NotImplementedError, ValueError):
+                    self._ok = False
         return self.t > 0

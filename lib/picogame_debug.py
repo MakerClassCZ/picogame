@@ -21,8 +21,25 @@
 
 import gc
 import time
+import os
 
-enabled = False    # ram() no-ops until a test session sets picogame_debug.enabled = True
+# General debug switch for the whole engine. settings.toml `PICOGAME_DEBUG = 1` seeds it (a test can
+# also set `picogame_debug.enabled = True` in code). Gates `ram()` + `note()` across every subsystem
+# (audio, input, ...). A falsy value ("", "0", "false") = off; default off.
+enabled = os.getenv("PICOGAME_DEBUG") not in (None, "", "0", "false", "False")
+
+
+def note(*args):
+    """Crash-proof serial diagnostic for an UNEXPECTED failure at a subsystem boundary (a real problem:
+    a mis-wired/missing I2S DAC driver, a claimed pin). Prints '[picogame] ...' ONLY when `enabled`, and
+    NEVER raises (an OOM inside the print can't escape). Do NOT call it for an EXPECTED fallback (the sim
+    has no synthio; a PWM board has no I2S DAC) - those must stay quiet."""
+    if not enabled:
+        return
+    try:
+        print("[picogame]", *args)
+    except Exception:
+        pass
 
 
 def ram(tag):
@@ -67,6 +84,8 @@ class Watch:
     swapped only when the rounded numbers change. hide()/show() toggle the sprite;
     remove() detaches it from the scene for good. step() is ~free while hidden."""
 
+    CELLS = 18                             # fixed width -> constant bitmap size (no shrink/stale, reused buffer)
+
     def __init__(self, scene, clock=None, every=30, x=2, y=2):
         import picogame as pg
         import terminalio
@@ -78,7 +97,10 @@ class Watch:
         self._n = 0
         self._t0 = _ms()
         self._text = None
-        bmp, _, _ = picogame_font.render_text(pg, self._font, "FPS --", self._fg, self._bg)
+        self._buf = None                   # reused glyph buffer -> NO per-update ~1 KB bitmap alloc
+        # allocate the buffer + first bitmap ONCE, at a fixed CELLS width (space-padded thereafter)
+        bmp, _, _, self._buf, _ = picogame_font._render_into(
+            pg, self._font, " " * self.CELLS, self._fg, self._bg, None)
         self.sprite = pg.Sprite(bmp, x, y)
         self.sprite.anchor = (0.0, 0.0)
         self.scene = scene
@@ -101,9 +123,13 @@ class Watch:
             text = "FPS %d FREE %dk" % (fps, gc.mem_free() // 1024)
         else:
             text = "FPS %d" % fps
-        if text != self._text:             # high-churn text: one live bitmap, old one GC'd
+        text = text[:self.CELLS]
+        text = text + " " * (self.CELLS - len(text))   # fixed width (constant size, no stale pixels);
+        #                                                manual pad - str.ljust is absent on some CP builds
+        if text != self._text:             # re-render into the REUSED buffer (only the small Bitmap wrapper allocs)
             self._text = text
-            bmp, _, _ = self._fontmod.render_text(self._pg, self._font, text, self._fg, self._bg)
+            bmp, _, _, self._buf, _ = self._fontmod._render_into(
+                self._pg, self._font, text, self._fg, self._bg, self._buf)
             self.sprite.bitmap = bmp
 
     def hide(self):

@@ -33,6 +33,22 @@ def _txt(x):
     # None -> "" (a blank/hidden field), not the literal "None"; everything else -> str.
     return "" if x is None else str(x)
 
+
+def _target(display):
+    """Normalize a display for pg.render. Games commonly hand these helpers `board.DISPLAY`, which on
+    a framebuffer board (Fruit Jam DVI) is a framebufferio.FramebufferDisplay that pg.render can't take
+    directly - unwrap it via picogame_game.target (MEMOIZED, so a HUD normalizing every frame never
+    reallocates the wrapper). A BusDisplay / pg.Display / pg.Framebuffer has no `.framebuffer` and passes
+    straight through, so the PicoPad path is byte-for-byte unchanged. Only a missing picogame_game (never
+    in practice) falls back to the raw display; resolver errors (bad rotation/depth) propagate as-is."""
+    if getattr(display, "framebuffer", None) is None:
+        return display
+    try:
+        import picogame_game
+    except ImportError:
+        return display
+    return picogame_game.target(display)
+
 # tick() return values for Menu / SceneMenu / GridCursor: an index/cell on A (confirm), CANCEL on B
 # (back), or None while still navigating. Text menus can also exit via a "Back" item; graphical/tile
 # menus use B (the cancel). Pick whichever fits - both are supported.
@@ -216,7 +232,7 @@ class HudBar:
 
     def __init__(self, pg, display, buffer, x, y, w, h, bg):
         self.pg = pg
-        self.display = display
+        self.display = _target(display)   # accept board.DISPLAY on a framebuffer board (Fruit Jam)
         self.buffer = buffer
         self.x, self.y, self.w, self.h = x, y, w, h
         self.bg = bg
@@ -279,7 +295,7 @@ class TextBox:
                 view.text(6, (self.y + 6 + i * LINE_H) - vy, ln, self.fg, self.font)
 
     def _render(self, display, buffer):
-        self.pg.render(display, [self._sd], buffer,
+        self.pg.render(_target(display), [self._sd], buffer,
                        self.x, self.y, self.x + self.w, self.y + self.h, background=self.bg)
 
     def draw(self, display, buffer, lines, force=False):

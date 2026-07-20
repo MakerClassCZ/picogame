@@ -42,6 +42,37 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
         rgb444 = getattr(pg, "RGB444_SUPPORTED", False)
     if strip_h is None:
         strip_h = getattr(pg, "STRIP_H", 8)   # board compile-time default (CIRCUITPY_PICOGAME_STRIP_H; 8 DMA/24 not)
+    # PICOGAME_INVERT in settings.toml = the panel's correct resting inversion state. ST7789 panels
+    # come in BOTH polarities and the board init picks one (PicoPad sends INVON) - a user with the
+    # other panel variant sees a negative. When the key IS SET, enforce it here (pg.invert sends
+    # INVON/INVOFF - free, no pixel data); unset = leave the board init alone (other boards may not
+    # send INVON at all). picogame_fx.PANEL_INVERTED reads the same key, so the InvertFlash
+    # hit-flash stays calibrated with it - one toml key fixes both.
+    # Two siblings for the other panel-variant/QoL fixes reachable on a board.c-built display:
+    #   PICOGAME_MADCTL     absolute MADCTL byte (0x36 register: mirrors + BGR order). Absolute on
+    #                       purpose - the register can't be read back, so bit-flips would need a
+    #                       per-board baseline. PicoPad values: 0x60 stock | 0x68 BGR panel |
+    #                       0xA0 mounted 180 deg | 0xA8 both. (DIY boards: use the custom-board
+    #                       PICOGAME_FLIP/PICOGAME_BGR keys instead - their launcher rebuilds.)
+    #   PICOGAME_BRIGHTNESS backlight, integer PERCENT 0-100 (settings.toml has no floats).
+    try:
+        import os
+        _inv = os.getenv("PICOGAME_INVERT")
+        _mad = os.getenv("PICOGAME_MADCTL")
+        _bri = os.getenv("PICOGAME_BRIGHTNESS")
+        if _inv is not None or _mad is not None or _bri is not None:
+            import board as _board
+            _d = _board.DISPLAY
+            if _inv is not None:
+                _on = (_inv != 0) if isinstance(_inv, int) else \
+                    str(_inv).strip().lower() not in ("", "0", "false", "no")
+                pg.invert(_d, _on)
+            if _mad is not None:
+                _d.bus.send(0x36, bytes([int(str(_mad), 0) & 0xFF]))
+            if _bri is not None:
+                _d.brightness = max(0, min(100, int(_bri))) / 100
+    except Exception:
+        pass                                  # no board.DISPLAY / no invert (sim variants): ignore
     backend, is_fb = resolve_display(display)
     if is_fb:
         # Framebuffer target (WASM playground, Fruit Jam DVI): the scene composites straight
@@ -73,6 +104,32 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
     return scene, buf_a, buf_b
 
 
+_RESOLVED = {}   # id(display) -> (display, backend, is_fb): setup() and every HUD that normalizes
+                 # board.DISPLAY share ONE wrapper (no per-frame Framebuffer realloc). The original
+                 # display is kept as a STRONG ref in the tuple so its id can't be reused by a later
+                 # object (stale-alias guard), and the hit is re-verified with `is` before reuse.
+
+
+_TARGET = {}   # id(display) -> (display, backend): alloc-free hot-path cache for target()
+
+
+def target(display):
+    """Immediate-render target for pg.render: a framebuffer board's FramebufferDisplay -> its
+    pg.Framebuffer (memoized via resolve_display); a BusDisplay / pg.Display / pg.Framebuffer (none of
+    which carry a `.framebuffer` attr) passes straight through. Lets HUD / Label / overlay / cutscene
+    helpers accept a bare `board.DISPLAY` on every platform. Resolver errors (bad rotation / colour
+    depth / old firmware) propagate - the caller sees the real reason, not a later 'expected a BusDisplay'."""
+    if getattr(display, "framebuffer", None) is None:
+        return display
+    key = id(display)                        # alloc-free on hits: resolve_display's (backend, is_fb)
+    hit = _TARGET.get(key)                    # tuple would allocate per call on this per-frame path
+    if hit is not None and hit[0] is display:
+        return hit[1]
+    backend = resolve_display(display)[0]
+    _TARGET[key] = (display, backend)
+    return backend
+
+
 def resolve_display(display=None):
     """Find and normalize the render target. Returns (backend, is_framebuffer).
 
@@ -97,7 +154,12 @@ def resolve_display(display=None):
     if display is None:
         raise RuntimeError("no display found; on a DVI board set "
                            "CIRCUITPY_PICODVI_ENABLE=\"always\" in settings.toml")
+    key = id(display)
+    hit = _RESOLVED.get(key)
+    if hit is not None and hit[0] is display:      # verify identity: guards a reused id() (stale alias)
+        return hit[1], hit[2]
     if hasattr(pg, "Framebuffer") and isinstance(display, pg.Framebuffer):
+        _RESOLVED[key] = (display, display, True)
         return display, True
     raw = getattr(display, "framebuffer", None)
     if raw is not None:
@@ -112,21 +174,22 @@ def resolve_display(display=None):
         if getattr(raw, "color_depth", 16) != 16:
             raise ValueError("picogame needs a 16-bit framebuffer "
                              "(set CIRCUITPY_DISPLAY_COLOR_DEPTH=16 in settings.toml)")
+        # The engine composites each dirty band OFF-SCREEN (a private scratch strip) and memcpys only
+        # the finished band into the live scanout buffer, so the beam never samples a half-composited
+        # region (no flicker) and never wire-order bytes (no colour tearing). Colour handling: if the
+        # scanout HW byte-swaps 16bpp pixels on read (`pixel_byte_swap=True`, the default), the buffer
+        # must hold NATIVE RGB565 so the engine byte-swaps the scratch before the copy; a build that
+        # disabled the HW swap reports `pixel_byte_swap=False` and we store the engine's WIRE order
+        # directly. Absent property (normal firmware) -> assume native. Two-way firmware skew-tolerant.
+        native = bool(getattr(raw, "pixel_byte_swap", True))
         try:
-            fb = pg.Framebuffer(raw, raw.width, raw.height, native_rgb565=True)
+            fb = pg.Framebuffer(raw, raw.width, raw.height, native_rgb565=native)
         except TypeError:
             raise RuntimeError("this firmware's picogame.Framebuffer lacks native_rgb565 - "
                                "flash a newer picogame build")
-        # Tear-free full repaints: let the Scene wait for the DVI frame boundary before a
-        # large/full-screen composite (e.g. a camera move). Opt-in + best-effort: absent on SPI
-        # panels and older firmware, where it simply stays off (no sync).
-        waiter = getattr(raw, "wait_for_vblank", None)
-        if waiter is not None:
-            try:
-                fb.sync = waiter
-            except AttributeError:
-                pass
+        _RESOLVED[key] = (display, fb, True)
         return fb, True
+    _RESOLVED[key] = (display, display, False)
     return display, False
 
 
@@ -144,5 +207,5 @@ def overlay(scene, display, items, buffer, x0, y0, x1, y1, *, background=0):
 
     Args mirror `pg.render`: `items` may be any layer kinds (a StripDraw with `view.text`
     = a 0-RAM text screen), `buffer` is a strip buffer (reuse the one from setup())."""
-    pg.render(display, items, buffer, x0, y0, x1, y1, background=background)
+    pg.render(target(display), items, buffer, x0, y0, x1, y1, background=background)
     scene.invalidate()

@@ -26,35 +26,12 @@ import math
 import os
 
 try:
-    import board
     import synthio
-    from audiopwmio import PWMAudioOut
     from audiomixer import Mixer
+    import picogame_audioout            # shared PWM/I2S output factory (I2S DAC on the Fruit Jam)
     AVAILABLE = True
-except ImportError:            # audio-less firmware (or desktop Python) -> silent no-op mode
+except ImportError:            # no synthio/audiomixer (audio-less firmware or desktop) -> silent no-op
     AVAILABLE = False
-
-
-def _resolve_pin(pin):
-    """The PWM audio pin. Same policy as picogame_audio.Audio (kept in sync by hand - both
-    are audio libs, neither depends on the other): an explicit pin wins; else settings.toml
-    PICOGAME_AUDIO; else the common board names AUDIO/SPEAKER/BUZZER. None if nothing matches
-    (Synth then degrades to a silent no-op, unlike Audio which raises)."""
-    if pin is not None:
-        return pin
-    name = os.getenv("PICOGAME_AUDIO")
-    if name:
-        pin = getattr(board, name, None)
-        if pin is None:
-            try:
-                import microcontroller
-                pin = getattr(microcontroller.pin, name, None)
-            except ImportError:
-                pass
-        if pin is not None:
-            return pin
-    return (getattr(board, "AUDIO", None) or getattr(board, "SPEAKER", None)
-            or getattr(board, "BUZZER", None))
 
 try:
     from micropython import const
@@ -170,7 +147,7 @@ class Synth:
         self._win = 0                # protected-window frames left; _winp = its priority
         self._winp = 0
         try:
-            self.audio = PWMAudioOut(_resolve_pin(pin))   # None -> the except below runs silent
+            self.audio = picogame_audioout.make_output(sample_rate, pin)   # I2S/PWM; raises -> silent
             self.mixer = Mixer(voice_count=2, sample_rate=sample_rate, channel_count=1,
                                bits_per_sample=16, buffer_size=buffer_size)
             self.audio.play(self.mixer)
@@ -179,7 +156,9 @@ class Synth:
             self.synth = synthio.Synthesizer(sample_rate=sample_rate, channel_count=1)
             self.mixer.voice[1].play(self.synth)
             self.available = True
-        except Exception:            # MemoryError on a tight heap / pin in use -> run silent
+        except Exception as e:       # MemoryError on a tight heap / pin in use -> run silent
+            import picogame_debug     # settings.toml PICOGAME_DEBUG=1 -> print the real reason (else silent)
+            picogame_debug.note("synth: init failed ->", repr(e))
             out = getattr(self, "audio", None)
             if out is not None and not isinstance(out, _Null):
                 try:
