@@ -185,106 +185,114 @@ def new_game():
 new_game()
 kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 print("LEFT/RIGHT run, UP/B jump. Stomp enemies, grab coins, reach the green flag.")
-_shown_coins, _shown_lives, _shown_score = -1, -1, -1
-while True:
-    btn.poll()
 
-    dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
-    if dx:
-        nx = st.px + dx * 3
-        if not (solid_at(int(nx) + dx * 6, int(st.py) - 4) or
-                solid_at(int(nx) + dx * 6, int(st.py) - 12)):
-            st.px = max(6, min(LEVEL_W - 6, nx))
-    jpress = btn.just_pressed(btn.UP) or btn.just_pressed(btn.B)     # rising edge of either jump key
-    jbuf.feed(jpress)                                                # remember an early jump press
-    coyote.feed(st.landed)                                           # remember being grounded
-    jfired = coyote.is_active and jbuf.consume()
-    if jfired:
-        st.vy = -11.0
-        st.landed = False
-        kit.jump()
-        coyote.t = 0                                                 # one jump per ledge window
 
-    if DEBUG:
-        st.frame += 1
-        # Print only on interesting events (a jump key edge, a jump firing, a landed change)
-        # plus a 1 Hz heartbeat - enough to see WHY a press did/didn't become a jump, without
-        # flooding the 30 fps serial. Read it on the USB console while jumping on HW.
-        if jpress or jfired or st.landed != st._dbg_landed or st.frame % 30 == 0:
-            print("f%d UP=%d B=%d jpress=%d jbuf=%d coyote=%d landed=%d FIRE=%d py=%d vy=%.1f"
-                  % (st.frame, btn.is_pressed(btn.UP), btn.is_pressed(btn.B), jpress,
-                     jbuf.t, coyote.t, st.landed, jfired, int(st.py), st.vy))
-        st._dbg_landed = st.landed
+def main():
+    # --- per-frame loop in a FUNCTION (not module scope): names become array-indexed locals,
+    # not globals-dict lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    _shown_coins, _shown_lives, _shown_score = -1, -1, -1
+    while True:
+        btn.poll()
 
-    st.vy = min(7.0, st.vy + 0.6)
-    move_v(int(st.px), int(st.py), st.vy, 6)
-    st.py = float(_MV[0])
-    st.vy = _MV[1]
-    st.landed = _MV[2]
-    player.move(int(st.px), int(st.py))
+        dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
+        if dx:
+            nx = st.px + dx * 3
+            if not (solid_at(int(nx) + dx * 6, int(st.py) - 4) or
+                    solid_at(int(nx) + dx * 6, int(st.py) - 12)):
+                st.px = max(6, min(LEVEL_W - 6, nx))
+        jpress = btn.just_pressed(btn.UP) or btn.just_pressed(btn.B)     # rising edge of either jump key
+        jbuf.feed(jpress)                                                # remember an early jump press
+        coyote.feed(st.landed)                                           # remember being grounded
+        jfired = coyote.is_active and jbuf.consume()
+        if jfired:
+            st.vy = -11.0
+            st.landed = False
+            kit.jump()
+            coyote.t = 0                                                 # one jump per ledge window
 
-    # fell in a pit
-    if st.py > H + 20:
-        st.lives -= 1
-        if st.lives < 0:
-            kit.explosion()
-            new_game()
-        else:
-            kit.hurt()
-            reset_player()
-        follow()
-        continue
+        if DEBUG:
+            st.frame += 1
+            # Print only on interesting events (a jump key edge, a jump firing, a landed change)
+            # plus a 1 Hz heartbeat - enough to see WHY a press did/didn't become a jump, without
+            # flooding the 30 fps serial. Read it on the USB console while jumping on HW.
+            if jpress or jfired or st.landed != st._dbg_landed or st.frame % 30 == 0:
+                print("f%d UP=%d B=%d jpress=%d jbuf=%d coyote=%d landed=%d FIRE=%d py=%d vy=%.1f"
+                      % (st.frame, btn.is_pressed(btn.UP), btn.is_pressed(btn.B), jpress,
+                         jbuf.t, coyote.t, st.landed, jfired, int(st.py), st.vy))
+            st._dbg_landed = st.landed
 
-    # coins: check the tile at the player's chest
-    chest_tx, chest_ty = int(st.px) // TILE, (int(st.py) - 8) // TILE
-    if 0 <= chest_tx < COLS and 0 <= chest_ty < ROWS and tf.at(level, chest_tx, chest_ty, tiles.B_COIN):
-        level.tile(chest_tx, chest_ty, 0)
-        st.coins += 1
-        st.score += 100
-        kit.coin()
-    # goal
-    goal_tx = int(st.px) // TILE
-    if tf.at(level, goal_tx, ROWS - 3, tiles.B_EXIT):
-        st.score += 1000
-        kit.powerup()
-        new_game()
+        st.vy = min(7.0, st.vy + 0.6)
+        move_v(int(st.px), int(st.py), st.vy, 6)
+        st.py = float(_MV[0])
+        st.vy = _MV[1]
+        st.landed = _MV[2]
+        player.move(int(st.px), int(st.py))
 
-    # enemies
-    for e in enemies:
-        if not e.data.get("on"):
+        # fell in a pit
+        if st.py > H + 20:
+            st.lives -= 1
+            if st.lives < 0:
+                kit.explosion()
+                new_game()
+            else:
+                kit.hurt()
+                reset_player()
+            follow()
             continue
-        nx = e.data["x"] + e.data["dir"] * 1.2
-        # turn at wall or ledge
-        if solid_at(int(nx) + e.data["dir"] * 7, int(e.data["y"]) - 6) or \
-                not solid_at(int(nx) + e.data["dir"] * 7, int(e.data["y"]) + 2):
-            e.data["dir"] = -e.data["dir"]
-        else:
-            e.data["x"] = nx
-            e.move(int(nx), int(e.data["y"]))
-        # player interaction: native box collision, then stomp-vs-hurt discrimination
-        if player.overlaps(e):
-            if st.vy > 1 and st.py <= e.data["y"] + 6:     # falling onto its head -> stomp
-                e.data["on"] = False
-                e.visible = False
-                st.vy = -7.0
-                st.score += 200
-                kit.boom()
-            else:                                              # hurt
-                st.lives -= 1
-                if st.lives < 0:
-                    kit.explosion()
-                    new_game()
-                else:
-                    kit.hurt()
-                    reset_player()
-                follow()
-                break
 
-    follow()
-    shown_lives = max(0, st.lives)
-    if st.coins != _shown_coins or shown_lives != _shown_lives or st.score != _shown_score:
-        _shown_coins, _shown_lives, _shown_score = st.coins, shown_lives, st.score
-        hud.set("COINS %d/%d  LIVES %d  %05d" % (st.coins, st.coins_total, shown_lives, st.score))
-    kit.tick()
-    scene.refresh()
-    clock.tick()
+        # coins: check the tile at the player's chest
+        chest_tx, chest_ty = int(st.px) // TILE, (int(st.py) - 8) // TILE
+        if 0 <= chest_tx < COLS and 0 <= chest_ty < ROWS and tf.at(level, chest_tx, chest_ty, tiles.B_COIN):
+            level.tile(chest_tx, chest_ty, 0)
+            st.coins += 1
+            st.score += 100
+            kit.coin()
+        # goal
+        goal_tx = int(st.px) // TILE
+        if tf.at(level, goal_tx, ROWS - 3, tiles.B_EXIT):
+            st.score += 1000
+            kit.powerup()
+            new_game()
+
+        # enemies
+        for e in enemies:
+            if not e.data.get("on"):
+                continue
+            nx = e.data["x"] + e.data["dir"] * 1.2
+            # turn at wall or ledge
+            if solid_at(int(nx) + e.data["dir"] * 7, int(e.data["y"]) - 6) or \
+                    not solid_at(int(nx) + e.data["dir"] * 7, int(e.data["y"]) + 2):
+                e.data["dir"] = -e.data["dir"]
+            else:
+                e.data["x"] = nx
+                e.move(int(nx), int(e.data["y"]))
+            # player interaction: native box collision, then stomp-vs-hurt discrimination
+            if player.overlaps(e):
+                if st.vy > 1 and st.py <= e.data["y"] + 6:     # falling onto its head -> stomp
+                    e.data["on"] = False
+                    e.visible = False
+                    st.vy = -7.0
+                    st.score += 200
+                    kit.boom()
+                else:                                              # hurt
+                    st.lives -= 1
+                    if st.lives < 0:
+                        kit.explosion()
+                        new_game()
+                    else:
+                        kit.hurt()
+                        reset_player()
+                    follow()
+                    break
+
+        follow()
+        shown_lives = max(0, st.lives)
+        if st.coins != _shown_coins or shown_lives != _shown_lives or st.score != _shown_score:
+            _shown_coins, _shown_lives, _shown_score = st.coins, shown_lives, st.score
+            hud.set("COINS %d/%d  LIVES %d  %05d" % (st.coins, st.coins_total, shown_lives, st.score))
+        kit.tick()
+        scene.refresh()
+        clock.tick()
+
+
+main()

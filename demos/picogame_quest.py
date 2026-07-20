@@ -255,125 +255,133 @@ def gain_xp(elv):
 
 new_game()
 print("Overworld: D-pad walk, B talk to NPC. Random encounters -> turn battle.")
-while True:
-    btn.poll()
 
-    if st.mode == "over":
-        dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
-        dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
-        if dx:
-            st.facing = 3 if dx > 0 else 2
-        elif dy:
-            st.facing = 1 if dy > 0 else 0
-        player.frame = st.facing
-        moved = False
-        if dx:
-            nx = st.px + dx * 2
-            if can_walk(nx, st.py):
-                st.px = nx
-                moved = True
-        if dy:
-            ny = st.py + dy * 2
-            if can_walk(st.px, ny):
-                st.py = ny
-                moved = True
-        if moved:
-            player.move(st.px, st.py)
-            camera_follow()
-            st.steps += 1
-            if st.steps > ENCOUNTER_MIN_STEPS and random.randint(0, 9) < ENCOUNTER_CHANCE:
-                st.steps = 0
-                start_battle()
-        # talk to NPC
-        near = abs(st.px - npc.x) <= TILE and abs(st.py - npc.y) <= TILE
-        if near and btn.just_pressed(btn.B):
-            st.mode = "dialog"
-            dlg.show(["Villager:", "Beware the slimes in",   # set ONCE on entering dialog
-                      "the tall grass, hero.", "(press B)"])
-        scene.refresh()
 
-    elif st.mode == "dialog":
-        scene.refresh()           # Panel is a scene layer -> drawn here, single present, no flicker
-        if btn.just_pressed(btn.B) or btn.just_pressed(btn.A):
-            dlg.hide()
-            st.mode = "over"
-            scene.invalidate()
+def main():
+    # --- per-frame loop in a FUNCTION (not module scope): names become array-indexed locals,
+    # not globals-dict lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    while True:
+        btn.poll()
 
-    elif st.mode == "battle":
-        e = st.enemy
-        # Static turn-based screen. Split the VISUAL state (hp/mp/msg -> a full wipe + forced
-        # redraw) from the menu SELECTION: a moved cursor must NOT trigger the wipe, or the whole
-        # screen blinks. So on a visual change we wipe + force everything; on a selection-only
-        # change we just let bmenu.draw() repaint its two affected rows (cheap, no wipe).
-        if st.battle_dirty:
-            st.battle_dirty = False
-            pg.render(scene.display, _ENEMY_LIST, bufA, 0, 0, W, H, background=pg.rgb565(8, 8, 24))
-            enemy_box.draw(scene.display, bufA,
-                           ["Lv%d slime  HP %d/%d" % (e["lv"], e["hp"], e["hpmax"])], force=True)
-            if st.msg_t > 0:
-                msg_box.draw(scene.display, bufA, [st.msg], force=True)
-            else:
-                stats_box.draw(scene.display, bufA,
-                               ["HP %d/%d  MP %d/%d  Lv%d" % (st.hp, st.hpmax, st.mp, st.mpmax, st.level)],
-                               force=True)
-                bmenu.draw(scene.display, bufA, force=True)
-        elif st.msg_t <= 0:
-            bmenu.draw(scene.display, bufA)         # selection moved: per-row repaint, no wipe/blink
-        if st.msg_t > 0:
-            st.msg_t -= 1
-            if st.msg_t == 0:
-                st.battle_dirty = True     # message expired: `msg_t > 0` flipped -> redraw stats + menu
-            if st.hp <= 0 and st.msg_t == 0:
-                new_game()
-            if e["hp"] <= 0 and st.msg_t == 0:
+        if st.mode == "over":
+            dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
+            dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
+            if dx:
+                st.facing = 3 if dx > 0 else 2
+            elif dy:
+                st.facing = 1 if dy > 0 else 0
+            player.frame = st.facing
+            moved = False
+            if dx:
+                nx = st.px + dx * 2
+                if can_walk(nx, st.py):
+                    st.px = nx
+                    moved = True
+            if dy:
+                ny = st.py + dy * 2
+                if can_walk(st.px, ny):
+                    st.py = ny
+                    moved = True
+            if moved:
+                player.move(st.px, st.py)
+                camera_follow()
+                st.steps += 1
+                if st.steps > ENCOUNTER_MIN_STEPS and random.randint(0, 9) < ENCOUNTER_CHANCE:
+                    st.steps = 0
+                    start_battle()
+            # talk to NPC
+            near = abs(st.px - npc.x) <= TILE and abs(st.py - npc.y) <= TILE
+            if near and btn.just_pressed(btn.B):
+                st.mode = "dialog"
+                dlg.show(["Villager:", "Beware the slimes in",   # set ONCE on entering dialog
+                          "the tall grass, hero.", "(press B)"])
+            scene.refresh()
+
+        elif st.mode == "dialog":
+            scene.refresh()           # Panel is a scene layer -> drawn here, single present, no flicker
+            if btn.just_pressed(btn.B) or btn.just_pressed(btn.A):
+                dlg.hide()
                 st.mode = "over"
                 scene.invalidate()
-        else:
-            act = bmenu.tick(btn)
-            if act is not None and act >= 0:
-                if act == 0:        # attack
-                    ch = random.randint(0, HIT_ROLL_MAX_FAST if st.spd > e["spd"] else HIT_ROLL_MAX)
-                    if ch < MISS_BELOW:
-                        battle_msg("You missed!")
-                    else:
-                        crit = 2 if ch > CRIT_ABOVE else 1
-                        dmg = max(1, st.atk * crit * st.level // e["dfn"])
-                        e["hp"] = max(0, e["hp"] - dmg)
-                        battle_msg("Hit! -%d HP" % dmg)
-                    if e["hp"] <= 0:
-                        gain_xp(e["lv"])
-                        st.gold += e["lv"] * random.randint(1, 3)
-                        if st.xp < XP_PER_LEVEL:    # gain_xp may have queued a level msg
-                            battle_msg("You win! +gold", 50)
-                    else:
-                        enemy_turn()
-                elif act == 1:      # magic
-                    if st.mp >= 4:
-                        st.mp -= 4
-                        dmg = max(1, (st.atk + st.atk // 2) * st.level // e["dfn"])
-                        e["hp"] = max(0, e["hp"] - dmg)
-                        battle_msg("Magic! -%d HP" % dmg)
+
+        elif st.mode == "battle":
+            e = st.enemy
+            # Static turn-based screen. Split the VISUAL state (hp/mp/msg -> a full wipe + forced
+            # redraw) from the menu SELECTION: a moved cursor must NOT trigger the wipe, or the whole
+            # screen blinks. So on a visual change we wipe + force everything; on a selection-only
+            # change we just let bmenu.draw() repaint its two affected rows (cheap, no wipe).
+            if st.battle_dirty:
+                st.battle_dirty = False
+                pg.render(scene.display, _ENEMY_LIST, bufA, 0, 0, W, H, background=pg.rgb565(8, 8, 24))
+                enemy_box.draw(scene.display, bufA,
+                               ["Lv%d slime  HP %d/%d" % (e["lv"], e["hp"], e["hpmax"])], force=True)
+                if st.msg_t > 0:
+                    msg_box.draw(scene.display, bufA, [st.msg], force=True)
+                else:
+                    stats_box.draw(scene.display, bufA,
+                                   ["HP %d/%d  MP %d/%d  Lv%d" % (st.hp, st.hpmax, st.mp, st.mpmax, st.level)],
+                                   force=True)
+                    bmenu.draw(scene.display, bufA, force=True)
+            elif st.msg_t <= 0:
+                bmenu.draw(scene.display, bufA)         # selection moved: per-row repaint, no wipe/blink
+            if st.msg_t > 0:
+                st.msg_t -= 1
+                if st.msg_t == 0:
+                    st.battle_dirty = True     # message expired: `msg_t > 0` flipped -> redraw stats + menu
+                if st.hp <= 0 and st.msg_t == 0:
+                    new_game()
+                if e["hp"] <= 0 and st.msg_t == 0:
+                    st.mode = "over"
+                    scene.invalidate()
+            else:
+                act = bmenu.tick(btn)
+                if act is not None and act >= 0:
+                    if act == 0:        # attack
+                        ch = random.randint(0, HIT_ROLL_MAX_FAST if st.spd > e["spd"] else HIT_ROLL_MAX)
+                        if ch < MISS_BELOW:
+                            battle_msg("You missed!")
+                        else:
+                            crit = 2 if ch > CRIT_ABOVE else 1
+                            dmg = max(1, st.atk * crit * st.level // e["dfn"])
+                            e["hp"] = max(0, e["hp"] - dmg)
+                            battle_msg("Hit! -%d HP" % dmg)
                         if e["hp"] <= 0:
                             gain_xp(e["lv"])
-                            st.gold += e["lv"]
+                            st.gold += e["lv"] * random.randint(1, 3)
+                            if st.xp < XP_PER_LEVEL:    # gain_xp may have queued a level msg
+                                battle_msg("You win! +gold", 50)
                         else:
                             enemy_turn()
-                    else:
-                        battle_msg("Not enough MP!")
-                elif act == 2:      # heal
-                    if st.mp >= 5:
-                        st.mp -= 5
-                        st.hp = min(st.hpmax, st.hp + 12)
-                        battle_msg("Healed +12 HP")
-                        enemy_turn()
-                    else:
-                        battle_msg("Not enough MP!")
-                else:               # flee
-                    if random.randint(0, 1):
-                        st.mode = "over"
-                        scene.invalidate()
-                    else:
-                        battle_msg("Couldn't escape!")
-                        enemy_turn()
+                    elif act == 1:      # magic
+                        if st.mp >= 4:
+                            st.mp -= 4
+                            dmg = max(1, (st.atk + st.atk // 2) * st.level // e["dfn"])
+                            e["hp"] = max(0, e["hp"] - dmg)
+                            battle_msg("Magic! -%d HP" % dmg)
+                            if e["hp"] <= 0:
+                                gain_xp(e["lv"])
+                                st.gold += e["lv"]
+                            else:
+                                enemy_turn()
+                        else:
+                            battle_msg("Not enough MP!")
+                    elif act == 2:      # heal
+                        if st.mp >= 5:
+                            st.mp -= 5
+                            st.hp = min(st.hpmax, st.hp + 12)
+                            battle_msg("Healed +12 HP")
+                            enemy_turn()
+                        else:
+                            battle_msg("Not enough MP!")
+                    else:               # flee
+                        if random.randint(0, 1):
+                            st.mode = "over"
+                            scene.invalidate()
+                        else:
+                            battle_msg("Couldn't escape!")
+                            enemy_turn()
 
-    clock.tick()
+        clock.tick()
+
+
+main()

@@ -23,6 +23,7 @@ import array
 import gc
 import terminalio
 import picogame as pg
+import picogame_cutscene as cut
 import picogame_game
 import picogame_input
 import picogame_clock
@@ -437,44 +438,79 @@ def update_play():
         plane.visible = True
 
 
+def title_splash():
+    """Full-screen PixelLab intro art, streamed from flash (~0 heap), shown once before the start
+    menu. Blocks until A; auto-advances on the desktop sim (no `_host` on device). Skipped if
+    unavailable."""
+    def _has(_m):
+        try:
+            __import__(_m); return True
+        except ImportError:
+            return False
+    # Auto-advance the splash ONLY in headless runs (the smoke harness / the desktop sim's
+    # --frames + screenshot runs, where no one can press A). The browser playground (has `bridge`)
+    # and the device WAIT for A, like a real title screen.
+    hold = 90 if (_has("smoke") or (_has("_host") and not _has("bridge"))) else 0
+    try:
+        try:
+            here = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
+        except NameError:
+            here = "."      # the WASM playground execs the game without __file__; assets sit in cwd (/p)
+        pal = cut.palette(pg, __import__("picowing_title_pal"))
+        cut.play(pg, scene.display, bufA, btn, here + "/picowing_title.dat",
+                 pal=pal, w=160, h=120, caption="A: start", auto_hold=hold, clock=clock)
+        scene.invalidate()
+    except Exception:
+        pass
+
+
 # --- main loop -------------------------------------------------------------
-show_title()
+title_splash()                                         # the single full-screen intro (waits A)
+new_game()                                             # -> straight into play, no second title screen
 hud_refresh()
 print("Pico Wing - D-pad move, hold A fire, B bomb. A to start.")
-last_heat_band = -1                                    # int shadows (Menu idiom: two ints, not a tuple)
-last_blink = -1
-while True:
-    btn.poll()
-    # starfield scrolls in every state (motion behind the menus too)
-    for s in stars:
-        s.fy += s.data
-        if s.fy > H:
-            s.fy = -2
-            s.fx = rng.below(W)
-    if st.state == "title":
-        if btn.just_pressed(btn.A):
-            new_game()
-    elif st.state == "play":
-        update_play()
-    elif st.state == "over":
-        if btn.just_pressed(btn.A):                    # INSTANT restart, re-init in place
-            new_game()
-    if st.flash_t > 0:                                 # momentary player flash -> clear after a few frames
-        st.flash_t -= 1
-        if st.flash_t == 0:
-            plane.flash = 0
-    ps.tick()
-    shake.tick()                                       # decaying screen-shake on top of the view
-    bomb_flash.tick()                                  # restore the panel after the bomb's invert pulse
-    # Discrete HUD state (score/chain/mult/lives/bombs/lock) sets st.hud_dirty at its mutation sites;
-    # the animated heat gauge (band + locked-blink) is tracked by two int shadows - no per-frame tuple.
-    hb = st.heat // 20
-    blink = (st.t // 4 & 1) if st.gun_locked else 0
-    if st.hud_dirty or hb != last_heat_band or blink != last_blink:
-        last_heat_band = hb
-        last_blink = blink
-        st.hud_dirty = False
-        hud_refresh()
-    sfx_tick()
-    scene.refresh()
-    clock.tick()
+
+
+def main():
+    # --- per-frame loop in a FUNCTION (not module scope): names become array-indexed locals,
+    # not globals-dict lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    last_heat_band = -1                                    # int shadows (Menu idiom: two ints, not a tuple)
+    last_blink = -1
+    while True:
+        btn.poll()
+        # starfield scrolls in every state (motion behind the menus too)
+        for s in stars:
+            s.fy += s.data
+            if s.fy > H:
+                s.fy = -2
+                s.fx = rng.below(W)
+        if st.state == "title":
+            if btn.just_pressed(btn.A):
+                new_game()
+        elif st.state == "play":
+            update_play()
+        elif st.state == "over":
+            if btn.just_pressed(btn.A):                    # INSTANT restart, re-init in place
+                new_game()
+        if st.flash_t > 0:                                 # momentary player flash -> clear after a few frames
+            st.flash_t -= 1
+            if st.flash_t == 0:
+                plane.flash = 0
+        ps.tick()
+        shake.tick()                                       # decaying screen-shake on top of the view
+        bomb_flash.tick()                                  # restore the panel after the bomb's invert pulse
+        # Discrete HUD state (score/chain/mult/lives/bombs/lock) sets st.hud_dirty at its mutation sites;
+        # the animated heat gauge (band + locked-blink) is tracked by two int shadows - no per-frame tuple.
+        hb = st.heat // 20
+        blink = (st.t // 4 & 1) if st.gun_locked else 0
+        if st.hud_dirty or hb != last_heat_band or blink != last_blink:
+            last_heat_band = hb
+            last_blink = blink
+            st.hud_dirty = False
+            hud_refresh()
+        sfx_tick()
+        scene.refresh()
+        clock.tick()
+
+
+main()

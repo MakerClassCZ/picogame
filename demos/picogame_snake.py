@@ -82,47 +82,57 @@ def new_game():
 kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if the board has no audio
 new_game()
 print("D-pad to steer. Eat the red food, don't bite yourself or the walls.")
-_shown_score, _shown_len = -1, -1
-while True:
-    btn.poll()
 
-    dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
-    dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
-    # queue a turn (no instant reversal)
-    if dx and (dx, 0) != (-st.direction[0], 0):
-        st.want = (dx, 0)
-    elif dy and (0, dy) != (0, -st.direction[1]):
-        st.want = (0, dy)
 
-    st.step += 1
-    if st.step >= 5:                       # advance one cell every 5 frames
-        st.step = 0
-        st.direction = st.want
-        hx, hy = st.body[-1]
-        nx, ny = hx + st.direction[0], hy + st.direction[1]
-        cell = grid.tile(nx, ny) if 0 <= nx < COLS and 0 <= ny < ROWS else BODY
-        if cell == BODY or cell == HEAD:       # out-of-bounds already maps to BODY above
-            kit.explosion()                # crash
-            new_game()                     # -> restart
-        else:
-            grid.tile(hx, hy, BODY)        # old head becomes body
-            grid.tile(nx, ny, HEAD)        # new head
-            st.body.append((nx, ny))
-            if cell == FOOD:
-                st.score += 10
-                st.grow += 2
-                kit.coin()                 # ate the food
-                place_food()
-            if st.grow > 0:
-                st.grow -= 1
-            elif len(st.body) > 1:
-                ox, oy = st.body.popleft() # drop the tail cell
-                grid.tile(ox, oy, 0)
+def main():
+    # --- per-frame loop lives in THIS function, not at module scope: inside a function the
+    # loop's names are array-indexed locals, not globals-dict lookups (a measured on-device
+    # win; see the picogame-game-design skill's hot-loop style guide). Hoist hot module refs
+    # (btn.poll, scene.refresh, clock.tick) to locals here if a heavier game needs the last %.
+    _shown_score, _shown_len = -1, -1
+    while True:
+        btn.poll()
 
-    body_len = len(st.body)
-    if st.score != _shown_score or body_len != _shown_len:
-        _shown_score, _shown_len = st.score, body_len
-        hud.set("SCORE %04d   LEN %d" % (st.score, body_len))
-    kit.tick()                             # drive the SFX sequencer (coin is a 2-note rise)
-    scene.refresh()
-    clock.tick()
+        dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
+        dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
+        # queue a turn (no instant reversal)
+        if dx and (dx, 0) != (-st.direction[0], 0):
+            st.want = (dx, 0)
+        elif dy and (0, dy) != (0, -st.direction[1]):
+            st.want = (0, dy)
+
+        st.step += 1
+        if st.step >= 5:                       # advance one cell every 5 frames
+            st.step = 0
+            st.direction = st.want
+            hx, hy = st.body[-1]
+            nx, ny = hx + st.direction[0], hy + st.direction[1]
+            cell = grid.tile(nx, ny) if 0 <= nx < COLS and 0 <= ny < ROWS else BODY
+            if cell == BODY or cell == HEAD:       # out-of-bounds already maps to BODY above
+                kit.explosion()                # crash
+                new_game()                     # -> restart
+            else:
+                grid.tile(hx, hy, BODY)        # old head becomes body
+                grid.tile(nx, ny, HEAD)        # new head
+                st.body.append((nx, ny))
+                if cell == FOOD:
+                    st.score += 10
+                    st.grow += 2
+                    kit.coin()                 # ate the food
+                    place_food()
+                if st.grow > 0:
+                    st.grow -= 1
+                elif len(st.body) > 1:
+                    ox, oy = st.body.popleft() # drop the tail cell
+                    grid.tile(ox, oy, 0)
+
+        body_len = len(st.body)
+        if st.score != _shown_score or body_len != _shown_len:
+            _shown_score, _shown_len = st.score, body_len
+            hud.set("SCORE %04d   LEN %d" % (st.score, body_len))
+        kit.tick()                             # drive the SFX sequencer (coin is a 2-note rise)
+        scene.refresh()
+        clock.tick()
+
+
+main()

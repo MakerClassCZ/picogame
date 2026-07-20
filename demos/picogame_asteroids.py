@@ -108,112 +108,122 @@ def new_game():
 new_game()
 kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 print("LEFT/RIGHT rotate, UP thrust, B fire. Clear the asteroids.")
-frame = 0
-_shown_score, _shown_lives = -1, -1
-while True:
-    btn.poll()
-    frame += 1
-    st.fire_cd -= 1
-    if st.inv > 0:
-        st.inv -= 1
 
-    # rotate / thrust  (ang in turns 0..1; nose-up so dir = (sin_t, -cos_t))
-    if btn.is_pressed(btn.LEFT):
-        st.ang = (st.ang - TURN) % 1.0
-    if btn.is_pressed(btn.RIGHT):
-        st.ang = (st.ang + TURN) % 1.0
-    dx, dy = m.sin_t(st.ang), -m.cos_t(st.ang)
-    if btn.is_pressed(btn.UP):
-        st.vx += dx * 0.25
-        st.vy += dy * 0.25
-        if frame & 1:                                  # exhaust puff from the tail, every other frame
-            exhaust.emit(int(st.sx - dx * 9), int(st.sy - dy * 9), 2, 2, 10,
-                         pg.rgb565(255, 150, 40))
-    # cap + drift
-    sp = m.length(st.vx, st.vy)
-    if sp > 5:
-        st.vx *= 5 / sp
-        st.vy *= 5 / sp
-    st.vx *= 0.99
-    st.vy *= 0.99
-    st.sx, st.sy = wrap(st.sx + st.vx, st.sy + st.vy)
-    ship.angle = st.ang * 360.0       # runtime affine rotation
-    ship.move(int(st.sx), int(st.sy))
-    ship.visible = (st.inv <= 0) or (frame & 1)
 
-    # fire
-    if btn.just_pressed(btn.B) and st.fire_cd <= 0:
-        b = bullets.spawn()
-        if b:
-            d = b.data
-            d["vx"] = dx * 7
-            d["vy"] = dy * 7
-            d["life"] = 30
-            d["x"] = st.sx
-            d["y"] = st.sy
-            b.move(int(st.sx), int(st.sy))
-            st.fire_cd = 6
-            kit.zap()                  # fire
+def main():
+    # --- per-frame loop lives in THIS function, not at module scope: inside a function the
+    # loop's names are array-indexed locals, not globals-dict lookups (a measured on-device
+    # win; see the picogame-game-design skill's hot-loop style guide). Hoist hot module refs
+    # (btn.poll, scene.refresh, clock.tick) to locals here if a heavier game needs the last %.
+    frame = 0
+    _shown_score, _shown_lives = -1, -1
+    while True:
+        btn.poll()
+        frame += 1
+        st.fire_cd -= 1
+        if st.inv > 0:
+            st.inv -= 1
 
-    # bullets
-    for b in bullets.items:
-        if not b.visible:
-            continue
-        b.data["life"] -= 1
-        if b.data["life"] <= 0:
-            bullets.free(b)
-            continue
-        b.data["x"], b.data["y"] = wrap(b.data["x"] + b.data["vx"], b.data["y"] + b.data["vy"])
-        b.move(int(b.data["x"]), int(b.data["y"]))
+        # rotate / thrust  (ang in turns 0..1; nose-up so dir = (sin_t, -cos_t))
+        if btn.is_pressed(btn.LEFT):
+            st.ang = (st.ang - TURN) % 1.0
+        if btn.is_pressed(btn.RIGHT):
+            st.ang = (st.ang + TURN) % 1.0
+        dx, dy = m.sin_t(st.ang), -m.cos_t(st.ang)
+        if btn.is_pressed(btn.UP):
+            st.vx += dx * 0.25
+            st.vy += dy * 0.25
+            if frame & 1:                                  # exhaust puff from the tail, every other frame
+                exhaust.emit(int(st.sx - dx * 9), int(st.sy - dy * 9), 2, 2, 10,
+                             pg.rgb565(255, 150, 40))
+        # cap + drift
+        sp = m.length(st.vx, st.vy)
+        if sp > 5:
+            st.vx *= 5 / sp
+            st.vy *= 5 / sp
+        st.vx *= 0.99
+        st.vy *= 0.99
+        st.sx, st.sy = wrap(st.sx + st.vx, st.sy + st.vy)
+        ship.angle = st.ang * 360.0       # runtime affine rotation
+        ship.move(int(st.sx), int(st.sy))
+        ship.visible = (st.inv <= 0) or (frame & 1)
 
-    # rocks: move, wrap, collide (sprite.near - circular distance, reads sprite pos)
-    for r in rocks.items:
-        if not r.visible:
-            continue
-        r.data["x"], r.data["y"] = wrap(r.data["x"] + r.data["vx"], r.data["y"] + r.data["vy"])
-        r.move(int(r.data["x"]), int(r.data["y"]))
-        rr = ROCK_R[r.data["size"]]
-        # bullet hits
+        # fire
+        if btn.just_pressed(btn.B) and st.fire_cd <= 0:
+            b = bullets.spawn()
+            if b:
+                d = b.data
+                d["vx"] = dx * 7
+                d["vy"] = dy * 7
+                d["life"] = 30
+                d["x"] = st.sx
+                d["y"] = st.sy
+                b.move(int(st.sx), int(st.sy))
+                st.fire_cd = 6
+                kit.zap()                  # fire
+
+        # bullets
         for b in bullets.items:
             if not b.visible:
                 continue
-            if b.near(r, rr):
-                # snapshot this rock's state BEFORE freeing it: spawn() below reuses the
-                # just-freed slot, so the first child overwrites r.data - read it now or the
-                # second child sees the bumped size (-> spawn_rock(3) -> rock_bm IndexError).
-                sz, rx, ry = r.data["size"], r.data["x"], r.data["y"]
-                rvx, rvy = r.data["vx"], r.data["vy"]
+            b.data["life"] -= 1
+            if b.data["life"] <= 0:
                 bullets.free(b)
-                rocks.free(r)
-                st.score += (3 - sz) * 20
-                kit.boom()                   # asteroid destroyed
-                if sz < 2:                       # split into two smaller
-                    for s in (-1, 1):
-                        spawn_rock(sz + 1, rx, ry, rvx + s * 0.8, rvy - s * 0.8)
-                break
-        # ship hit
-        if st.inv <= 0 and r.visible and ship.near(r, rr + 6):
-            st.lives -= 1
-            st.inv = 90
-            st.sx, st.sy = float(W // 2), float(H // 2)
-            st.vx = st.vy = 0.0
-            if st.lives < 0:
-                kit.explosion()
-                new_game()
-            else:
-                kit.hurt()
+                continue
+            b.data["x"], b.data["y"] = wrap(b.data["x"] + b.data["vx"], b.data["y"] + b.data["vy"])
+            b.move(int(b.data["x"]), int(b.data["y"]))
 
-    if rocks.count() == 0:
-        st.wave += 1
-        kit.powerup()                # wave cleared
-        new_wave(st.wave)
+        # rocks: move, wrap, collide (sprite.near - circular distance, reads sprite pos)
+        for r in rocks.items:
+            if not r.visible:
+                continue
+            r.data["x"], r.data["y"] = wrap(r.data["x"] + r.data["vx"], r.data["y"] + r.data["vy"])
+            r.move(int(r.data["x"]), int(r.data["y"]))
+            rr = ROCK_R[r.data["size"]]
+            # bullet hits
+            for b in bullets.items:
+                if not b.visible:
+                    continue
+                if b.near(r, rr):
+                    # snapshot this rock's state BEFORE freeing it: spawn() below reuses the
+                    # just-freed slot, so the first child overwrites r.data - read it now or the
+                    # second child sees the bumped size (-> spawn_rock(3) -> rock_bm IndexError).
+                    sz, rx, ry = r.data["size"], r.data["x"], r.data["y"]
+                    rvx, rvy = r.data["vx"], r.data["vy"]
+                    bullets.free(b)
+                    rocks.free(r)
+                    st.score += (3 - sz) * 20
+                    kit.boom()                   # asteroid destroyed
+                    if sz < 2:                       # split into two smaller
+                        for s in (-1, 1):
+                            spawn_rock(sz + 1, rx, ry, rvx + s * 0.8, rvy - s * 0.8)
+                    break
+            # ship hit
+            if st.inv <= 0 and r.visible and ship.near(r, rr + 6):
+                st.lives -= 1
+                st.inv = 90
+                st.sx, st.sy = float(W // 2), float(H // 2)
+                st.vx = st.vy = 0.0
+                if st.lives < 0:
+                    kit.explosion()
+                    new_game()
+                else:
+                    kit.hurt()
 
-    kit.tick()
-    exhaust.tick()
-    scene.refresh()
-    shown_lives = max(0, st.lives)
-    if st.score != _shown_score or shown_lives != _shown_lives:
-        _shown_score, _shown_lives = st.score, shown_lives
-        hud.set("SCORE %05d   SHIPS %d" % (st.score, shown_lives))
-    hud.draw(scene.display, bufA)
-    clock.tick()
+        if rocks.count() == 0:
+            st.wave += 1
+            kit.powerup()                # wave cleared
+            new_wave(st.wave)
+
+        kit.tick()
+        exhaust.tick()
+        scene.refresh()
+        shown_lives = max(0, st.lives)
+        if st.score != _shown_score or shown_lives != _shown_lives:
+            _shown_score, _shown_lives = st.score, shown_lives
+            hud.set("SCORE %05d   SHIPS %d" % (st.score, shown_lives))
+        hud.draw(scene.display, bufA)
+        clock.tick()
+
+
+main()

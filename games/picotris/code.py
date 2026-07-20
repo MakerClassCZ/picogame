@@ -169,7 +169,6 @@ grid = [[0] * COLS for _ in range(ROWS)]               # locked blocks (0 empty,
 cur = {"name": "T", "rot": 0, "x": 3, "y": -1}
 nxt = bag.next()
 score = lines = level = 0
-changed = True
 flash = None                                            # [full_rows, frames_left] while a clear flashes
 INTERVALS = (24, 20, 16, 13, 10, 8, 6, 5, 4, 3)        # gravity frames per cell, by level
 
@@ -281,53 +280,63 @@ def render_board():
 
 spawn()
 refresh_hud()
-grav = 0
 print("L/R move | A rotate | Down soft-drop")
-while True:
-    btn.poll()
-    _frame += 1
-    _i = 0                                    # drain scheduled arpeggio notes due this frame
-    while _i < len(_seq):
-        if _seq[_i][0] <= _frame:
-            sfx(_seq[_i][1])
-            _seq.pop(_i)
-        else:
-            _i += 1
-    if flash:                                           # line-clear: blink the full rows, then clear them
-        flash[1] -= 1
-        white = (flash[1] // 3) % 2 == 1
-        for r in flash[0]:
-            for c in range(COLS):
-                well.tile(c, r, 8 if white else grid[r][c])
-        if flash[1] <= 0:
-            resolve_flash()
-            changed = True
-    else:
-        if btn.just_pressed(btn.LEFT) and fits(cur["name"], cur["rot"], cur["x"] - 1, cur["y"]):
-            cur["x"] -= 1
-            changed = True
-            sfx(SND_MOVE)
-        if btn.just_pressed(btn.RIGHT) and fits(cur["name"], cur["rot"], cur["x"] + 1, cur["y"]):
-            cur["x"] += 1
-            changed = True
-            sfx(SND_MOVE)
-        if btn.just_pressed(btn.A):
-            nr = (cur["rot"] + 1) % len(SHAPES[cur["name"]][1])
-            if fits(cur["name"], nr, cur["x"], cur["y"]):
-                cur["rot"] = nr
-                changed = True
-                sfx(SND_ROT)
-        grav += 1
-        interval = 1 if btn.is_pressed(btn.DOWN) else INTERVALS[min(level, len(INTERVALS) - 1)]
-        if grav >= interval:
-            grav = 0
-            if fits(cur["name"], cur["rot"], cur["x"], cur["y"] + 1):
-                cur["y"] += 1
+
+
+def main():
+    global _frame
+    # --- per-frame loop in a FUNCTION: names become array-indexed locals, not globals-dict
+    # lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    changed = True
+    grav = 0
+    while True:
+        btn.poll()
+        _frame += 1
+        _i = 0                                    # drain scheduled arpeggio notes due this frame
+        while _i < len(_seq):
+            if _seq[_i][0] <= _frame:
+                sfx(_seq[_i][1])
+                _seq.pop(_i)
             else:
-                lock_piece()
-            changed = True
-    if changed and not flash:
-        render_board()
-        changed = False
-    scene.refresh()
-    clock.tick()
+                _i += 1
+        if flash:                                           # line-clear: blink the full rows, then clear them
+            flash[1] -= 1
+            white = (flash[1] // 3) % 2 == 1
+            for r in flash[0]:
+                for c in range(COLS):
+                    well.tile(c, r, 8 if white else grid[r][c])
+            if flash[1] <= 0:
+                resolve_flash()
+                changed = True
+        else:
+            if btn.just_pressed(btn.LEFT) and fits(cur["name"], cur["rot"], cur["x"] - 1, cur["y"]):
+                cur["x"] -= 1
+                changed = True
+                sfx(SND_MOVE)
+            if btn.just_pressed(btn.RIGHT) and fits(cur["name"], cur["rot"], cur["x"] + 1, cur["y"]):
+                cur["x"] += 1
+                changed = True
+                sfx(SND_MOVE)
+            if btn.just_pressed(btn.A):
+                nr = (cur["rot"] + 1) % len(SHAPES[cur["name"]][1])
+                if fits(cur["name"], nr, cur["x"], cur["y"]):
+                    cur["rot"] = nr
+                    changed = True
+                    sfx(SND_ROT)
+            grav += 1
+            interval = 1 if btn.is_pressed(btn.DOWN) else INTERVALS[min(level, len(INTERVALS) - 1)]
+            if grav >= interval:
+                grav = 0
+                if fits(cur["name"], cur["rot"], cur["x"], cur["y"] + 1):
+                    cur["y"] += 1
+                else:
+                    lock_piece()
+                changed = True
+        if changed and not flash:
+            render_board()
+            changed = False
+        scene.refresh()
+        clock.tick()
+
+
+main()

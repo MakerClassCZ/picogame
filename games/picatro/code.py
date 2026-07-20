@@ -445,7 +445,6 @@ def invalidate_cards():
 # ---------------- audio (guarded: synthio device-only; sim silent -> no-ops) ----------------
 # Music: none (removed 2026-07-10 on owner playtest - it distracted from the cards). SFX only.
 _frame = 0
-_lock_until = 0                           # input-lock frame: a decided result ignores presses briefly so a
                                           # skip-masher can't blow through the banner before it registers
 _seq = []                                 # pending arpeggio notes [play_frame, note], drained each frame
 try:
@@ -525,289 +524,299 @@ howto.show([
     "press A - on with the show!",
 ])
 print("Picatro prototype. L/R move, UP/DN pick, A PLAY, B DISCARD.")
-while True:
-    btn.poll()
-    _frame += 1
-    _i = 0                                    # drain scheduled arpeggio notes due this frame
-    while _i < len(_seq):
-        if _seq[_i][0] <= _frame:
-            sfx(_seq[_i][1])
-            _seq.pop(_i)
-        else:
-            _i += 1
 
-    if st.state == HOWTO:
-        top_lbl.set("")
-        help_lbl.set("")
-        if btn.just_pressed(btn.A):           # dismiss the how-to card, begin play
-            howto.hide()
-            st.state = SELECT
-            invalidate_cards()
 
-    elif st.state == SELECT:
-        if btn.just_pressed(btn.RIGHT):
-            st.cur = (st.cur + 1) % len(st.hand)
-            invalidate_cards()
-            sfx(SND_NAV)
-        if btn.just_pressed(btn.LEFT):
-            st.cur = (st.cur - 1) % len(st.hand)
-            invalidate_cards()
-            sfx(SND_NAV)
-        if btn.just_pressed(btn.UP):              # UP = pick the card under the cursor (it lifts up)
-            if not st.sel[st.cur] and sum(st.sel) < 5:
-                st.sel[st.cur] = True
-                invalidate_cards()
-                sfx(SND_PICK)
-        if btn.just_pressed(btn.DOWN):            # DOWN = drop it back (deselect)
-            if st.sel[st.cur]:
-                st.sel[st.cur] = False
-                invalidate_cards()
-                sfx(SND_CLEAR)
-        if btn.just_pressed(btn.Y):               # Y = toggle the beginner score-preview (optional; boards
-            st.preview = not st.preview           # without a Y button just never fire this - no gameplay dep)
-            if st.preview:
-                st.used_help = True               # turning it on ONCE marks the whole run as assisted
-            sfx(SND_NAV)
-        # PLAY -> run the scoring tally (score is added at the SLAM, cards stay lifted until then)
-        if btn.just_pressed(btn.A) and any(st.sel) and st.hands > 0:
-            cards = selected_cards()
-            if any(is_wild(c) for c in cards):       # the Understudy is one-shot: playing it spends it
-                st.wild_live = False
-            t, chips, mult, sc = score_play(cards)   # also stores st.sc_grind / st.sc_harl for the tally
-            if DEBUG:
-                bc, bm = HAND_BASE[t]
-                add_m = bm + st.bank_m + 3 + st.sc_harl
-                print("PLAY  %s" % " ".join(_card(c) for c in cards))
-                print("  %s   scored: %s" % (HAND_NAME[t], " ".join(_card(c) for c in st.sc_scored)))
-                print("  chips  %d base  +%d cards  +%d Grinder  +%d bank  = %d" % (
-                    bc, st.sc_rankc, st.sc_grind, st.bank_c, chips))
-                print("  mult   %d base  +%d bank  +3 Steady  +%d Harl (%d suits)  = %d" % (
-                    bm, st.bank_m, st.sc_harl, st.sc_harl + 1, add_m))
-                if st.bank_xc:
-                    print("  club   x%.1f  ->  mult %d" % (st.sc_xcf, mult))
-                print("  SCORE  %d x %d = %d    total %d -> %d / %d" % (
-                    chips, mult, sc, st.total, st.total + sc, st.target))
-            st.bank_c = st.bank_m = st.bank_xc = 0    # banked bonuses consumed by this hand
-            st.hands -= 1
-            st.sc_type, st.sc_chips, st.sc_mult, st.sc_val = t, chips, mult, sc
-            st.sc_idxs = [i for i in range(len(st.hand)) if st.sel[i]]
-            st.sc_t = 0
-            st.state = SCORING
-            sfx_seq(SEQ_PLAY)
-        # DISCARD = weapon
-        if btn.just_pressed(btn.B) and any(st.sel) and st.discards > 0:
-            cards = selected_cards()
-            clubs = 0
-            has_spade = False
-            dbg_lines = []
-            for r, s in cards:
-                if is_wild((r, s)):       # tossing the Understudy banks its PRINTED suit, then it's gone
-                    st.wild_live = False
-                if s == 1:
-                    st.bank_c += 4        # heart  -> +chips
-                    dbg_lines.append("+4c    (%s)" % _card((r, s)))
-                elif s == 2:
-                    st.bank_m += 1        # diamond -> +mult
-                    dbg_lines.append("+1m    (%s)" % _card((r, s)))
-                elif s == 3:
-                    clubs += 1            # club -> xmult (count accumulates; applied non-compounding)
-                    dbg_lines.append("+0.5x  (%s)" % _card((r, s)))
-                else:                     # spade -> ONE bonus draw (flat, capped - doesn't scale with count)
-                    dbg_lines.append(("+1 draw (%s)" if not has_spade else "no extra draw, capped (%s)") % _card((r, s)))
-                    has_spade = True
-            st.bank_xc += clubs
-            st.discards -= 1
-            idxs = [i for i in range(len(st.hand)) if st.sel[i]]
-            for i in reversed(idxs):
-                st.hand.pop(i)
-            # settle to base 8, +1 for a spade "dig" this discard (never accumulates -> hand is only ever 8 or 9)
-            target = BASE_HAND + (1 if has_spade else 0)
-            draw_back(target - len(st.hand))
-            grew = len(st.hand) > BASE_HAND                 # got the dig card (ended at 9)
-            st.sel = [False] * len(st.hand)
-            st.cur = min(st.cur, len(st.hand) - 1)
-            invalidate_cards()
-            sfx_seq(SEQ_DISCARD)
-            if grew:
-                sfx(SND_PICK)                               # small chirp + the hand visibly grows to 9: the dig feedback
-            st.state = SELECT              # discard doesn't score -> straight back to the hand
-            invalidate_cards()             # (banked bonus shows above the cards; no A-confirm needed)
-            if DEBUG:
-                print("DISCARD  %s" % " ".join(_card(c) for c in cards))
-                for _l in dbg_lines:
-                    print("    %s" % _l)
-                print("  => banked +%dc +%dm x%.1f   %s   (disc left %d)" % (
-                    st.bank_c, st.bank_m, 1.0 + 0.5 * st.bank_xc,
-                    "hand->9 (+1 card)" if grew else "hand->8", st.discards))
-            dbg_status("after DISCARD")
+def main():
+    global _frame
+    # --- per-frame loop in a FUNCTION: names become array-indexed locals, not globals-dict
+    # lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    _lock_until = 0                           # input-lock frame: a decided result ignores presses briefly so a
+    while True:
+        btn.poll()
+        _frame += 1
+        _i = 0                                    # drain scheduled arpeggio notes due this frame
+        while _i < len(_seq):
+            if _seq[_i][0] <= _frame:
+                sfx(_seq[_i][1])
+                _seq.pop(_i)
+            else:
+                _i += 1
 
-        # HUD: format-on-change (compare ints, format only on a real change - see State.h_*)
-        if (st.blind != st.h_blind or st.total != st.h_total
-                or st.hands != st.h_hands or st.discards != st.h_disc):
-            st.h_blind, st.h_total, st.h_hands, st.h_disc = st.blind, st.total, st.hands, st.discards
-            top_lbl.set("BLIND %d   %d / %d   hands %d  disc %d" % (st.blind, st.total, st.target, st.hands, st.discards))
-        acts_lbl.set("Grind+3c Steady+3m Harl+1/suit")  # constant string -> .set() no-ops (free)
-        # PEEK (Y): a live preview of what the picked cards would score right now, banks included. Uses the
-        # SAME score_play()/breakdown as a real play (no drift), but commits nothing - purely a teaching aid.
-        # Re-score ONLY when the selection changes: a selection BITMASK suffices as the key, because every
-        # path that changes the hand or the banks (play / discard / new blind) also RESETS st.sel.
-        if st.preview and any(st.sel):
-            key = 0
-            for _i in range(len(st.sel)):
-                if st.sel[_i]:
-                    key |= 1 << _i
-            if key != st.h_peek:
-                st.h_peek = key
-                pt, pc, pm, pv = score_play(selected_cards())
-                result_lbl.set("PEEK  %s   %d x %d = %d" % (HAND_NAME[pt], pc, pm, pv))
-                mult_lbl.set(breakdown_line(pt, pc, pm))
-        elif st.preview:
-            st.h_peek = -1
-            result_lbl.set("PEEK on - pick cards to see the score")
-            mult_lbl.set("")
-        else:
-            st.h_peek = -1
-            result_lbl.set("")                          # (the running bank shows on banked_lbl - no dup line)
-            mult_lbl.set("")
-        banked_lbl.set(banked_label() if (st.bank_c or st.bank_m or st.bank_xc) else "")
-        help_lbl.set("L/R move  UP/DN pick  A PLAY  B DISCARD" + ("   Y=peek" if btn.has(btn.Y) else ""))
-        # Harlequin is the one Act gated by the selection (suit variety). Show that as a calm on/off state:
-        # keep it GHOSTED (dither) while the picked cards don't earn it, and pop it to FULL COLOUR the
-        # moment they span >=2 suits - so the player sees the variety-mult coming BEFORE committing. No
-        # blinking (that's noise); Grinder/Steady always fire, so they stay lit.
-        sel_suits = len(set(c[1] for c in selected_cards()))
-        act_sprites[2].dither = 0 if sel_suits >= 2 else HARL_DIM
-
-    elif st.state == SCORING:                 # the tally: name -> chips count-up -> mult count-up -> SLAM
-        st.sc_t += 1
-        P1, P2, P3 = 10, 26, 42               # phase ends (frames)
-        if st.sc_t < P3 and btn.just_pressed():
-            st.sc_t = P3                       # any press skips straight to the slam
-        name = HAND_NAME[st.sc_type]
-        blink = HILITE if (st.sc_t // 3) & 1 else 0       # flash the Act(s) that are firing right now
-        for s in act_sprites:
-            s.flash = 0
-            s.dither = 0                                  # clear the SELECT-state Harlequin ghosting
-        if P1 <= st.sc_t < P2:                            # chips phase -> Grinder (+3c per card)
-            act_sprites[0].flash = blink
-        elif P2 <= st.sc_t < P3:                          # mult phase -> Steady (+ Harlequin if multi-suit)
-            act_sprites[1].flash = blink
-            if st.sc_harl > 0:
-                act_sprites[2].flash = blink
-        top_lbl.set("BLIND %d   %d / %d   hands %d  disc %d" % (st.blind, st.total, st.target, st.hands, st.discards))
-        help_lbl.set("")
-        if st.sc_t < P1:
-            result_lbl.set(name)
-            banked_lbl.set(""); mult_lbl.set("")
-        elif st.sc_t < P2:                     # count the chips up
-            if st.sc_t == P1:
-                sfx_seq(SEQ_CHIPS)             # rising chip ticker
-            shown = int(st.sc_chips * (st.sc_t - P1) / (P2 - P1))
-            result_lbl.set("%s    %d" % (name, shown))
-            banked_lbl.set("counting chips..."); mult_lbl.set("")
-        elif st.sc_t < P3:                     # chips done, count the mult up
-            if st.sc_t == P2:
-                sfx_seq(SEQ_MULT)             # mult ticker
-            shownm = 1 + int((st.sc_mult - 1) * (st.sc_t - P2) / (P3 - P2))
-            result_lbl.set("%s    %d  x %d" % (name, st.sc_chips, shownm))
-            banked_lbl.set(""); mult_lbl.set("")
-        elif st.sc_t == P3:                    # SLAM: bank the score, retire cards, decide the outcome
-            st.total += st.sc_val
-            if DEBUG:
-                print("SLAM  +%d -> total %d / %d  (%s)" % (
-                    st.sc_val, st.total, st.target,
-                    "CLEARED" if st.total >= st.target else ("BUST" if st.hands == 0 else "continue")))
-            sfx_seq(SEQ_SLAM)
-            parts.emit(160, 118, 12 + st.sc_type * 2, 4, 26, HILITE)  # coin pop (bigger for rarer hands)
-            for i in reversed(st.sc_idxs):     # NOW retire the played cards + redraw the hand
-                st.hand.pop(i)
-            draw_back(max(0, BASE_HAND - len(st.hand)))   # settle back to base 8 (never leaves a 9-residual)
-            st.sel = [False] * len(st.hand)
-            st.cur = min(st.cur, len(st.hand) - 1)
-            invalidate_cards()
-            dbg_status("after PLAY")
-            # A DECIDED play (cleared / bust / run-won) jumps straight to its result screen: same
-            # breakdown, plus a low banner at y130 and a brief input-lock. A mid-blind play falls
-            # through to the HOLD breakdown below.
-            if st.total >= st.target or st.hands == 0:
-                _lock_until = _frame + 15                  # ~0.3s so a masher can't blow past the banner
-                if st.total >= st.target:
-                    if st.blind >= LAST_BLIND:             # end-of-GAME: a huge triple-colour burst
-                        st.state = FINAL
-                        show_banner("YOU WIN!", INK, HILITE, y=130)
-                        parts.emit(70, 110, 20, 7, 55, HILITE)
-                        parts.emit(160, 110, 20, 7, 55, VERM)
-                        parts.emit(250, 110, 20, 7, 55, TEAL)
-                    else:                                  # end-of-BLIND: a two-colour double burst
-                        st.state = WIN
-                        st.encore = (st.total - st.target) >= ENCORE_OVERKILL
-                        show_banner("ENCORE!" if st.encore else "CLEARED!", CREAM, SELC, y=130)
-                        parts.emit(90, 108, 22, 6, 48, HILITE)
-                        parts.emit(230, 108, 22, 6, 48, VERM)
-                    sfx_seq(SEQ_WIN)
-                else:                                      # hands used up without clearing -> end of run
-                    st.state = OVER
-                    _w, _fg, _bg, st.bust_flavor = bust_look(st.blind - 1)   # graded by blinds cleared
-                    show_banner(_w, _fg, _bg, y=130)
-                    sfx_seq(SEQ_BUST)
-                invalidate_cards()                         # blank the hand now that it's a result screen
-        else:                                  # HOLD: mid-blind breakdown, continue on any button
-            set_breakdown()
-            help_lbl.set("any button: continue")
-            if btn.just_pressed():
-                result_lbl.set(""); banked_lbl.set("")    # clear breakdown before leaving the screen
+        if st.state == HOWTO:
+            top_lbl.set("")
+            help_lbl.set("")
+            if btn.just_pressed(btn.A):           # dismiss the how-to card, begin play
+                howto.hide()
                 st.state = SELECT
+                invalidate_cards()
 
-    elif st.state == WIN:
-        # blind cleared: the full computation stays visible (same breakdown), CLEARED! banner low, cards
-        # hidden. One press -> next blind (the input-lock stops a masher blowing past the banner).
-        top_lbl.set("BLIND %d CLEARED!  %d / %d" % (st.blind, st.total, st.target))
-        set_breakdown()
-        help_lbl.set("ENCORE! overkill %d -> +1 hand next blind" % (st.total - st.target)
-                     if st.encore else "any button: next blind")
-        if _frame % 4 == 0:                        # gentle confetti keeps raining while the banner holds
-            parts.emit(random.randint(16, 300), 6, 2, 2, 52, HILITE if (_frame // 4) & 1 else VERM)
-        if _frame >= _lock_until and btn.just_pressed():
-            clear_banner()
-            new_blind(False)
-            invalidate_cards()
+        elif st.state == SELECT:
+            if btn.just_pressed(btn.RIGHT):
+                st.cur = (st.cur + 1) % len(st.hand)
+                invalidate_cards()
+                sfx(SND_NAV)
+            if btn.just_pressed(btn.LEFT):
+                st.cur = (st.cur - 1) % len(st.hand)
+                invalidate_cards()
+                sfx(SND_NAV)
+            if btn.just_pressed(btn.UP):              # UP = pick the card under the cursor (it lifts up)
+                if not st.sel[st.cur] and sum(st.sel) < 5:
+                    st.sel[st.cur] = True
+                    invalidate_cards()
+                    sfx(SND_PICK)
+            if btn.just_pressed(btn.DOWN):            # DOWN = drop it back (deselect)
+                if st.sel[st.cur]:
+                    st.sel[st.cur] = False
+                    invalidate_cards()
+                    sfx(SND_CLEAR)
+            if btn.just_pressed(btn.Y):               # Y = toggle the beginner score-preview (optional; boards
+                st.preview = not st.preview           # without a Y button just never fire this - no gameplay dep)
+                if st.preview:
+                    st.used_help = True               # turning it on ONCE marks the whole run as assisted
+                sfx(SND_NAV)
+            # PLAY -> run the scoring tally (score is added at the SLAM, cards stay lifted until then)
+            if btn.just_pressed(btn.A) and any(st.sel) and st.hands > 0:
+                cards = selected_cards()
+                if any(is_wild(c) for c in cards):       # the Understudy is one-shot: playing it spends it
+                    st.wild_live = False
+                t, chips, mult, sc = score_play(cards)   # also stores st.sc_grind / st.sc_harl for the tally
+                if DEBUG:
+                    bc, bm = HAND_BASE[t]
+                    add_m = bm + st.bank_m + 3 + st.sc_harl
+                    print("PLAY  %s" % " ".join(_card(c) for c in cards))
+                    print("  %s   scored: %s" % (HAND_NAME[t], " ".join(_card(c) for c in st.sc_scored)))
+                    print("  chips  %d base  +%d cards  +%d Grinder  +%d bank  = %d" % (
+                        bc, st.sc_rankc, st.sc_grind, st.bank_c, chips))
+                    print("  mult   %d base  +%d bank  +3 Steady  +%d Harl (%d suits)  = %d" % (
+                        bm, st.bank_m, st.sc_harl, st.sc_harl + 1, add_m))
+                    if st.bank_xc:
+                        print("  club   x%.1f  ->  mult %d" % (st.sc_xcf, mult))
+                    print("  SCORE  %d x %d = %d    total %d -> %d / %d" % (
+                        chips, mult, sc, st.total, st.total + sc, st.target))
+                st.bank_c = st.bank_m = st.bank_xc = 0    # banked bonuses consumed by this hand
+                st.hands -= 1
+                st.sc_type, st.sc_chips, st.sc_mult, st.sc_val = t, chips, mult, sc
+                st.sc_idxs = [i for i in range(len(st.hand)) if st.sel[i]]
+                st.sc_t = 0
+                st.state = SCORING
+                sfx_seq(SEQ_PLAY)
+            # DISCARD = weapon
+            if btn.just_pressed(btn.B) and any(st.sel) and st.discards > 0:
+                cards = selected_cards()
+                clubs = 0
+                has_spade = False
+                dbg_lines = []
+                for r, s in cards:
+                    if is_wild((r, s)):       # tossing the Understudy banks its PRINTED suit, then it's gone
+                        st.wild_live = False
+                    if s == 1:
+                        st.bank_c += 4        # heart  -> +chips
+                        dbg_lines.append("+4c    (%s)" % _card((r, s)))
+                    elif s == 2:
+                        st.bank_m += 1        # diamond -> +mult
+                        dbg_lines.append("+1m    (%s)" % _card((r, s)))
+                    elif s == 3:
+                        clubs += 1            # club -> xmult (count accumulates; applied non-compounding)
+                        dbg_lines.append("+0.5x  (%s)" % _card((r, s)))
+                    else:                     # spade -> ONE bonus draw (flat, capped - doesn't scale with count)
+                        dbg_lines.append(("+1 draw (%s)" if not has_spade else "no extra draw, capped (%s)") % _card((r, s)))
+                        has_spade = True
+                st.bank_xc += clubs
+                st.discards -= 1
+                idxs = [i for i in range(len(st.hand)) if st.sel[i]]
+                for i in reversed(idxs):
+                    st.hand.pop(i)
+                # settle to base 8, +1 for a spade "dig" this discard (never accumulates -> hand is only ever 8 or 9)
+                target = BASE_HAND + (1 if has_spade else 0)
+                draw_back(target - len(st.hand))
+                grew = len(st.hand) > BASE_HAND                 # got the dig card (ended at 9)
+                st.sel = [False] * len(st.hand)
+                st.cur = min(st.cur, len(st.hand) - 1)
+                invalidate_cards()
+                sfx_seq(SEQ_DISCARD)
+                if grew:
+                    sfx(SND_PICK)                               # small chirp + the hand visibly grows to 9: the dig feedback
+                st.state = SELECT              # discard doesn't score -> straight back to the hand
+                invalidate_cards()             # (banked bonus shows above the cards; no A-confirm needed)
+                if DEBUG:
+                    print("DISCARD  %s" % " ".join(_card(c) for c in cards))
+                    for _l in dbg_lines:
+                        print("    %s" % _l)
+                    print("  => banked +%dc +%dm x%.1f   %s   (disc left %d)" % (
+                        st.bank_c, st.bank_m, 1.0 + 0.5 * st.bank_xc,
+                        "hand->9 (+1 card)" if grew else "hand->8", st.discards))
+                dbg_status("after DISCARD")
 
-    elif st.state == OVER:
-        cleared = st.blind - 1
-        # run ended: how far you got + how much you MADE vs NEEDED in the blind that ended it; the last
-        # hand's breakdown stays visible; graded banner low; cards hidden.
-        top_lbl.set("You cleared %d of %d blinds%s" % (cleared, LAST_BLIND, "   (with help)" if st.used_help else ""))
-        result_lbl.set("Blind %d:  %d / %d  (short %d)" % (st.blind, st.total, st.target, st.target - st.total))
-        banked_lbl.set(st.bust_flavor)                  # graded, upbeat circus quip (above the low banner)
-        mult_lbl.set("")                                # kept clear - the banner sits here
-        help_lbl.set("any button: new run")
-        if _frame >= _lock_until and btn.just_pressed():
-            clear_banner()
-            new_blind(True)
-            invalidate_cards()
+            # HUD: format-on-change (compare ints, format only on a real change - see State.h_*)
+            if (st.blind != st.h_blind or st.total != st.h_total
+                    or st.hands != st.h_hands or st.discards != st.h_disc):
+                st.h_blind, st.h_total, st.h_hands, st.h_disc = st.blind, st.total, st.hands, st.discards
+                top_lbl.set("BLIND %d   %d / %d   hands %d  disc %d" % (st.blind, st.total, st.target, st.hands, st.discards))
+            acts_lbl.set("Grind+3c Steady+3m Harl+1/suit")  # constant string -> .set() no-ops (free)
+            # PEEK (Y): a live preview of what the picked cards would score right now, banks included. Uses the
+            # SAME score_play()/breakdown as a real play (no drift), but commits nothing - purely a teaching aid.
+            # Re-score ONLY when the selection changes: a selection BITMASK suffices as the key, because every
+            # path that changes the hand or the banks (play / discard / new blind) also RESETS st.sel.
+            if st.preview and any(st.sel):
+                key = 0
+                for _i in range(len(st.sel)):
+                    if st.sel[_i]:
+                        key |= 1 << _i
+                if key != st.h_peek:
+                    st.h_peek = key
+                    pt, pc, pm, pv = score_play(selected_cards())
+                    result_lbl.set("PEEK  %s   %d x %d = %d" % (HAND_NAME[pt], pc, pm, pv))
+                    mult_lbl.set(breakdown_line(pt, pc, pm))
+            elif st.preview:
+                st.h_peek = -1
+                result_lbl.set("PEEK on - pick cards to see the score")
+                mult_lbl.set("")
+            else:
+                st.h_peek = -1
+                result_lbl.set("")                          # (the running bank shows on banked_lbl - no dup line)
+                mult_lbl.set("")
+            banked_lbl.set(banked_label() if (st.bank_c or st.bank_m or st.bank_xc) else "")
+            help_lbl.set("L/R move  UP/DN pick  A PLAY  B DISCARD" + ("   Y=peek" if btn.has(btn.Y) else ""))
+            # Harlequin is the one Act gated by the selection (suit variety). Show that as a calm on/off state:
+            # keep it GHOSTED (dither) while the picked cards don't earn it, and pop it to FULL COLOUR the
+            # moment they span >=2 suits - so the player sees the variety-mult coming BEFORE committing. No
+            # blinking (that's noise); Grinder/Steady always fire, so they stay lit.
+            sel_suits = len(set(c[1] for c in selected_cards()))
+            act_sprites[2].dither = 0 if sel_suits >= 2 else HARL_DIM
 
-    else:  # FINAL - all LAST_BLIND blinds cleared, the whole run is won
-        top_lbl.set("YOU BEAT THE PICO CIRCUS!%s" % ("   (with help)" if st.used_help else ""))
-        result_lbl.set("Blind %d:  %d / %d  (crushed it by %d!)" % (st.blind, st.total, st.target, st.total - st.target))
-        banked_lbl.set("all %d blinds cleared - take a bow!" % LAST_BLIND)
-        mult_lbl.set("")                                # kept clear - the banner sits here
-        help_lbl.set("any button: new run")
-        if _frame % 2 == 0:                             # nonstop dense multi-colour celebration fountain
-            parts.emit(random.randint(12, 306), 4, 3, 2, 58, (HILITE, VERM, TEAL)[(_frame // 2) % 3])
-        if _frame >= _lock_until and btn.just_pressed():
-            clear_banner()
+        elif st.state == SCORING:                 # the tally: name -> chips count-up -> mult count-up -> SLAM
+            st.sc_t += 1
+            P1, P2, P3 = 10, 26, 42               # phase ends (frames)
+            if st.sc_t < P3 and btn.just_pressed():
+                st.sc_t = P3                       # any press skips straight to the slam
+            name = HAND_NAME[st.sc_type]
+            blink = HILITE if (st.sc_t // 3) & 1 else 0       # flash the Act(s) that are firing right now
             for s in act_sprites:
                 s.flash = 0
-            new_blind(True)
-            invalidate_cards()
+                s.dither = 0                                  # clear the SELECT-state Harlequin ghosting
+            if P1 <= st.sc_t < P2:                            # chips phase -> Grinder (+3c per card)
+                act_sprites[0].flash = blink
+            elif P2 <= st.sc_t < P3:                          # mult phase -> Steady (+ Harlequin if multi-suit)
+                act_sprites[1].flash = blink
+                if st.sc_harl > 0:
+                    act_sprites[2].flash = blink
+            top_lbl.set("BLIND %d   %d / %d   hands %d  disc %d" % (st.blind, st.total, st.target, st.hands, st.discards))
+            help_lbl.set("")
+            if st.sc_t < P1:
+                result_lbl.set(name)
+                banked_lbl.set(""); mult_lbl.set("")
+            elif st.sc_t < P2:                     # count the chips up
+                if st.sc_t == P1:
+                    sfx_seq(SEQ_CHIPS)             # rising chip ticker
+                shown = int(st.sc_chips * (st.sc_t - P1) / (P2 - P1))
+                result_lbl.set("%s    %d" % (name, shown))
+                banked_lbl.set("counting chips..."); mult_lbl.set("")
+            elif st.sc_t < P3:                     # chips done, count the mult up
+                if st.sc_t == P2:
+                    sfx_seq(SEQ_MULT)             # mult ticker
+                shownm = 1 + int((st.sc_mult - 1) * (st.sc_t - P2) / (P3 - P2))
+                result_lbl.set("%s    %d  x %d" % (name, st.sc_chips, shownm))
+                banked_lbl.set(""); mult_lbl.set("")
+            elif st.sc_t == P3:                    # SLAM: bank the score, retire cards, decide the outcome
+                st.total += st.sc_val
+                if DEBUG:
+                    print("SLAM  +%d -> total %d / %d  (%s)" % (
+                        st.sc_val, st.total, st.target,
+                        "CLEARED" if st.total >= st.target else ("BUST" if st.hands == 0 else "continue")))
+                sfx_seq(SEQ_SLAM)
+                parts.emit(160, 118, 12 + st.sc_type * 2, 4, 26, HILITE)  # coin pop (bigger for rarer hands)
+                for i in reversed(st.sc_idxs):     # NOW retire the played cards + redraw the hand
+                    st.hand.pop(i)
+                draw_back(max(0, BASE_HAND - len(st.hand)))   # settle back to base 8 (never leaves a 9-residual)
+                st.sel = [False] * len(st.hand)
+                st.cur = min(st.cur, len(st.hand) - 1)
+                invalidate_cards()
+                dbg_status("after PLAY")
+                # A DECIDED play (cleared / bust / run-won) jumps straight to its result screen: same
+                # breakdown, plus a low banner at y130 and a brief input-lock. A mid-blind play falls
+                # through to the HOLD breakdown below.
+                if st.total >= st.target or st.hands == 0:
+                    _lock_until = _frame + 15                  # ~0.3s so a masher can't blow past the banner
+                    if st.total >= st.target:
+                        if st.blind >= LAST_BLIND:             # end-of-GAME: a huge triple-colour burst
+                            st.state = FINAL
+                            show_banner("YOU WIN!", INK, HILITE, y=130)
+                            parts.emit(70, 110, 20, 7, 55, HILITE)
+                            parts.emit(160, 110, 20, 7, 55, VERM)
+                            parts.emit(250, 110, 20, 7, 55, TEAL)
+                        else:                                  # end-of-BLIND: a two-colour double burst
+                            st.state = WIN
+                            st.encore = (st.total - st.target) >= ENCORE_OVERKILL
+                            show_banner("ENCORE!" if st.encore else "CLEARED!", CREAM, SELC, y=130)
+                            parts.emit(90, 108, 22, 6, 48, HILITE)
+                            parts.emit(230, 108, 22, 6, 48, VERM)
+                        sfx_seq(SEQ_WIN)
+                    else:                                      # hands used up without clearing -> end of run
+                        st.state = OVER
+                        _w, _fg, _bg, st.bust_flavor = bust_look(st.blind - 1)   # graded by blinds cleared
+                        show_banner(_w, _fg, _bg, y=130)
+                        sfx_seq(SEQ_BUST)
+                    invalidate_cards()                         # blank the hand now that it's a result screen
+            else:                                  # HOLD: mid-blind breakdown, continue on any button
+                set_breakdown()
+                help_lbl.set("any button: continue")
+                if btn.just_pressed():
+                    result_lbl.set(""); banked_lbl.set("")    # clear breakdown before leaving the screen
+                    st.state = SELECT
 
-    _over_txt = "GAME OVER" if st.state == OVER else ("RUN COMPLETE" if st.state == FINAL else "")
-    if _over_txt:                                           # centre it under the banner in the card zone
-        over_lbl.sprite.x = (W - len(_over_txt) * _BFW) // 2
-    over_lbl.set(_over_txt)                                 # hidden on every other screen
-    # the waltz plays while the player THINKS (how-to + hand-picking); it stops the moment a play
-    # commits so the SCORING tally / result stings own the speaker, and resumes back at SELECT
-    music_on(st.state == HOWTO or st.state == SELECT)
-    parts.tick()
-    scene.refresh()
-    clock.tick()
+        elif st.state == WIN:
+            # blind cleared: the full computation stays visible (same breakdown), CLEARED! banner low, cards
+            # hidden. One press -> next blind (the input-lock stops a masher blowing past the banner).
+            top_lbl.set("BLIND %d CLEARED!  %d / %d" % (st.blind, st.total, st.target))
+            set_breakdown()
+            help_lbl.set("ENCORE! overkill %d -> +1 hand next blind" % (st.total - st.target)
+                         if st.encore else "any button: next blind")
+            if _frame % 4 == 0:                        # gentle confetti keeps raining while the banner holds
+                parts.emit(random.randint(16, 300), 6, 2, 2, 52, HILITE if (_frame // 4) & 1 else VERM)
+            if _frame >= _lock_until and btn.just_pressed():
+                clear_banner()
+                new_blind(False)
+                invalidate_cards()
+
+        elif st.state == OVER:
+            cleared = st.blind - 1
+            # run ended: how far you got + how much you MADE vs NEEDED in the blind that ended it; the last
+            # hand's breakdown stays visible; graded banner low; cards hidden.
+            top_lbl.set("You cleared %d of %d blinds%s" % (cleared, LAST_BLIND, "   (with help)" if st.used_help else ""))
+            result_lbl.set("Blind %d:  %d / %d  (short %d)" % (st.blind, st.total, st.target, st.target - st.total))
+            banked_lbl.set(st.bust_flavor)                  # graded, upbeat circus quip (above the low banner)
+            mult_lbl.set("")                                # kept clear - the banner sits here
+            help_lbl.set("any button: new run")
+            if _frame >= _lock_until and btn.just_pressed():
+                clear_banner()
+                new_blind(True)
+                invalidate_cards()
+
+        else:  # FINAL - all LAST_BLIND blinds cleared, the whole run is won
+            top_lbl.set("YOU BEAT THE PICO CIRCUS!%s" % ("   (with help)" if st.used_help else ""))
+            result_lbl.set("Blind %d:  %d / %d  (crushed it by %d!)" % (st.blind, st.total, st.target, st.total - st.target))
+            banked_lbl.set("all %d blinds cleared - take a bow!" % LAST_BLIND)
+            mult_lbl.set("")                                # kept clear - the banner sits here
+            help_lbl.set("any button: new run")
+            if _frame % 2 == 0:                             # nonstop dense multi-colour celebration fountain
+                parts.emit(random.randint(12, 306), 4, 3, 2, 58, (HILITE, VERM, TEAL)[(_frame // 2) % 3])
+            if _frame >= _lock_until and btn.just_pressed():
+                clear_banner()
+                for s in act_sprites:
+                    s.flash = 0
+                new_blind(True)
+                invalidate_cards()
+
+        _over_txt = "GAME OVER" if st.state == OVER else ("RUN COMPLETE" if st.state == FINAL else "")
+        if _over_txt:                                           # centre it under the banner in the card zone
+            over_lbl.sprite.x = (W - len(_over_txt) * _BFW) // 2
+        over_lbl.set(_over_txt)                                 # hidden on every other screen
+        # the waltz plays while the player THINKS (how-to + hand-picking); it stops the moment a play
+        # commits so the SCORING tally / result stings own the speaker, and resumes back at SELECT
+        music_on(st.state == HOWTO or st.state == SELECT)
+        parts.tick()
+        scene.refresh()
+        clock.tick()
+
+
+main()

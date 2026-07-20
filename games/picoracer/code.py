@@ -221,148 +221,156 @@ car.angle = st.th
 hud.draw()
 show_banner("PICORACER     B: START")
 
-while True:
-    btn.poll()
 
-    if st.mode == "start" or st.mode == "finish":  # frozen title / results; B begins the countdown
-        if btn.just_pressed(btn.B):
-            reset_race()
-            st.mode = "countdown"
-            st.countdown_t = 0
-            st.cd_phase = -1
-            if engine:
-                engine.start()
-        else:
-            engine_silence()
-        cam.follow(st.subx, st.suby).apply()
-        scene.refresh()
-        clock.tick()
-        continue
 
-    if st.mode == "countdown":                     # 3 - 2 - 1 - GO!, with a blip each second
-        st.countdown_t += 1
-        ph = min(2, (st.countdown_t - 1) // 40)
-        if ph != st.cd_phase:
-            st.cd_phase = ph
-            show_banner(("3", "2", "1")[ph], big=True)
-            sfx(SFX_COUNT)
-        if st.countdown_t > 120:
-            sfx(SFX_GO)
-            flash_banner("GO!", 28, big=True)
-            st.last_lap = st.last_lsec = st.last_bsec = -1
-            st.mode = "race"
-        cam.follow(st.subx, st.suby).apply()
-        scene.refresh()
-        clock.tick()
-        continue
+def main():
+    # --- per-frame loop in a FUNCTION (not module scope): names become array-indexed locals,
+    # not globals-dict lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    while True:
+        btn.poll()
 
-    if st.banner_t > 0:                            # tick down a flash banner (GO! / lap time)
-        st.banner_t -= 1
-        if st.banner_t == 0:
-            banner.set("")
-    if st.flash_t > 0:                             # best-lap celebration: BLINK the car white
-        st.flash_t -= 1
-        car.flash = WHITE if (st.flash_t // 3) & 1 else 0
-        if st.flash_t == 0:
-            car.flash = 0
-    st.lap_t += 1
-    st.race_t += 1
-
-    a_up = btn.is_pressed(btn.B)
-    a_dn = btn.is_pressed(btn.A)
-    a_left = btn.is_pressed(btn.LEFT)
-    a_right = btn.is_pressed(btn.RIGHT)
-
-    if a_up:
-        st.speed += ACCEL
-    elif a_dn:
-        st.speed -= BRAKE
-    else:
-        st.speed -= DRAG if st.speed > 0 else -DRAG
-        if abs(st.speed) < DRAG:
-            st.speed = 0.0
-    on_road = road.at_px(tm, min(WORLD_W - 1, int(st.subx)), min(WORLD_H - 1, int(st.suby)), tiles.B_SOLID)
-    cap = SPEED_MAX if on_road else OFFROAD_MAX
-    if not on_road:
-        st.speed *= OFFROAD_DRAG
-    st.speed = max(-cap * 0.5, min(cap, st.speed))
-    engine_update(on_road)
-    if st.speed != 0.0:
-        if abs(st.speed) <= GRIP_SPEED:
-            bite = min(1.0, abs(st.speed) / 2.5)
-        else:                                    # above grip speed steering weakens -> understeer, brake to turn
-            grip_t = (abs(st.speed) - GRIP_SPEED) / (SPEED_MAX - GRIP_SPEED)
-            bite = 1.0 - grip_t * (1.0 - TURN_MIN)
-        st.th += (a_right - a_left) * TURN * bite * (1 if st.speed > 0 else -1)
-
-    rad = math.radians(st.th)
-    st.subx += math.sin(rad) * st.speed
-    st.suby += -math.cos(rad) * st.speed
-    st.subx = max(0, min(WORLD_W, st.subx))
-    st.suby = max(0, min(WORLD_H, st.suby))
-
-    car.move(int(st.subx), int(st.suby))
-    car.angle = st.th
-
-    # --- lap: touch the far-left checkpoint, then cross the finish line rightward ---
-    if st.subx < CP_X:
-        st.cp_hit = True
-    if st.cp_hit and st.prev_subx < FIN_X <= st.subx and FIN_Y0 <= st.suby < FIN_Y1:
-        st.cp_hit = False
-        lap_time = st.lap_t
-        prev_best = st.best_t
-        finish_lap()
-        if st.lap >= NLAPS:
-            show_banner(FIN_FMT % (st.race_t // 40, st.best_t // 40))
-            st.mode = "finish"
-            engine_silence()
-        else:
-            sfx(SFX_LAP)                          # chime crossing into the next lap
-            pb = (prev_best == 0) or (lap_time < prev_best)
-            if pb:
-                st.flash_t = 18                   # ~3 white blinks on a NEW BEST lap only
-            flash_banner("LAP %d  %02ds%s" % (st.lap, lap_time // 40, "  BEST!" if pb else ""), 70)
-    st.prev_subx = st.subx
-
-    # --- record this lap (decimated) ---
-    if st.rec_n < REC_MAX and (st.lap_t - 1) % REC_STEP == 0:
-        rec_x[st.rec_n] = int(st.subx)
-        rec_y[st.rec_n] = int(st.suby)
-        rec_a[st.rec_n] = (int(st.th) % 360) // 2
-        st.rec_n += 1
-
-    # --- advance + draw each active ghost (loops its own trace, position interpolated) ---
-    for i in range(min(st.lap, NGHOST)):
-        n = g_len[i]
-        if n < 2:
+        if st.mode == "start" or st.mode == "finish":  # frozen title / results; B begins the countdown
+            if btn.just_pressed(btn.B):
+                reset_race()
+                st.mode = "countdown"
+                st.countdown_t = 0
+                st.cd_phase = -1
+                if engine:
+                    engine.start()
+            else:
+                engine_silence()
+            cam.follow(st.subx, st.suby).apply()
+            scene.refresh()
+            clock.tick()
             continue
-        if not g_done[i]:                        # play the lap once, then park at the finish until re-sync
-            p = g_pos[i] + 1.0 / REC_STEP
-            if p >= n - 1:
-                p = n - 1
-                g_done[i] = True
-            g_pos[i] = p
-        p = g_pos[i]
-        i0 = int(p)
-        i1 = i0 + 1 if i0 + 1 < n else i0
-        fr = p - i0
-        gx = g_x[i][i0] + (g_x[i][i1] - g_x[i][i0]) * fr
-        gy = g_y[i][i0] + (g_y[i][i1] - g_y[i][i0]) * fr
-        ghosts[i].move(int(gx), int(gy))
-        ghosts[i].angle = g_a[i][i0] * 2
-        ghosts[i].visible = True
 
-    cam.follow(st.subx, st.suby).apply()
-    scene.refresh()
+        if st.mode == "countdown":                     # 3 - 2 - 1 - GO!, with a blip each second
+            st.countdown_t += 1
+            ph = min(2, (st.countdown_t - 1) // 40)
+            if ph != st.cd_phase:
+                st.cd_phase = ph
+                show_banner(("3", "2", "1")[ph], big=True)
+                sfx(SFX_COUNT)
+            if st.countdown_t > 120:
+                sfx(SFX_GO)
+                flash_banner("GO!", 28, big=True)
+                st.last_lap = st.last_lsec = st.last_bsec = -1
+                st.mode = "race"
+            cam.follow(st.subx, st.suby).apply()
+            scene.refresh()
+            clock.tick()
+            continue
 
-    lap1 = st.lap + 1
-    lsec = st.lap_t // 40
-    bsec = st.best_t // 40
-    if lap1 != st.last_lap or lsec != st.last_lsec or bsec != st.last_bsec:
-        st.last_lap, st.last_lsec, st.last_bsec = lap1, lsec, bsec
-        msg = "LAP %d/%d  %02ds" % (min(st.lap + 1, NLAPS), NLAPS, st.lap_t // 40)
-        if st.best_t:
-            msg += "  BEST %02ds" % (st.best_t // 40)
-        info.set(msg)
-        hud.draw()
-    clock.tick()
+        if st.banner_t > 0:                            # tick down a flash banner (GO! / lap time)
+            st.banner_t -= 1
+            if st.banner_t == 0:
+                banner.set("")
+        if st.flash_t > 0:                             # best-lap celebration: BLINK the car white
+            st.flash_t -= 1
+            car.flash = WHITE if (st.flash_t // 3) & 1 else 0
+            if st.flash_t == 0:
+                car.flash = 0
+        st.lap_t += 1
+        st.race_t += 1
+
+        a_up = btn.is_pressed(btn.B)
+        a_dn = btn.is_pressed(btn.A)
+        a_left = btn.is_pressed(btn.LEFT)
+        a_right = btn.is_pressed(btn.RIGHT)
+
+        if a_up:
+            st.speed += ACCEL
+        elif a_dn:
+            st.speed -= BRAKE
+        else:
+            st.speed -= DRAG if st.speed > 0 else -DRAG
+            if abs(st.speed) < DRAG:
+                st.speed = 0.0
+        on_road = road.at_px(tm, min(WORLD_W - 1, int(st.subx)), min(WORLD_H - 1, int(st.suby)), tiles.B_SOLID)
+        cap = SPEED_MAX if on_road else OFFROAD_MAX
+        if not on_road:
+            st.speed *= OFFROAD_DRAG
+        st.speed = max(-cap * 0.5, min(cap, st.speed))
+        engine_update(on_road)
+        if st.speed != 0.0:
+            if abs(st.speed) <= GRIP_SPEED:
+                bite = min(1.0, abs(st.speed) / 2.5)
+            else:                                    # above grip speed steering weakens -> understeer, brake to turn
+                grip_t = (abs(st.speed) - GRIP_SPEED) / (SPEED_MAX - GRIP_SPEED)
+                bite = 1.0 - grip_t * (1.0 - TURN_MIN)
+            st.th += (a_right - a_left) * TURN * bite * (1 if st.speed > 0 else -1)
+
+        rad = math.radians(st.th)
+        st.subx += math.sin(rad) * st.speed
+        st.suby += -math.cos(rad) * st.speed
+        st.subx = max(0, min(WORLD_W, st.subx))
+        st.suby = max(0, min(WORLD_H, st.suby))
+
+        car.move(int(st.subx), int(st.suby))
+        car.angle = st.th
+
+        # --- lap: touch the far-left checkpoint, then cross the finish line rightward ---
+        if st.subx < CP_X:
+            st.cp_hit = True
+        if st.cp_hit and st.prev_subx < FIN_X <= st.subx and FIN_Y0 <= st.suby < FIN_Y1:
+            st.cp_hit = False
+            lap_time = st.lap_t
+            prev_best = st.best_t
+            finish_lap()
+            if st.lap >= NLAPS:
+                show_banner(FIN_FMT % (st.race_t // 40, st.best_t // 40))
+                st.mode = "finish"
+                engine_silence()
+            else:
+                sfx(SFX_LAP)                          # chime crossing into the next lap
+                pb = (prev_best == 0) or (lap_time < prev_best)
+                if pb:
+                    st.flash_t = 18                   # ~3 white blinks on a NEW BEST lap only
+                flash_banner("LAP %d  %02ds%s" % (st.lap, lap_time // 40, "  BEST!" if pb else ""), 70)
+        st.prev_subx = st.subx
+
+        # --- record this lap (decimated) ---
+        if st.rec_n < REC_MAX and (st.lap_t - 1) % REC_STEP == 0:
+            rec_x[st.rec_n] = int(st.subx)
+            rec_y[st.rec_n] = int(st.suby)
+            rec_a[st.rec_n] = (int(st.th) % 360) // 2
+            st.rec_n += 1
+
+        # --- advance + draw each active ghost (loops its own trace, position interpolated) ---
+        for i in range(min(st.lap, NGHOST)):
+            n = g_len[i]
+            if n < 2:
+                continue
+            if not g_done[i]:                        # play the lap once, then park at the finish until re-sync
+                p = g_pos[i] + 1.0 / REC_STEP
+                if p >= n - 1:
+                    p = n - 1
+                    g_done[i] = True
+                g_pos[i] = p
+            p = g_pos[i]
+            i0 = int(p)
+            i1 = i0 + 1 if i0 + 1 < n else i0
+            fr = p - i0
+            gx = g_x[i][i0] + (g_x[i][i1] - g_x[i][i0]) * fr
+            gy = g_y[i][i0] + (g_y[i][i1] - g_y[i][i0]) * fr
+            ghosts[i].move(int(gx), int(gy))
+            ghosts[i].angle = g_a[i][i0] * 2
+            ghosts[i].visible = True
+
+        cam.follow(st.subx, st.suby).apply()
+        scene.refresh()
+
+        lap1 = st.lap + 1
+        lsec = st.lap_t // 40
+        bsec = st.best_t // 40
+        if lap1 != st.last_lap or lsec != st.last_lsec or bsec != st.last_bsec:
+            st.last_lap, st.last_lsec, st.last_bsec = lap1, lsec, bsec
+            msg = "LAP %d/%d  %02ds" % (min(st.lap + 1, NLAPS), NLAPS, st.lap_t // 40)
+            if st.best_t:
+                msg += "  BEST %02ds" % (st.best_t // 40)
+            info.set(msg)
+            hud.draw()
+        clock.tick()
+
+
+main()

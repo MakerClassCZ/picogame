@@ -20,6 +20,7 @@ import picogame_clock
 import picogame_ui as ui
 import train_tiles
 import train_levels as L
+import picogame_cutscene as cut
 
 W, H = board.DISPLAY.width, board.DISPLAY.height
 BARH = 16                                          # reserved info strip (top)
@@ -291,64 +292,99 @@ def pw_confirm():
     info.draw()
 
 
+def title_splash():
+    """Full-screen PixelLab title art (colourful wordmark + credits), streamed from flash (~0 heap).
+    Blocks until A; on the desktop sim (no `_host` module on device) it auto-advances so headless
+    runs don't stall. Silently skipped if the .dat is missing or the screen has no integer 2x fit."""
+    def _has(_m):
+        try:
+            __import__(_m); return True
+        except ImportError:
+            return False
+    # Auto-advance the splash ONLY in headless runs (the smoke harness / the desktop sim's
+    # --frames + screenshot runs, where no one can press A). The browser playground (has `bridge`)
+    # and the device WAIT for A, like a real title screen.
+    hold = 90 if (_has("smoke") or (_has("_host") and not _has("bridge"))) else 0
+    try:
+        try:
+            here = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
+        except NameError:
+            here = "."      # the WASM playground execs the game without __file__; assets sit in cwd (/p)
+        pal = cut.palette(pg, __import__("train_title_pal"))
+        cut.play(pg, scene.display, bufA, btn, here + "/train_title.dat",
+                 pal=pal, w=320, h=240, caption="A: play", auto_hold=hold, clock=clock)
+        scene.invalidate()
+    except Exception:
+        pass
+
+
 # --- main loop -------------------------------------------------------------
-start_level(1)                                       # start straight on level 1 (no title screen)
+title_splash()
+start_level(1)                                       # start straight on level 1 after the title
 gc.collect()
 print("Train - arrows steer, reach the gate; A = enter a level code to jump.")
-while True:
-    dt = clock.tick()
-    btn.poll()
 
-    if st.gstate == PWENTRY:                         # editing a level code in the HUD; the board is frozen
-        if btn.just_pressed(btn.B):
-            st.gstate = PLAYING                      # cancel -> resume the current level
-            show_info()
-        elif btn.just_pressed(btn.A):
-            pw_confirm()
-        else:
-            moved = True
-            if btn.just_pressed(btn.UP):
-                st.pw_slots[st.pw_pos] = (st.pw_slots[st.pw_pos] + 1) % 26
-            elif btn.just_pressed(btn.DOWN):
-                st.pw_slots[st.pw_pos] = (st.pw_slots[st.pw_pos] - 1) % 26
-            elif btn.just_pressed(btn.LEFT):
-                st.pw_pos = (st.pw_pos - 1) % 5
-            elif btn.just_pressed(btn.RIGHT):
-                st.pw_pos = (st.pw_pos + 1) % 5
+
+def main():
+    # --- per-frame loop in a FUNCTION (not module scope): its names are array-indexed locals,
+    # not globals-dict lookups — a measured on-device win (picogame-game-design hot-loop guide).
+    while True:
+        dt = clock.tick()
+        btn.poll()
+
+        if st.gstate == PWENTRY:                         # editing a level code in the HUD; the board is frozen
+            if btn.just_pressed(btn.B):
+                st.gstate = PLAYING                      # cancel -> resume the current level
+                show_info()
+            elif btn.just_pressed(btn.A):
+                pw_confirm()
             else:
-                moved = False
-            if moved:
-                pw_render()
+                moved = True
+                if btn.just_pressed(btn.UP):
+                    st.pw_slots[st.pw_pos] = (st.pw_slots[st.pw_pos] + 1) % 26
+                elif btn.just_pressed(btn.DOWN):
+                    st.pw_slots[st.pw_pos] = (st.pw_slots[st.pw_pos] - 1) % 26
+                elif btn.just_pressed(btn.LEFT):
+                    st.pw_pos = (st.pw_pos - 1) % 5
+                elif btn.just_pressed(btn.RIGHT):
+                    st.pw_pos = (st.pw_pos + 1) % 5
+                else:
+                    moved = False
+                if moved:
+                    pw_render()
 
-    elif st.gstate == PLAYING:
-        if btn.just_pressed(btn.A):                  # A -> level-code editor (PicoLibSDK "KEY-A:PSW")
-            go_pwentry()
-        else:
-            # queue up to 2 turns so quick taps aren't lost (lets you pre-steer a corner)
-            for mask, d in TURNS:
-                if btn.just_pressed(mask) and len(st.dir_queue) < 2 and (not st.dir_queue or st.dir_queue[-1] != d):
-                    st.dir_queue.append(d)
-            if st.state == CRASH_ST:
-                st.crash_t -= dt
-                # step the explosion 160..169 across the crash duration
-                f = CRASH + int((CRASH_DUR - st.crash_t) / CRASH_DUR * (CRASHMAX - CRASH + 1))
-                tm.tile(st.head_x, st.head_y, f if f < CRASHMAX else CRASHMAX)
-                if st.crash_t <= 0:
-                    init_level(st.level)            # restart the scene
-            elif st.state == FINISH:
-                st.finish_t += dt                   # play the win arpeggio, then advance straight in
-                while st.finish_i < 3 and st.finish_t >= st.finish_i * WIN_NOTE_DT:
-                    sfx(SUCCESS[st.finish_i])
-                    st.finish_i += 1
-                if st.finish_t >= WIN_HOLD:
-                    if st.level < L.LEVNUM:
-                        start_level(st.level + 1, fresh=False)
-                    else:
-                        start_level(1)              # all levels done -> loop back to level 1
-            else:                                   # WAIT/GO: tick the animation (steps inside)
-                st.anim_acc += dt
-                if st.anim_acc >= ANIM_DT:
-                    st.anim_acc = 0.0
-                    anim_level()
+        elif st.gstate == PLAYING:
+            if btn.just_pressed(btn.A):                  # A -> level-code editor (PicoLibSDK "KEY-A:PSW")
+                go_pwentry()
+            else:
+                # queue up to 2 turns so quick taps aren't lost (lets you pre-steer a corner)
+                for mask, d in TURNS:
+                    if btn.just_pressed(mask) and len(st.dir_queue) < 2 and (not st.dir_queue or st.dir_queue[-1] != d):
+                        st.dir_queue.append(d)
+                if st.state == CRASH_ST:
+                    st.crash_t -= dt
+                    # step the explosion 160..169 across the crash duration
+                    f = CRASH + int((CRASH_DUR - st.crash_t) / CRASH_DUR * (CRASHMAX - CRASH + 1))
+                    tm.tile(st.head_x, st.head_y, f if f < CRASHMAX else CRASHMAX)
+                    if st.crash_t <= 0:
+                        init_level(st.level)            # restart the scene
+                elif st.state == FINISH:
+                    st.finish_t += dt                   # play the win arpeggio, then advance straight in
+                    while st.finish_i < 3 and st.finish_t >= st.finish_i * WIN_NOTE_DT:
+                        sfx(SUCCESS[st.finish_i])
+                        st.finish_i += 1
+                    if st.finish_t >= WIN_HOLD:
+                        if st.level < L.LEVNUM:
+                            start_level(st.level + 1, fresh=False)
+                        else:
+                            start_level(1)              # all levels done -> loop back to level 1
+                else:                                   # WAIT/GO: tick the animation (steps inside)
+                    st.anim_acc += dt
+                    if st.anim_acc >= ANIM_DT:
+                        st.anim_acc = 0.0
+                        anim_level()
 
-    scene.refresh()
+        scene.refresh()
+
+
+main()

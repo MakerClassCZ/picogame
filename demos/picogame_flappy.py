@@ -81,50 +81,59 @@ def new_game():
 
 
 new_game()
-_hud_score = -1        # HUD shadow: reformat+draw the Label only when SCORE changes
 kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 print("Press B (or A) to flap. Thread the gaps.")
-while True:
-    btn.poll()
 
-    if btn.just_pressed(btn.B) or btn.just_pressed(btn.A):
-        vy = -6.0
-        kit.jump()                 # flap
-    vy = min(8.0, vy + 0.5)
-    by += vy
-    if by < 8:
-        by = 8
-        vy = 0
-    if by > H - 8:                 # hit ground -> restart
-        kit.explosion()
-        new_game()
-        continue
-    bird.move(BIRD_X, int(by))
 
-    for t, b in pipes:
-        d = t.data
-        d["x"] -= SPEED
-        x = d["x"]
-        if x < -PIPE_W:
-            rightmost = max(pp[0].data["x"] for pp in pipes)   # x of the pipe currently furthest right
-            place_pipe((t, b), rightmost + SPACING)            # recycle this pipe one gap beyond it
-            continue
-        t.move(x, d["gap"] - PIPE_BM_H)
-        b.move(x, d["gap"] + GAP)
-        # score when bird passes the pipe centre
-        if not d["scored"] and x + PIPE_W < BIRD_X:
-            d["scored"] = True
-            score += 1
-            kit.coin()             # passed a pipe
-        # collision: the bird's box touches either pipe; the gap between them is safe
-        if bird.overlaps(t) or bird.overlaps(b):
+def main():
+    global by, score, vy
+    # --- per-frame loop in a FUNCTION: names become array-indexed locals, not globals-dict
+    # lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    _hud_score = -1        # HUD shadow: reformat+draw the Label only when SCORE changes
+    while True:
+        btn.poll()
+
+        if btn.just_pressed(btn.B) or btn.just_pressed(btn.A):
+            vy = -6.0
+            kit.jump()                 # flap
+        vy = min(8.0, vy + 0.5)
+        by += vy
+        if by < 8:
+            by = 8
+            vy = 0
+        if by > H - 8:                 # hit ground -> restart
             kit.explosion()
             new_game()
-            break
+            continue
+        bird.move(BIRD_X, int(by))
 
-    scene.refresh()
-    kit.tick()
-    if score != _hud_score:
-        _hud_score = score
-        hud.set("SCORE %d" % score)
-    clock.tick()
+        for t, b in pipes:
+            d = t.data
+            d["x"] -= SPEED
+            x = d["x"]
+            if x < -PIPE_W:
+                rightmost = max(pp[0].data["x"] for pp in pipes)   # x of the pipe currently furthest right
+                place_pipe((t, b), rightmost + SPACING)            # recycle this pipe one gap beyond it
+                continue
+            t.move(x, d["gap"] - PIPE_BM_H)
+            b.move(x, d["gap"] + GAP)
+            # score when bird passes the pipe centre
+            if not d["scored"] and x + PIPE_W < BIRD_X:
+                d["scored"] = True
+                score += 1
+                kit.coin()             # passed a pipe
+            # collision: the bird's box touches either pipe; the gap between them is safe
+            if bird.overlaps(t) or bird.overlaps(b):
+                kit.explosion()
+                new_game()
+                break
+
+        scene.refresh()
+        kit.tick()
+        if score != _hud_score:
+            _hud_score = score
+            hud.set("SCORE %d" % score)
+        clock.tick()
+
+
+main()

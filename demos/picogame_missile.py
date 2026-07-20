@@ -66,13 +66,9 @@ scene.add(crosshair)
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 2, pg.rgb565(255, 230, 160), pg.rgb565(10, 8, 30))
 hud.reserve(21)
 
-score = 0
-frame = 0
 # shadow copies of the last-shown HUD values - only format+set the string when
 # SCORE or the live-city count actually changed (avoids a throwaway %-format
 # alloc every frame). Shadows start at -1 so the first frame always draws.
-_h_score = -1
-_h_cities = -1
 
 
 def live_cities():
@@ -105,66 +101,78 @@ def spawn():
 
 
 print("D-pad aim | B fire blast. Defend the cities!")
-while True:
-    btn.poll()
-    frame += 1
-    dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
-    dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
-    if dx or dy:
-        crosshair.move(max(0, min(W - 7, crosshair.x + dx * 5)),
-                       max(16, min(GROUND, crosshair.y + dy * 5)))
 
-    if btn.just_pressed(btn.B):
-        ex, ey = crosshair.x + 3, crosshair.y + 3
-        beam[0], beam[1], beam[2], beam[3], beam[4] = BATTERY[0], BATTERY[1], ex, ey, 4
-        particles.emit(ex, ey, 26, 5, 24, pg.rgb565(255, 200, 60))
-        kit.boom()                 # blast detonation
+
+def main():
+    # --- per-frame loop in a FUNCTION (not module scope): names become array-indexed locals,
+    # not globals-dict lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    score = 0
+    frame = 0
+    _h_score = -1
+    _h_cities = -1
+    while True:
+        btn.poll()
+        frame += 1
+        dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
+        dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
+        if dx or dy:
+            crosshair.move(max(0, min(W - 7, crosshair.x + dx * 5)),
+                           max(16, min(GROUND, crosshair.y + dy * 5)))
+
+        if btn.just_pressed(btn.B):
+            ex, ey = crosshair.x + 3, crosshair.y + 3
+            beam[0], beam[1], beam[2], beam[3], beam[4] = BATTERY[0], BATTERY[1], ex, ey, 4
+            particles.emit(ex, ey, 26, 5, 24, pg.rgb565(255, 200, 60))
+            kit.boom()                 # blast detonation
+            for m in incoming.items:
+                if not m.visible:
+                    continue
+                ddx, ddy = m.data[0] - ex, m.data[1] - ey
+                if ddx * ddx + ddy * ddy < BLAST_R * BLAST_R:   # squared dist, no sqrt
+                    incoming.free(m)
+                    score += 25
+                    particles.emit(int(m.data[0]), int(m.data[1]), 10, 4, 18, pg.rgb565(255, 120, 120))
+
+        if frame % 40 == 0:
+            spawn()
+
         for m in incoming.items:
             if not m.visible:
                 continue
-            ddx, ddy = m.data[0] - ex, m.data[1] - ey
-            if ddx * ddx + ddy * ddy < BLAST_R * BLAST_R:   # squared dist, no sqrt
+            m.data[0] += m.data[2]
+            m.data[1] += m.data[3]
+            if m.data[1] >= GROUND:
                 incoming.free(m)
-                score += 25
-                particles.emit(int(m.data[0]), int(m.data[1]), 10, 4, 18, pg.rgb565(255, 120, 120))
+                # destroy the nearest living city
+                best = None
+                for c in cities:
+                    if c.visible and (best is None or abs(c.x + 12 - m.data[0]) < abs(best.x + 12 - m.data[0])):
+                        best = c
+                if best is not None:
+                    best.visible = False
+                    kit.hurt()             # a city lost
+                    particles.emit(best.x + 12, GROUND, 20, 4, 22, pg.rgb565(90, 200, 120))
+            else:
+                m.move(int(m.data[0]), int(m.data[1]))
 
-    if frame % 40 == 0:
-        spawn()
-
-    for m in incoming.items:
-        if not m.visible:
-            continue
-        m.data[0] += m.data[2]
-        m.data[1] += m.data[3]
-        if m.data[1] >= GROUND:
-            incoming.free(m)
-            # destroy the nearest living city
-            best = None
+        n_cities = count_live_cities()
+        if n_cities == 0:            # all gone -> restart
+            kit.explosion()
+            score = 0
             for c in cities:
-                if c.visible and (best is None or abs(c.x + 12 - m.data[0]) < abs(best.x + 12 - m.data[0])):
-                    best = c
-            if best is not None:
-                best.visible = False
-                kit.hurt()             # a city lost
-                particles.emit(best.x + 12, GROUND, 20, 4, 22, pg.rgb565(90, 200, 120))
-        else:
-            m.move(int(m.data[0]), int(m.data[1]))
+                c.visible = True
+            incoming.free_all()
+            n_cities = len(cities)
 
-    n_cities = count_live_cities()
-    if n_cities == 0:            # all gone -> restart
-        kit.explosion()
-        score = 0
-        for c in cities:
-            c.visible = True
-        incoming.free_all()
-        n_cities = len(cities)
+        if beam[4] > 0:                          # the firing beam is a brief flash
+            beam[4] -= 1
+        kit.tick()
+        particles.tick()
+        if score != _h_score or n_cities != _h_cities:   # before refresh -> painted by it
+            _h_score, _h_cities = score, n_cities
+            hud.set("SCORE %05d  CITIES %d" % (score, n_cities))
+        scene.refresh()
+        clock.tick()
 
-    if beam[4] > 0:                          # the firing beam is a brief flash
-        beam[4] -= 1
-    kit.tick()
-    particles.tick()
-    if score != _h_score or n_cities != _h_cities:   # before refresh -> painted by it
-        _h_score, _h_cities = score, n_cities
-        hud.set("SCORE %05d  CITIES %d" % (score, n_cities))
-    scene.refresh()
-    clock.tick()
+
+main()

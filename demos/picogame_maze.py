@@ -126,41 +126,49 @@ hud.draw()
 kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 print("Maze - arrows move, A reveals the door. Find the exit.")
 
-while True:
-    btn.poll()
-    nx, ny = st.px, st.py
-    # btn.repeat gives grid auto-repeat for free: True on press, then every 5 frames while held
-    ddx = btn.repeat(btn.RIGHT, 5, 5) - btn.repeat(btn.LEFT, 5, 5)
-    ddy = btn.repeat(btn.DOWN, 5, 5) - btn.repeat(btn.UP, 5, 5)
-    if ddx:                                     # horizontal takes precedence over vertical
-        nx += 1 if ddx > 0 else -1
-    elif ddy:
-        ny += 1 if ddy > 0 else -1
 
-    if (nx != st.px or ny != st.py) and 0 <= nx < COLS and 0 <= ny < ROWS and maze[ny * COLS + nx] != WALL:
-        tm.tile(st.px, st.py, maze[st.py * COLS + st.px])   # restore the tile we leave (floor/door)
-        st.px, st.py = nx, ny
-        if st.px == st.dx and st.py == st.dy:     # reached the exit -> next level
-            st.level += 1
-            title.set("MAZE  LVL %d" % st.level)
-            hud.draw()
-            kit.powerup()              # reached the exit
-            new_level()
-        else:
-            reveal(st.px, st.py)
-            tm.tile(st.px, st.py, PLAYER)
 
-    # A = flash the hidden door location as a hint, then restore it
-    if btn.just_pressed(btn.A):
-        st.reveal_door = 24
-        kit.blip()                 # door hint
-    if st.reveal_door > 0:
-        st.reveal_door -= 1
-        if st.reveal_door == 0:
-            tm.tile(st.dx, st.dy, DOOR if seen[st.dy * COLS + st.dx] else HIDDEN)   # restore
-        else:
-            tm.tile(st.dx, st.dy, DOOR if (st.reveal_door // 4) % 2 else HIDDEN)   # blink
+def main():
+    # --- per-frame loop in a FUNCTION (not module scope): its names are array-indexed locals,
+    # not globals-dict lookups — a measured on-device win (picogame-game-design hot-loop guide).
+    while True:
+        btn.poll()
+        nx, ny = st.px, st.py
+        # btn.repeat gives grid auto-repeat for free: True on press, then every 5 frames while held
+        ddx = btn.repeat(btn.RIGHT, 5, 5) - btn.repeat(btn.LEFT, 5, 5)
+        ddy = btn.repeat(btn.DOWN, 5, 5) - btn.repeat(btn.UP, 5, 5)
+        if ddx:                                     # horizontal takes precedence over vertical
+            nx += 1 if ddx > 0 else -1
+        elif ddy:
+            ny += 1 if ddy > 0 else -1
 
-    kit.tick()
-    scene.refresh()
-    clock.tick()
+        if (nx != st.px or ny != st.py) and 0 <= nx < COLS and 0 <= ny < ROWS and maze[ny * COLS + nx] != WALL:
+            tm.tile(st.px, st.py, maze[st.py * COLS + st.px])   # restore the tile we leave (floor/door)
+            st.px, st.py = nx, ny
+            if st.px == st.dx and st.py == st.dy:     # reached the exit -> next level
+                st.level += 1
+                title.set("MAZE  LVL %d" % st.level)
+                hud.draw()
+                kit.powerup()              # reached the exit
+                new_level()
+            else:
+                reveal(st.px, st.py)
+                tm.tile(st.px, st.py, PLAYER)
+
+        # A = flash the hidden door location as a hint, then restore it
+        if btn.just_pressed(btn.A):
+            st.reveal_door = 24
+            kit.blip()                 # door hint
+        if st.reveal_door > 0:
+            st.reveal_door -= 1
+            if st.reveal_door == 0:
+                tm.tile(st.dx, st.dy, DOOR if seen[st.dy * COLS + st.dx] else HIDDEN)   # restore
+            else:
+                tm.tile(st.dx, st.dy, DOOR if (st.reveal_door // 4) % 2 else HIDDEN)   # blink
+
+        kit.tick()
+        scene.refresh()
+        clock.tick()
+
+
+main()

@@ -250,7 +250,6 @@ class State:
 
 
 st = State()
-_hud_key = None
 
 
 def clear_field():                                   # despawn everything in play + holster the torpedo
@@ -484,172 +483,182 @@ show_banner(TXT_START)
 st.mode = "start"                 # boot to the start screen; A dives in
 gc.collect()                      # compact the heap after all setup before the steady-state loop
 frame = 0
-while True:
-    btn.poll()
-    frame += 1
 
-    if st.mode != "play":                             # frozen screens: start / level-complete / game-over
-        if btn.just_pressed(btn.A):
-            resume_play() if st.mode == "leveldone" else begin_play()
-        present()
-        continue
 
-    # --- player ---
-    dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
-    dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
-    if dx:
-        st.facing = dx
-    if dx or dy:
-        sub.move(max(0, min(W - SUB_W, sub.x + dx * 4)),
-                 max(SURFACE_TOP, min(FLOOR_Y - SUB_H, sub.y + dy * 4)))
-    if frame % 4 == 0:
-        st.anim = (st.anim + 1) % 3
-    sub.frame = st.anim + (3 if st.facing > 0 else 0)
+def main():
+    global frame
+    # --- per-frame loop in a FUNCTION: names become array-indexed locals, not globals-dict
+    # lookups (measured on-device win; picogame-game-design hot-loop style guide).
+    _hud_key = None
+    while True:
+        btn.poll()
+        frame += 1
 
-    # --- fire one torpedo ---
-    if (btn.just_pressed(btn.A) or btn.just_pressed(btn.B)) and not torp.visible:   # A or B fire (simple game)
-        torp.visible = True
-        st.torp_vx = 8 if st.facing > 0 else -8
-        torp.move(sub.x + (SUB_W if st.facing > 0 else -8), sub.y + 8)
-        sfx(SND_FIRE)
-    if torp.visible:
-        nx = torp.x + st.torp_vx
-        if nx < -8 or nx > W:
-            torp.visible = False
-        else:
-            torp.move(nx, torp.y)
-    # hoist the player-torpedo collision point ONCE per frame (torp doesn't move again this frame);
-    # reused across every fish/diver + enemy sub, instead of building a fresh tuple per target.
-    torp_pt = (torp.x + 4, torp.y + 2)
-
-    # --- spawn fish/divers, and (from level 3) enemy subs ---
-    if frame % max(9, 18 - st.level) == 0 and st.spawn_tick < spawn_burst_count():
-        spawn_one()
-        st.spawn_tick += 1
-    if frame % 40 == 0:
-        st.spawn_tick = 0
-    if st.level >= 3:
-        cad = max(50, 150 - st.level * 12)               # subs come faster at higher levels
-        if frame % cad == 0:
-            spawn_sub()
-
-    # --- fish / divers ---
-    for e in enemies.items:
-        if not e.visible:
+        if st.mode != "play":                             # frozen screens: start / level-complete / game-over
+            if btn.just_pressed(btn.A):
+                resume_play() if st.mode == "leveldone" else begin_play()
+            present()
             continue
-        nx = e.x + e.data[1]
-        if nx < -ENEMY_W or nx > W:
-            enemies.free(e)
-            continue
-        e.move(nx, e.y)
-        if frame % 6 == 0:                           # animate fish AND divers (a swim/kick cycle)
-            base = 3 if e.data[1] > 0 else 0
-            e.frame = base + ((e.frame + 1) % 3)
-        if e.data[0] == 2 and torp.visible and e.overlaps(torp_pt):
-            bubbles.emit(e.x + 10, e.y + 9, 10, 3, 18, pg.rgb565(255, 200, 60))
-            enemies.free(e)
-            torp.visible = False
-            st.score += 3
-            sfx_seq(SEQ_HIT)
-            maybe_extra_life()
-            continue
-        if e.overlaps(sub, 4):
-            if e.data[0] == 1:
-                if st.divers < 6:
-                    st.divers += 1
-                    sfx_seq(SEQ_PICK)
-                enemies.free(e)
+
+        # --- player ---
+        dx = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
+        dy = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
+        if dx:
+            st.facing = dx
+        if dx or dy:
+            sub.move(max(0, min(W - SUB_W, sub.x + dx * 4)),
+                     max(SURFACE_TOP, min(FLOOR_Y - SUB_H, sub.y + dy * 4)))
+        if frame % 4 == 0:
+            st.anim = (st.anim + 1) % 3
+        sub.frame = st.anim + (3 if st.facing > 0 else 0)
+
+        # --- fire one torpedo ---
+        if (btn.just_pressed(btn.A) or btn.just_pressed(btn.B)) and not torp.visible:   # A or B fire (simple game)
+            torp.visible = True
+            st.torp_vx = 8 if st.facing > 0 else -8
+            torp.move(sub.x + (SUB_W if st.facing > 0 else -8), sub.y + 8)
+            sfx(SND_FIRE)
+        if torp.visible:
+            nx = torp.x + st.torp_vx
+            if nx < -8 or nx > W:
+                torp.visible = False
             else:
+                torp.move(nx, torp.y)
+        # hoist the player-torpedo collision point ONCE per frame (torp doesn't move again this frame);
+        # reused across every fish/diver + enemy sub, instead of building a fresh tuple per target.
+        torp_pt = (torp.x + 4, torp.y + 2)
+
+        # --- spawn fish/divers, and (from level 3) enemy subs ---
+        if frame % max(9, 18 - st.level) == 0 and st.spawn_tick < spawn_burst_count():
+            spawn_one()
+            st.spawn_tick += 1
+        if frame % 40 == 0:
+            st.spawn_tick = 0
+        if st.level >= 3:
+            cad = max(50, 150 - st.level * 12)               # subs come faster at higher levels
+            if frame % cad == 0:
+                spawn_sub()
+
+        # --- fish / divers ---
+        for e in enemies.items:
+            if not e.visible:
+                continue
+            nx = e.x + e.data[1]
+            if nx < -ENEMY_W or nx > W:
                 enemies.free(e)
+                continue
+            e.move(nx, e.y)
+            if frame % 6 == 0:                           # animate fish AND divers (a swim/kick cycle)
+                base = 3 if e.data[1] > 0 else 0
+                e.frame = base + ((e.frame + 1) % 3)
+            if e.data[0] == 2 and torp.visible and e.overlaps(torp_pt):
+                bubbles.emit(e.x + 10, e.y + 9, 10, 3, 18, pg.rgb565(255, 200, 60))
+                enemies.free(e)
+                torp.visible = False
+                st.score += 3
+                sfx_seq(SEQ_HIT)
+                maybe_extra_life()
+                continue
+            if e.overlaps(sub, 4):
+                if e.data[0] == 1:
+                    if st.divers < 6:
+                        st.divers += 1
+                        sfx_seq(SEQ_PICK)
+                    enemies.free(e)
+                else:
+                    enemies.free(e)
+                    sfx_seq(SEQ_DIE)
+                    lose_life()
+
+        # --- enemy submarines: move, animate, telegraph (blink), fire ---
+        for s in subs.items:
+            if not s.visible:
+                continue
+            nx = s.x + s.data[0]
+            if nx < -ENEMY_W or nx > W:
+                subs.free(s)
+                continue
+            s.move(nx, s.y)
+            if frame % 6 == 0:
+                base = 3 if s.data[0] > 0 else 0
+                s.frame = base + ((s.frame + 1) % 3)
+            fc = s.data[1] - 1
+            s.data[1] = fc
+            if 0 < fc <= 12:                                 # telegraph: blink white before firing
+                s.flash = WHITE if (fc // 3) % 2 else 0
+            elif fc <= 0:
+                s.flash = 0
+                if 0 <= s.x <= W - ENEMY_W:                  # only fire when on screen
+                    fire_enemy_torp(s)
+                s.data[1] = max(22, random.randint(40, 85) - st.level * 4)
+            # player torpedo kills the sub
+            if torp.visible and s.overlaps(torp_pt):
+                torp.visible = False
+                kill_sub(s)
+                continue
+            # ramming the sub
+            if s.overlaps(sub, 6):
+                subs.free(s)
                 sfx_seq(SEQ_DIE)
                 lose_life()
 
-    # --- enemy submarines: move, animate, telegraph (blink), fire ---
-    for s in subs.items:
-        if not s.visible:
-            continue
-        nx = s.x + s.data[0]
-        if nx < -ENEMY_W or nx > W:
-            subs.free(s)
-            continue
-        s.move(nx, s.y)
-        if frame % 6 == 0:
-            base = 3 if s.data[0] > 0 else 0
-            s.frame = base + ((s.frame + 1) % 3)
-        fc = s.data[1] - 1
-        s.data[1] = fc
-        if 0 < fc <= 12:                                 # telegraph: blink white before firing
-            s.flash = WHITE if (fc // 3) % 2 else 0
-        elif fc <= 0:
-            s.flash = 0
-            if 0 <= s.x <= W - ENEMY_W:                  # only fire when on screen
-                fire_enemy_torp(s)
-            s.data[1] = max(22, random.randint(40, 85) - st.level * 4)
-        # player torpedo kills the sub
-        if torp.visible and s.overlaps(torp_pt):
-            torp.visible = False
-            kill_sub(s)
-            continue
-        # ramming the sub
-        if s.overlaps(sub, 6):
-            subs.free(s)
-            sfx_seq(SEQ_DIE)
-            lose_life()
-
-    # --- enemy torpedoes: hit the player, or get shot down by the player's torpedo ---
-    for et in etorps.items:
-        if not et.visible:
-            continue
-        nx = et.x + et.data[0]
-        if nx < -8 or nx > W:
-            etorps.free(et)
-            continue
-        et.move(nx, et.y)
-        et_pt = (et.x + 4, et.y + 3)                  # this enemy torpedo's point, computed once
-        if torp.visible and torp.overlaps(et_pt):
-            bubbles.emit(et.x + 4, et.y + 3, 6, 2, 12, pg.rgb565(180, 220, 255))
-            etorps.free(et)
-            torp.visible = False
-            continue
-        if sub.overlaps(et_pt, 4):
-            etorps.free(et)
-            sfx_seq(SEQ_DIE)
-            lose_life()
-
-    # --- oxygen (surface refills via a latch) + the classic low-O2 heartbeat ---
-    if sub.y <= SURFACE_Y + 2:
-        if not st.surfaced:
-            st.surfaced = 1
-            surface_divers()
-        if st.ox < OX_MAX:                            # O2 refills GRADUALLY; the tick's pitch rises with the tank
-            st.ox = min(OX_MAX, st.ox + 2.5)
-            if frame % 4 == 0:
-                sfx(REFILL_NOTES[min(6, max(0, int((st.ox - OX_FLOOR) / 5)))])
-    else:
-        st.surfaced = 0
-        st.ox_tick += 1
-        if st.ox_tick >= 10:
-            st.ox_tick = 0
-            st.ox -= 1
-            if st.ox <= OX_FLOOR:
+        # --- enemy torpedoes: hit the player, or get shot down by the player's torpedo ---
+        for et in etorps.items:
+            if not et.visible:
+                continue
+            nx = et.x + et.data[0]
+            if nx < -8 or nx > W:
+                etorps.free(et)
+                continue
+            et.move(nx, et.y)
+            et_pt = (et.x + 4, et.y + 3)                  # this enemy torpedo's point, computed once
+            if torp.visible and torp.overlaps(et_pt):
+                bubbles.emit(et.x + 4, et.y + 3, 6, 2, 12, pg.rgb565(180, 220, 255))
+                etorps.free(et)
+                torp.visible = False
+                continue
+            if sub.overlaps(et_pt, 4):
+                etorps.free(et)
                 sfx_seq(SEQ_DIE)
                 lose_life()
-    ox = st.ox
-    if ox < 72:                                          # accelerating TWO-TONE heartbeat as O2 drops
-        if ox < OX_FLOOR + 2:
-            interval = 10
-        elif ox < OX_FLOOR + 6:
-            interval = 20
+
+        # --- oxygen (surface refills via a latch) + the classic low-O2 heartbeat ---
+        if sub.y <= SURFACE_Y + 2:
+            if not st.surfaced:
+                st.surfaced = 1
+                surface_divers()
+            if st.ox < OX_MAX:                            # O2 refills GRADUALLY; the tick's pitch rises with the tank
+                st.ox = min(OX_MAX, st.ox + 2.5)
+                if frame % 4 == 0:
+                    sfx(REFILL_NOTES[min(6, max(0, int((st.ox - OX_FLOOR) / 5)))])
         else:
-            interval = 30
-        if frame % interval == 0:
-            sfx(SND_OXLOW if (frame // interval) % 2 else SND_OXLOW2)
+            st.surfaced = 0
+            st.ox_tick += 1
+            if st.ox_tick >= 10:
+                st.ox_tick = 0
+                st.ox -= 1
+                if st.ox <= OX_FLOOR:
+                    sfx_seq(SEQ_DIE)
+                    lose_life()
+        ox = st.ox
+        if ox < 72:                                          # accelerating TWO-TONE heartbeat as O2 drops
+            if ox < OX_FLOOR + 2:
+                interval = 10
+            elif ox < OX_FLOOR + 6:
+                interval = 20
+            else:
+                interval = 30
+            if frame % interval == 0:
+                sfx(SND_OXLOW if (frame // interval) % 2 else SND_OXLOW2)
 
-    # --- HUD only when it actually changed (oxygen Canvas redraw is the costly bit) ---
-    key = (st.score, st.divers, st.lives, ox_barwidth())
-    if key != _hud_key:
-        _hud_key = key
-        draw_hud()
+        # --- HUD only when it actually changed (oxygen Canvas redraw is the costly bit) ---
+        key = (st.score, st.divers, st.lives, ox_barwidth())
+        if key != _hud_key:
+            _hud_key = key
+            draw_hud()
 
-    prompt.visible = st.divers >= 6 and (frame // 8) % 2 == 0   # blink the SURFACE! goal cue
-    present()
+        prompt.visible = st.divers >= 6 and (frame // 8) % 2 == 0   # blink the SURFACE! goal cue
+        present()
+
+
+main()

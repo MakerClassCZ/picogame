@@ -555,84 +555,92 @@ for _t in tanks:
     place_barrel(_t)
 show_title()
 
-while True:
-    btn.poll()
 
-    if st.state == "title":
-        if btn.just_pressed(btn.A):
-            _m = "ai"
-        elif btn.just_pressed(btn.B):
-            _m = "2p"
-        elif btn.just_pressed(btn.X):
-            _m = "demo"
-        else:
-            _m = None
-        if _m:
-            st.mode = _m
-            st.score[0] = st.score[1] = 0    # new match -> reset score
-            start_game()
 
-    elif st.state == "aim":
-        if is_ai(st.cur):
-            t = tanks[st.cur]
-            enemy = tanks[1 - st.cur]
-            n = 0
-            while st.ai_i < AI_CANDS_N and n < AI_STEP:   # score a chunk of candidates this frame
-                ang = AI_ANG_LO + AI_ANG_STEP * (st.ai_i // AI_PWR_N)
-                pw = AI_PWR_LO + AI_PWR_STEP * (st.ai_i % AI_PWR_N)
-                st.ai_i += 1
-                n += 1
-                lx, ly = sim_shot(t, ang, pw)
-                d = abs(lx - enemy["x"]) + abs(ly - (enemy["spr"].y - 4)) * 0.3
-                if d < st.ai_bd:
-                    st.ai_bd, st.ai_best = d, (ang, pw)
-            t["angle"], t["power"] = st.ai_best              # provisional aim: barrel swings as it "thinks"
-            st.think -= 1
-            # dots + HUD depend only on (angle,power) here (x/dir/score/wind fixed this turn) -> redraw
-            # ONLY when the provisional aim actually changed, not every one of the 18 think frames.
-            if t["angle"] != st.hud_ang or t["power"] != st.hud_pw:
-                st.hud_ang, st.hud_pw = t["angle"], t["power"]
-                update_dots(t)
-                update_hud()
-            if st.think <= 0:
-                t["angle"] = max(5, min(85, st.ai_best[0] + random.randint(-AI_ANG_ERR, AI_ANG_ERR)))
-                t["power"] = max(5, min(100, st.ai_best[1] + random.randint(-AI_PWR_ERR, AI_PWR_ERR)))
-                fire(t)
-        else:
-            t = tanks[st.cur]
-            changed = False
-            # angle is relative to facing: the key pointing AWAY from the enemy raises the barrel
-            up_key = btn.LEFT if t["dir"] > 0 else btn.RIGHT
-            dn_key = btn.RIGHT if t["dir"] > 0 else btn.LEFT
-            held = (btn.is_pressed(up_key) or btn.is_pressed(dn_key) or
-                    btn.is_pressed(btn.UP) or btn.is_pressed(btn.DOWN))
-            st.hold = st.hold + 1 if held else 0
-            step = 3 if st.hold > 8 else 1              # accelerate after ~0.3s held; ±1 on a tap (fine control)
-            if btn.is_pressed(up_key):
-                t["angle"] = min(85, t["angle"] + step); changed = True
-            if btn.is_pressed(dn_key):
-                t["angle"] = max(5, t["angle"] - step); changed = True
-            if btn.is_pressed(btn.UP):
-                t["power"] = min(100, t["power"] + step); changed = True
-            if btn.is_pressed(btn.DOWN):
-                t["power"] = max(5, t["power"] - step); changed = True
-            if changed:
-                update_dots(t)
-                update_hud()
-            if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
-                fire(t)
+def main():
+    # --- per-frame loop in a FUNCTION (not module scope): its names are array-indexed locals,
+    # not globals-dict lookups — a measured on-device win (picogame-game-design hot-loop guide).
+    while True:
+        btn.poll()
 
-    elif st.state == "fire":
-        step_fire()
+        if st.state == "title":
+            if btn.just_pressed(btn.A):
+                _m = "ai"
+            elif btn.just_pressed(btn.B):
+                _m = "2p"
+            elif btn.just_pressed(btn.X):
+                _m = "demo"
+            else:
+                _m = None
+            if _m:
+                st.mode = _m
+                st.score[0] = st.score[1] = 0    # new match -> reset score
+                start_game()
 
-    elif st.state == "over":
-        if btn.just_pressed(btn.A):
-            start_game()          # next round, keep the running score
-        elif btn.just_pressed(btn.B):
-            show_title()          # back to menu (a new match resets the score)
+        elif st.state == "aim":
+            if is_ai(st.cur):
+                t = tanks[st.cur]
+                enemy = tanks[1 - st.cur]
+                n = 0
+                while st.ai_i < AI_CANDS_N and n < AI_STEP:   # score a chunk of candidates this frame
+                    ang = AI_ANG_LO + AI_ANG_STEP * (st.ai_i // AI_PWR_N)
+                    pw = AI_PWR_LO + AI_PWR_STEP * (st.ai_i % AI_PWR_N)
+                    st.ai_i += 1
+                    n += 1
+                    lx, ly = sim_shot(t, ang, pw)
+                    d = abs(lx - enemy["x"]) + abs(ly - (enemy["spr"].y - 4)) * 0.3
+                    if d < st.ai_bd:
+                        st.ai_bd, st.ai_best = d, (ang, pw)
+                t["angle"], t["power"] = st.ai_best              # provisional aim: barrel swings as it "thinks"
+                st.think -= 1
+                # dots + HUD depend only on (angle,power) here (x/dir/score/wind fixed this turn) -> redraw
+                # ONLY when the provisional aim actually changed, not every one of the 18 think frames.
+                if t["angle"] != st.hud_ang or t["power"] != st.hud_pw:
+                    st.hud_ang, st.hud_pw = t["angle"], t["power"]
+                    update_dots(t)
+                    update_hud()
+                if st.think <= 0:
+                    t["angle"] = max(5, min(85, st.ai_best[0] + random.randint(-AI_ANG_ERR, AI_ANG_ERR)))
+                    t["power"] = max(5, min(100, st.ai_best[1] + random.randint(-AI_PWR_ERR, AI_PWR_ERR)))
+                    fire(t)
+            else:
+                t = tanks[st.cur]
+                changed = False
+                # angle is relative to facing: the key pointing AWAY from the enemy raises the barrel
+                up_key = btn.LEFT if t["dir"] > 0 else btn.RIGHT
+                dn_key = btn.RIGHT if t["dir"] > 0 else btn.LEFT
+                held = (btn.is_pressed(up_key) or btn.is_pressed(dn_key) or
+                        btn.is_pressed(btn.UP) or btn.is_pressed(btn.DOWN))
+                st.hold = st.hold + 1 if held else 0
+                step = 3 if st.hold > 8 else 1              # accelerate after ~0.3s held; ±1 on a tap (fine control)
+                if btn.is_pressed(up_key):
+                    t["angle"] = min(85, t["angle"] + step); changed = True
+                if btn.is_pressed(dn_key):
+                    t["angle"] = max(5, t["angle"] - step); changed = True
+                if btn.is_pressed(btn.UP):
+                    t["power"] = min(100, t["power"] + step); changed = True
+                if btn.is_pressed(btn.DOWN):
+                    t["power"] = max(5, t["power"] - step); changed = True
+                if changed:
+                    update_dots(t)
+                    update_hud()
+                if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
+                    fire(t)
 
-    parts.tick()
+        elif st.state == "fire":
+            step_fire()
 
-    sfx_tick()
-    scene.refresh()
-    clock.tick()
+        elif st.state == "over":
+            if btn.just_pressed(btn.A):
+                start_game()          # next round, keep the running score
+            elif btn.just_pressed(btn.B):
+                show_title()          # back to menu (a new match resets the score)
+
+        parts.tick()
+
+        sfx_tick()
+        scene.refresh()
+        clock.tick()
+
+
+main()
