@@ -259,8 +259,12 @@ NUMCOINS = len(coins)
 
 
 class State:
-    """The whole game's mutable state -- one object, passed where a function needs it."""
+    """The whole game's mutable state -- one object, passed where a function needs it. __init__ calls
+    reset()."""
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.facing = DOWN
         self.coins = 0
         self.hp = MAX_HP
@@ -315,125 +319,128 @@ def open_door():
 
 
 camera_follow()
-dt = 1 / 30
-while True:
-    btn.poll()
-    st.frame_count += 1
+def main():                          # loop in a function -> its names are fast locals (see step 6)
+    dt = 1 / 30                      # seed the first frame; re-set from clock.tick() each loop
+    while True:
+        btn.poll()
+        st.frame_count += 1
 
-    if st.mode == WON:
-        if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
-            scene.refresh()
-            dialog.draw(scene.display, buffer_a, ["You reached the shrine!", "", "QUEST COMPLETE", "(press A)"])
-            if audio:
-                audio.sfx(snd_win)            # bright chime on the win
-            st.overlay_shown = True
-        if btn.just_pressed(btn.A):
-            st.mode = EXPLORE
-            scene.invalidate()
-        clock.tick()
-        continue
+        if st.mode == WON:
+            if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
+                scene.refresh()
+                dialog.draw(scene.display, buffer_a, ["You reached the shrine!", "", "QUEST COMPLETE", "(press A)"])
+                if audio:
+                    audio.sfx(snd_win)            # bright chime on the win
+                st.overlay_shown = True
+            if btn.just_pressed(btn.A):
+                st.mode = EXPLORE
+                scene.invalidate()
+            clock.tick()
+            continue
 
-    if st.mode == DIALOG:
-        if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
-            scene.refresh()
-            dialog.draw(scene.display, buffer_a, dialog_lines(st))
-            st.overlay_shown = True
-        if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
-            if audio:
-                audio.sfx(snd_talk)           # blip on dialog advance
-            if st.stage == 0:
-                st.stage = 1
-            elif st.stage == 1 and st.coins >= NUMCOINS:
-                st.stage = 2
-                open_door()
-            st.mode = EXPLORE
-            scene.invalidate()
-        clock.tick()
-        continue
+        if st.mode == DIALOG:
+            if not st.overlay_shown:              # draw ONCE -> no per-frame flicker
+                scene.refresh()
+                dialog.draw(scene.display, buffer_a, dialog_lines(st))
+                st.overlay_shown = True
+            if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
+                if audio:
+                    audio.sfx(snd_talk)           # blip on dialog advance
+                if st.stage == 0:
+                    st.stage = 1
+                elif st.stage == 1 and st.coins >= NUMCOINS:
+                    st.stage = 2
+                    open_door()
+                st.mode = EXPLORE
+                scene.invalidate()
+            clock.tick()
+            continue
 
-    delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
-    delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
-    if delta_x:
-        st.facing = RIGHT if delta_x > 0 else LEFT
-    elif delta_y:
-        st.facing = DOWN if delta_y > 0 else UP
-    hero.flip_x = (st.facing == LEFT)         # mirror the side art for LEFT
-    moved = False
-    if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
-        hero.move(hero.x + delta_x * SPEED, hero.y); moved = True
-    if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
-        hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
-    if moved:
-        camera_follow()
-        walk.play(FACING_ANIM[st.facing])
-        walk.tick(dt)
-    else:
-        hero.bitmap = BM[FACING_ANIM[st.facing]][0]   # still: pose A of the current facing
-
-    if btn.just_pressed(btn.B):
-        ddx, ddy = DIR[st.facing]
-        ax, ay = hero.x + ddx * TILE, hero.y + ddy * TILE
-        for enemy in enemies:
-            if enemy.visible and abs(enemy.x - ax) < TILE and abs(enemy.y - ay) < TILE:
-                enemy.visible = False
-
-    if st.frame_count % 2 == 0:
-        for enemy in enemies:
-            if not enemy.visible:
-                continue
-            # which way to the hero: -1, 0 or +1 per axis (a compact sign())
-            chase_dx = (hero.x > enemy.x) - (hero.x < enemy.x)
-            chase_dy = (hero.y > enemy.y) - (hero.y < enemy.y)
-            if chase_dx and can_walk(enemy.x + chase_dx, enemy.y):
-                enemy.move(enemy.x + chase_dx, enemy.y)
-            if chase_dy and can_walk(enemy.x, enemy.y + chase_dy):
-                enemy.move(enemy.x, enemy.y + chase_dy)
-
-    if st.hurt_cooldown > 0:
-        st.hurt_cooldown -= 1
-        if st.hurt_cooldown == HURT_FRAMES - FLASH_FRAMES:  # end the hit-flash after 3 frames
-            hero.flash = None
-    else:
-        for enemy in enemies:
-            # 13px: slime radius (~7) + hero half-width (~8), i.e. they're touching
-            if enemy.visible and near(enemy, hero.x, hero.y, 13):
-                st.hp -= 1
-                st.hurt_cooldown = HURT_FRAMES
-                hero.flash = WHITE        # white hit-flash on damage
-                if st.hp <= 0:
-                    st.hp = MAX_HP
-                    hero.move(START[0], START[1])
-                    camera_follow()
-                break
-
-    # pick up any coin we're standing on (within ~12px on both axes = close enough)
-    for coin in coins:
-        if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
-            coin.visible = False
-            st.coins += 1
-
-    # reach the shrine (goal tile) once the door is open
-    if st.stage >= 2:
-        # the tile under the hero's centre
-        center_tile_x = (hero.x + TILE // 2) // TILE
-        center_tile_y = (hero.y + TILE // 2) // TILE
-        if world.tile(center_tile_x, center_tile_y) == GOAL:
-            st.mode = WON
-            st.overlay_shown = False
-
-    if near(hero, npc.x, npc.y):
-        hud.set("HP %d  COINS %d/%d  A:TALK" % (st.hp, st.coins, NUMCOINS))
-        if btn.just_pressed(btn.A):
-            st.mode = DIALOG
-            st.overlay_shown = False
-    else:
-        if st.stage < 1 or st.coins < NUMCOINS:
-            objective = "FIND THE COINS"
-        elif st.stage >= 2:
-            objective = "DOOR OPEN!"
+        delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
+        delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
+        if delta_x:
+            st.facing = RIGHT if delta_x > 0 else LEFT
+        elif delta_y:
+            st.facing = DOWN if delta_y > 0 else UP
+        hero.flip_x = (st.facing == LEFT)         # mirror the side art for LEFT
+        moved = False
+        if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
+            hero.move(hero.x + delta_x * SPEED, hero.y); moved = True
+        if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
+            hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
+        if moved:
+            camera_follow()
+            walk.play(FACING_ANIM[st.facing])
+            walk.tick(dt)
         else:
-            objective = "RETURN TO NPC"
-        hud.set("HP %d  COINS %d/%d  %s" % (st.hp, st.coins, NUMCOINS, objective))
+            hero.bitmap = BM[FACING_ANIM[st.facing]][0]   # still: pose A of the current facing
 
-    scene.refresh()
-    dt = clock.tick()
+        if btn.just_pressed(btn.B):
+            ddx, ddy = DIR[st.facing]
+            ax, ay = hero.x + ddx * TILE, hero.y + ddy * TILE
+            for enemy in enemies:
+                if enemy.visible and abs(enemy.x - ax) < TILE and abs(enemy.y - ay) < TILE:
+                    enemy.visible = False
+
+        if st.frame_count % 2 == 0:
+            for enemy in enemies:
+                if not enemy.visible:
+                    continue
+                # which way to the hero: -1, 0 or +1 per axis (a compact sign())
+                chase_dx = (hero.x > enemy.x) - (hero.x < enemy.x)
+                chase_dy = (hero.y > enemy.y) - (hero.y < enemy.y)
+                if chase_dx and can_walk(enemy.x + chase_dx, enemy.y):
+                    enemy.move(enemy.x + chase_dx, enemy.y)
+                if chase_dy and can_walk(enemy.x, enemy.y + chase_dy):
+                    enemy.move(enemy.x, enemy.y + chase_dy)
+
+        if st.hurt_cooldown > 0:
+            st.hurt_cooldown -= 1
+            if st.hurt_cooldown == HURT_FRAMES - FLASH_FRAMES:  # end the hit-flash after 3 frames
+                hero.flash = None
+        else:
+            for enemy in enemies:
+                # 13px: slime radius (~7) + hero half-width (~8), i.e. they're touching
+                if enemy.visible and near(enemy, hero.x, hero.y, 13):
+                    st.hp -= 1
+                    st.hurt_cooldown = HURT_FRAMES
+                    hero.flash = WHITE        # white hit-flash on damage
+                    if st.hp <= 0:
+                        st.hp = MAX_HP
+                        hero.move(START[0], START[1])
+                        camera_follow()
+                    break
+
+        # pick up any coin we're standing on (within ~12px on both axes = close enough)
+        for coin in coins:
+            if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
+                coin.visible = False
+                st.coins += 1
+
+        # reach the shrine (goal tile) once the door is open
+        if st.stage >= 2:
+            # the tile under the hero's centre
+            center_tile_x = (hero.x + TILE // 2) // TILE
+            center_tile_y = (hero.y + TILE // 2) // TILE
+            if world.tile(center_tile_x, center_tile_y) == GOAL:
+                st.mode = WON
+                st.overlay_shown = False
+
+        if near(hero, npc.x, npc.y):
+            hud.set("HP %d  COINS %d/%d  A:TALK" % (st.hp, st.coins, NUMCOINS))
+            if btn.just_pressed(btn.A):
+                st.mode = DIALOG
+                st.overlay_shown = False
+        else:
+            if st.stage < 1 or st.coins < NUMCOINS:
+                objective = "FIND THE COINS"
+            elif st.stage >= 2:
+                objective = "DOOR OPEN!"
+            else:
+                objective = "RETURN TO NPC"
+            hud.set("HP %d  COINS %d/%d  %s" % (st.hp, st.coins, NUMCOINS, objective))
+
+        scene.refresh()
+        dt = clock.tick()
+
+main()

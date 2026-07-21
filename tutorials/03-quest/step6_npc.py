@@ -1,4 +1,4 @@
-# Quest -- step 6: an NPC you can talk to (and a State object to tidy up).
+# Quest -- step 6: an NPC you can talk to (and a State object + a main() loop to tidy up).
 #
 # What you learn: interaction + a simple state machine for dialog, AND how to keep
 # the growing pile of game variables under control. An NPC is a sprite; when the hero
@@ -17,8 +17,9 @@
 # (EXPLORE / DIALOG) rather than a magic string, so a branch reads `st.mode ==
 # DIALOG`.
 #
-# New vs step 5: an NPC sprite, a State object, a mode machine (EXPLORE/DIALOG),
-# picogame_ui.TextBox, freezing the world during dialog, an adjacency "PRESS A" prompt.
+# New vs step 5: an NPC sprite, a State object, the loop moved into a main() function,
+# a mode machine (EXPLORE/DIALOG), picogame_ui.TextBox, freezing the world during
+# dialog, an adjacency "PRESS A" prompt.
 #
 # Run:  python3 sim/run.py tutorials/03-quest/step6_npc.py --shot /tmp/q6.png
 
@@ -237,8 +238,12 @@ LINES = ["Villager:", "Beware the slimes in the", "tall grass, traveller.", "(pr
 
 
 class State:
-    """All the mutable game variables in one place (was a pile of module globals)."""
+    """All the mutable game variables in one place (was a pile of module globals). __init__ just calls
+    reset(), so every default lives in ONE spot and a restart would be a single call -- st.reset()."""
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.facing = DOWN
         self.coins = 0
         self.mode = EXPLORE               # EXPLORE = walking around, DIALOG = talking
@@ -271,54 +276,62 @@ def camera_follow():
 
 
 camera_follow()
-dt = 1 / 30
-while True:
-    btn.poll()
+# The per-frame loop now lives in a FUNCTION (main), not at module scope. Inside a
+# function its names -- st, the loop's own delta_x/dt, the helpers -- resolve as fast
+# array-indexed locals instead of globals-dict lookups; on the device that's a
+# measured speed-up for the hot loop. It pairs naturally with the State tidy-up: one
+# st object + one main() is the shape every bigger game grows into.
+def main():
+    dt = 1 / 30                      # seed the first frame; re-set from clock.tick() each loop
+    while True:
+        btn.poll()
 
-    if st.mode == DIALOG:
-        if not st.dlg_shown:                  # draw ONCE -> no per-frame flicker
-            scene.refresh()                   # world frozen under the box
-            dialog.draw(scene.display, buffer_a, LINES)
-            st.dlg_shown = True
-        if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
-            st.mode = EXPLORE
-            scene.invalidate()                # repaint over the box next frame
-        clock.tick()
-        continue
+        if st.mode == DIALOG:
+            if not st.dlg_shown:                  # draw ONCE -> no per-frame flicker
+                scene.refresh()                   # world frozen under the box
+                dialog.draw(scene.display, buffer_a, LINES)
+                st.dlg_shown = True
+            if btn.just_pressed(btn.A) or btn.just_pressed(btn.B):
+                st.mode = EXPLORE
+                scene.invalidate()                # repaint over the box next frame
+            clock.tick()
+            continue
 
-    delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
-    delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
-    if delta_x:
-        st.facing = RIGHT if delta_x > 0 else LEFT
-    elif delta_y:
-        st.facing = DOWN if delta_y > 0 else UP
-    hero.flip_x = (st.facing == LEFT)         # mirror the side art for LEFT
+        delta_x = btn.is_pressed(btn.RIGHT) - btn.is_pressed(btn.LEFT)
+        delta_y = btn.is_pressed(btn.DOWN) - btn.is_pressed(btn.UP)
+        if delta_x:
+            st.facing = RIGHT if delta_x > 0 else LEFT
+        elif delta_y:
+            st.facing = DOWN if delta_y > 0 else UP
+        hero.flip_x = (st.facing == LEFT)         # mirror the side art for LEFT
 
-    moved = False
-    if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
-        hero.move(hero.x + delta_x * SPEED, hero.y); moved = True
-    if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
-        hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
-    if moved:
-        camera_follow()
-        walk.play(FACING_ANIM[st.facing])     # animate the walk while moving
-        walk.tick(dt)
-    else:
-        hero.bitmap = BM[FACING_ANIM[st.facing]][0]   # still: pose A of the current facing
+        moved = False
+        if delta_x and can_walk(hero.x + delta_x * SPEED, hero.y):
+            hero.move(hero.x + delta_x * SPEED, hero.y); moved = True
+        if delta_y and can_walk(hero.x, hero.y + delta_y * SPEED):
+            hero.move(hero.x, hero.y + delta_y * SPEED); moved = True
+        if moved:
+            camera_follow()
+            walk.play(FACING_ANIM[st.facing])     # animate the walk while moving
+            walk.tick(dt)
+        else:
+            hero.bitmap = BM[FACING_ANIM[st.facing]][0]   # still: pose A of the current facing
 
-    # pick up any coin we're standing on (within ~12px on both axes = close enough)
-    for coin in coins:
-        if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
-            coin.visible = False
-            st.coins += 1
+        # pick up any coin we're standing on (within ~12px on both axes = close enough)
+        for coin in coins:
+            if coin.visible and abs(hero.x - coin.x) < 12 and abs(hero.y - coin.y) < 12:
+                coin.visible = False
+                st.coins += 1
 
-    if near_npc():
-        hud.set("COINS %d/%d   A: TALK" % (st.coins, len(coins)))
-        if btn.just_pressed(btn.A):
-            st.mode = DIALOG
-            st.dlg_shown = False
-    else:
-        hud.set("COINS %d/%d" % (st.coins, len(coins)))
+        if near_npc():
+            hud.set("COINS %d/%d   A: TALK" % (st.coins, len(coins)))
+            if btn.just_pressed(btn.A):
+                st.mode = DIALOG
+                st.dlg_shown = False
+        else:
+            hud.set("COINS %d/%d" % (st.coins, len(coins)))
 
-    scene.refresh()
-    dt = clock.tick()
+        scene.refresh()
+        dt = clock.tick()
+
+main()
