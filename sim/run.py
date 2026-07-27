@@ -137,7 +137,9 @@ def main():
               "R / Q = X,  T / E = Y,  close the window to quit")
     if args.hold:                      # hold buttons for the whole run (input testing)
         for name in args.hold.split(","):
-            _host.pressed_pins.add("SW_" + name.strip().upper())
+            n = name.strip().upper()
+            # a full pin name (e.g. SW2_LEFT for player 2) passes through; a bare button -> SW_<name>
+            _host.pressed_pins.add(n if n.startswith("SW") else "SW_" + n)
 
     os.chdir(game_dir)                 # so open("cavern.bin") etc. work
     src = open(game_path).read()

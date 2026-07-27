@@ -128,4 +128,7 @@ def setup_keymap():
         pygame.K_g: "SW_B", pygame.K_SPACE: "SW_B",
         pygame.K_r: "SW_X", pygame.K_q: "SW_X",
         pygame.K_t: "SW_Y", pygame.K_e: "SW_Y",
+        # player 2 (local multiplayer demos): IJKL D-pad + P = A, on the one keyboard
+        pygame.K_i: "SW2_UP", pygame.K_k: "SW2_DOWN", pygame.K_j: "SW2_LEFT", pygame.K_l: "SW2_RIGHT",
+        pygame.K_p: "SW2_A",
     })

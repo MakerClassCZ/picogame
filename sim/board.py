@@ -10,3 +10,7 @@ DISPLAY = _Display()
 SW_UP = "SW_UP"; SW_DOWN = "SW_DOWN"; SW_LEFT = "SW_LEFT"; SW_RIGHT = "SW_RIGHT"
 SW_A = "SW_A"; SW_B = "SW_B"; SW_X = "SW_X"; SW_Y = "SW_Y"
 AUDIO = "AUDIO"
+# player-2 pins (SIM ONLY): let a local-multiplayer demo drive a second player from a second key
+# cluster (IJKL + P) on the one desktop keyboard. Real boards don't have these - a game maps them
+# only when no USB pad is present, and _resolve_pin skips a missing board pin on hardware.
+SW2_UP = "SW2_UP"; SW2_DOWN = "SW2_DOWN"; SW2_LEFT = "SW2_LEFT"; SW2_RIGHT = "SW2_RIGHT"; SW2_A = "SW2_A"
