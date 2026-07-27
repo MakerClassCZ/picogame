@@ -30,9 +30,11 @@ import picogame_ui as ui
 import picogame_synth as snd
 import picogame_sfx
 
-_kit = picogame_sfx.Kit(snd.Synth())
-FIRE_SND = _kit.zap                          # cannon fire
-BOOM_SND = _kit.explosion                    # shell impact
+# The synthio SFX kit is built LATER (after the big graphics buffers below). synthio
+# eats/fragments the tiny RP2040 heap, so building it FIRST left no contiguous room for
+# the barrel rotation atlas -> MemoryError. Allocate big graphics first, synthio last.
+_kit = None
+FIRE_SND = BOOM_SND = None                    # kit-voice refs; assigned once the kit is built
 
 
 def sfx(n):
@@ -41,7 +43,8 @@ def sfx(n):
 
 
 def sfx_tick():
-    _kit.tick()
+    if _kit is not None:
+        _kit.tick()
 
 
 # --- colours (ALWAYS via rgb565 - never raw 0xRRGGBB) ---
@@ -130,7 +133,7 @@ HULL = [
     "#.#.#.#.#.#.#",
 ]
 GUNMETAL = pg.rgb565(205, 208, 218)
-BARREL_N = 48                         # baked rotation steps (7.5 deg each)
+BARREL_N = 24                         # baked rotation steps (15 deg; shot uses the exact angle, atlas just quantises the visual)
 BARREL_L = 9                          # barrel length (px)
 _bar_pts = [(0, -1.3), (BARREL_L, -1.3), (BARREL_L, 1.3), (0, 1.3)]   # bar from centre -> +x
 _bar_sz = BARREL_L * 2 + 4
@@ -196,6 +199,16 @@ def _mbuf(rows):
 WINDCOL = pg.rgb565(210, 60, 0)
 sock_bm = shp.atlas([_mbuf(f) for f in _SOCK], 8, 10, WINDCOL)
 del HULL, _SOCK, _bar_pts, _mbuf   # bake-time scaffolding only; final bitmaps own their own buffers
+
+# --- audio: build the synthio SFX kit NOW, AFTER the big graphics buffers above (terrain
+# Tilemap + barrel atlas). Doing it here keeps the heap unfragmented for those big contiguous
+# allocations; synthio then takes whatever remains. Guarded so a board with no audio stays silent.
+try:
+    _kit = picogame_sfx.Kit(snd.Synth())
+    FIRE_SND = _kit.zap                          # cannon fire
+    BOOM_SND = _kit.explosion                    # shell impact
+except Exception:                                # no synthio HW / no heap -> silent no-ops
+    _kit = FIRE_SND = BOOM_SND = None
 flag = pg.Sprite(sock_bm, W // 2, 0)  # x chosen each round: a peak near mid-field (set by pick_flag_spot)
 flag.anchor = (0.5, 1.0)             # bottom-centre -> the pole base sits on the surface
 flag.scale = 2                       # bigger so it reads from across the field (integer scale = crisp)
