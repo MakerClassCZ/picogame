@@ -650,6 +650,10 @@ class Canvas:
         # Sim mirror of the firmware Canvas.text(): composite glyphs straight into the surface.
         # The device does this in C with no Python glyph cache; here we reuse the sim's glyph
         # rasterizer (RAM is free in the sim) - the OUTPUT pixels are identical either way.
+        # The firmware accepts ONLY fontio.BuiltinFont - mirror that strictly, or a game that
+        # passes an ExtraFont works in the sim and TypeErrors on the device (bitten 2026-07).
+        if type(font).__name__ not in ("_Font", "BuiltinFont"):
+            raise TypeError("font must be of type BuiltinFont, not %s" % type(font).__name__)
         import picogame_font as _pf
         fw, fh = font.get_bounding_box()[:2]
         for ch in s:
@@ -818,7 +822,9 @@ class StripDraw:
         self.pending = True
         self._view = Canvas(1, 1)        # reused; data/w/h repointed per strip
 
-    def invalidate(self):
+    def invalidate(self, x=0, y=0, w=0, h=0):
+        # firmware L2 accepts a sub-rect for partial repaint; the sim has no dirty-rect (it full-
+        # repaints), so the rect is accepted for API parity but ignored.
         self.pending = True
 
     # read/write rect size mirroring the firmware properties (internals use w/h)
