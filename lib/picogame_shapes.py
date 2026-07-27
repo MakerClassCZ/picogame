@@ -123,21 +123,27 @@ def poly_frames(size, points, nframes, color, fill=True):
     size x size multi-frame atlas - the engine has no runtime rotation, so this is
     the 'pre-rotated frames' pattern for asteroids/ships/turrets."""
     c = size / 2.0
-    frames = []
-    for f in range(nframes):
-        ang = f * 2.0 * math.pi / nframes
+    # Allocate the one contiguous atlas buffer FIRST (on a clean heap) and rasterise
+    # each rotation straight into its column. Building a Python list of `nframes`
+    # intermediate buffers first fragments the tiny RP2040 heap and can make the big
+    # atlas alloc fail (OOM), even though the atlas itself would fit.
+    n = nframes
+    stride = size * n
+    data = bytearray(stride * size)
+    for f in range(n):
+        ang = f * 2.0 * math.pi / n
         ca, sa = math.cos(ang), math.sin(ang)
         pts = [(c + (px * ca - py * sa), c + (px * sa + py * ca)) for (px, py) in points]
-        buf = bytearray(size * size)
         if fill:
-            _fill_poly(buf, size, pts)
+            _fill_poly(data, size, pts, stride, f * size)
         else:
-            _stroke_poly(buf, size, pts)
-        frames.append(buf)
-    return atlas(frames, size, size, color)
+            _stroke_poly(data, size, pts, stride, f * size)
+    return _bm(data, size, size, color, frames=n, stride=stride)
 
 
-def _fill_poly(buf, size, pts):
+def _fill_poly(buf, size, pts, stride=None, x0=0):
+    if stride is None:
+        stride = size
     n = len(pts)
     for y in range(size):
         xs = []
@@ -147,14 +153,17 @@ def _fill_poly(buf, size, pts):
             if (y1 <= y < y2) or (y2 <= y < y1):
                 xs.append(x1 + (x2 - x1) * (y - y1) / (y2 - y1))
         xs.sort()
+        base = y * stride + x0
         for k in range(0, len(xs) - 1, 2):
             a = max(0, int(xs[k]))
             b = min(size - 1, int(xs[k + 1]))
             for x in range(a, b + 1):
-                buf[y * size + x] = 1
+                buf[base + x] = 1
 
 
-def _stroke_poly(buf, size, pts):
+def _stroke_poly(buf, size, pts, stride=None, x0=0):
+    if stride is None:
+        stride = size
     n = len(pts)
     for i in range(n):
         x1, y1 = pts[i]
@@ -164,4 +173,4 @@ def _stroke_poly(buf, size, pts):
             x = int(x1 + (x2 - x1) * s / steps)
             y = int(y1 + (y2 - y1) * s / steps)
             if 0 <= x < size and 0 <= y < size:
-                buf[y * size + x] = 1
+                buf[y * stride + x0 + x] = 1

@@ -26,7 +26,7 @@ import os
 # General debug switch for the whole engine. settings.toml `PICOGAME_DEBUG = 1` seeds it (a test can
 # also set `picogame_debug.enabled = True` in code). Gates `ram()` + `note()` across every subsystem
 # (audio, input, ...). A falsy value ("", "0", "false") = off; default off.
-enabled = os.getenv("PICOGAME_DEBUG") not in (None, "", "0", "false", "False")
+enabled = os.getenv("PICOGAME_DEBUG") not in (None, "", 0, False, "0", "false", "False")
 
 
 def note(*args):

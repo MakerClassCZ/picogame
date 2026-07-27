@@ -5,7 +5,7 @@
 # the CPU address space (only frozen/XIP data is), so importing the sheet as a .mpy copies
 # all of it to the heap. StreamSheet instead opens the file once and, each time you ask for
 # a frame, seeks to it and `readinto()`s a single-frame buffer (no allocation per frame).
-# The sheet must be FRAME-MAJOR (each frame's w*h bytes contiguous) - use tools/pack_sheet.py.
+# The sheet must be FRAME-MAJOR (each frame's w*h bytes contiguous) - use pack_sheet.py (picogame repo, tools/).
 #
 #   import picogame_stream
 #   sheet = picogame_stream.StreamSheet(pg, "jill.bin", 64, 100, 11, PAL, transparent=0)

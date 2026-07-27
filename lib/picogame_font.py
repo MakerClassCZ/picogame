@@ -122,6 +122,25 @@ def _render_into(pg, font, text, fg, bg, buf):
     return bmp, w, h, data, palette
 
 
+def compose_into(font, text, buf, w, chars):
+    """Compose `text` into an EXISTING `buf` in place (stride `w`, height fh), truncated / blank-padded
+    to `chars` cells - every cell is (re)written so no clear is needed. Reuses the per-glyph flat cache
+    with whole-row memcpy; allocates no Bitmap and no palette, so a widget that pre-built its Bitmap over
+    `buf` (fixed width) can repaint by just calling this + sprite.touch() - zero per-update churn. buf
+    must be >= w*fh; `w` should be fw*chars."""
+    fw, fh = font.get_bounding_box()[:2]
+    n = len(text)
+    for i in range(chars):
+        cp = ord(text[i]) if i < n else 32          # pad the tail with blanks
+        mv = memoryview(_glyph_flat(font, cp, fw, fh))
+        d = i * fw
+        base = 0
+        for _gy in range(fh):
+            buf[d:d + fw] = mv[base:base + fw]      # whole-row memcpy (no per-pixel Python)
+            d += w
+            base += fw
+
+
 class Label:
     """A positioned text label drawn immediately to the display (good for HUD).
     Re-renders only when the text changes; draw() repaints its rectangle AND clears the
@@ -152,8 +171,8 @@ class Label:
             self.sprite.move(x, y)
 
     def set(self, text):
-        text = str(text)
-        if text == self.text:
+        text = "" if text is None else str(text)   # None -> hidden (match ui.SceneLabel/_HudLabel _txt),
+        if text == self.text:                       # not the literal "None"
             return False
         self.text = text
         if text == "":                     # empty = hidden: don't leave stale glyph pixels behind
@@ -190,3 +209,102 @@ class Label:
         self.pg.render(display, self._slist if has_new else _EMPTY, buffer,
                        x0, y0, x1, y1, background=self.bg)
         self._drawn = (self.x, self.y, self.x + self.w, self.y + self.h) if has_new else None
+
+
+# ---- ExtraFont: the builtin font + extra glyphs from small BDF subsets ------
+
+class _BdfCell:
+    """One glyph as its own tiny 1-bit 'sheet' (a fw x fh cell): sheet[x, y]
+    -> 0/1. Duck-types the tile-sheet contract _glyph_flat reads (`.width` +
+    `[x, y]` indexing), with the glyph's tile_index fixed at 0."""
+    __slots__ = ("width", "height", "_rows")
+
+    def __init__(self, fw, fh, rows):
+        self.width = fw
+        self.height = fh
+        self._rows = rows            # one int per row, MSB-first (fw <= 8)
+
+    def __getitem__(self, key):
+        x, y = key
+        return (self._rows[y] >> (7 - x)) & 1
+
+
+class _BdfGlyph:
+    __slots__ = ("bitmap", "tile_index")
+
+    def __init__(self, cell):
+        self.bitmap = cell
+        self.tile_index = 0
+
+
+class ExtraFont:
+    """The builtin terminalio.FONT extended with glyphs from one or more SMALL
+    charcell BDF files - diacritics, symbols - looked up as fallbacks:
+
+        font = picogame_font.ExtraFont("/lib/fonts/picogame_cz.bdf",
+                                       "/lib/fonts/picogame_symbols.bdf")
+        bmp, w, h = picogame_font.render_text(pg, font, "Žluťoučký ←↑→↓", fg)
+
+    get_glyph() asks the builtin font first, then each BDF in the order given,
+    so extra files only ever ADD glyphs. The bundled subsets (fonts/*.bdf,
+    regenerate with make_bdf_subset.py - picogame repo, tools/) are cut from CircuitPython's own
+    ter-u12n.bdf - the very Terminus build terminalio.FONT comes from - so
+    they blend seamlessly with builtin text.
+
+    Pure-Python BDF reader, no adafruit_bitmap_font/displayio dependency;
+    works on the device and the sim alike. Constraints: charcell BDF only
+    (every glyph a full get_bounding_box() cell, width <= 8 px - Terminus
+    qualifies); glyphs load eagerly (~20 B each, a 30-glyph set is <1 KB).
+
+    LIMITATION: this is a Python-side font for THIS module's render paths
+    (render_text/render_text_pal/Label and widgets built on them). The native
+    C text path (picogame.Canvas.text - so picogame_ui.SceneLabel/HudBar and
+    StripDraw view.text) validates fontio.BuiltinFont in the firmware and
+    will NOT accept it."""
+
+    def __init__(self, *paths, base=None):
+        if base is None:
+            import terminalio
+            base = terminalio.FONT
+        self.base = base
+        self.fw, self.fh = base.get_bounding_box()[:2]
+        self._glyphs = {}
+        for p in paths:
+            self.load(p)
+
+    def load(self, path):
+        """Parse one charcell BDF into the fallback table (callable again
+        later to add more sets; later loads never override earlier ones)."""
+        fw, fh = self.fw, self.fh
+        cp = None
+        rows = None
+        with open(path) as f:
+            for line in f:
+                if line.startswith("ENCODING "):
+                    cp = int(line[9:])
+                elif line.startswith("BITMAP"):
+                    rows = []
+                elif rows is not None and not line.startswith("ENDCHAR"):
+                    rows.append(int(line, 16))   # a hex bitmap row
+                else:
+                    if not line.startswith("ENDCHAR"):
+                        continue
+                    if cp is not None and cp >= 0:
+                        if len(rows) != fh:
+                            raise ValueError(
+                                "%s: U+%04X has %d rows, need %d (charcell "
+                                "BDF only)" % (path, cp, len(rows), fh))
+                        if cp not in self._glyphs:
+                            self._glyphs[cp] = _BdfGlyph(
+                                _BdfCell(fw, fh, rows))
+                    cp = None
+                    rows = None
+
+    def get_bounding_box(self):
+        return self.base.get_bounding_box()
+
+    def get_glyph(self, code_point):
+        g = self.base.get_glyph(code_point)
+        if g is None:
+            g = self._glyphs.get(code_point)
+        return g

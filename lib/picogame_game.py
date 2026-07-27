@@ -113,6 +113,61 @@ _RESOLVED = {}   # id(display) -> (display, backend, is_fb): setup() and every H
 _TARGET = {}   # id(display) -> (display, backend): alloc-free hot-path cache for target()
 
 
+def open_framebuffer(width, height, color_depth=None):
+    """Ensure the display is a DVI framebuffer at width x height, and return it.
+
+    Lets a game pick its OWN resolution in code (fresh interpreter per game via the launcher),
+    so nothing has to be hand-set in settings.toml. Behaviour by board:
+      - a DVI/framebuffer board that exposes the picodvi pins (Fruit Jam: board.CKP/CKN/D0P...):
+        if the current display already matches width x height it is reused (no realloc / flicker,
+        and this cleanly absorbs a resolution left behind by the previous game across a soft
+        reload); otherwise release_displays() + a fresh picodvi.Framebuffer at this size;
+      - a fixed-panel board (ST7789 SPI PicoPad) or the sim: a NO-OP - returns the existing
+        board.DISPLAY unchanged (the panel is a fixed size; the request is simply ignored).
+
+    color_depth defaults to 16 (RGB565) for <= 320x240 and 8 (RGB332) above - 8-bit is the only
+    depth picodvi offers at 640x480, and the engine already renders RGB332. 640x480 needs PSRAM.
+    """
+    try:
+        import board
+    except ImportError:
+        return None
+    cur = getattr(board, "DISPLAY", None)
+    # fixed-panel board / sim: no picodvi module or no DVI pins -> use whatever display exists
+    try:
+        import picodvi
+        import framebufferio
+        import displayio
+    except ImportError:
+        return cur
+    if not hasattr(board, "CKP"):
+        return cur
+    if cur is not None and getattr(cur, "width", None) == width \
+            and getattr(cur, "height", None) == height:
+        return cur                              # already the right size -> reuse
+    if color_depth is None:
+        color_depth = 16 if width * height <= 320 * 240 else 8
+    displayio.release_displays()
+    fb = picodvi.Framebuffer(
+        width, height,
+        clk_dp=board.CKP, clk_dn=board.CKN,
+        red_dp=board.D0P, red_dn=board.D0N,
+        green_dp=board.D1P, green_dn=board.D1N,
+        blue_dp=board.D2P, blue_dn=board.D2N,
+        color_depth=color_depth)
+    disp = framebufferio.FramebufferDisplay(fb, auto_refresh=False)
+    # Best-effort: make the new display visible via board.DISPLAY too, so code that reads
+    # board.DISPLAY.width/height directly (e.g. a game's asset scaler) sees the new size. board
+    # is a C module and may reject attribute writes -> ignore; such callers should use the
+    # returned display (or supervisor.runtime.display) instead. CALL THIS BEFORE importing any
+    # module that captures board.DISPLAY at import time.
+    try:
+        board.DISPLAY = disp
+    except (AttributeError, TypeError):
+        pass
+    return disp
+
+
 def target(display):
     """Immediate-render target for pg.render: a framebuffer board's FramebufferDisplay -> its
     pg.Framebuffer (memoized via resolve_display); a BusDisplay / pg.Display / pg.Framebuffer (none of
@@ -171,8 +226,9 @@ def resolve_display(display=None):
             pass
         if getattr(display, "rotation", 0) != 0:
             raise ValueError("picogame needs rotation 0 (set CIRCUITPY_DISPLAY_ROTATION=0)")
-        if getattr(raw, "color_depth", 16) != 16:
-            raise ValueError("picogame needs a 16-bit framebuffer "
+        depth = getattr(raw, "color_depth", 16)
+        if depth not in (8, 16):
+            raise ValueError("picogame needs a 16-bit or 8-bit framebuffer "
                              "(set CIRCUITPY_DISPLAY_COLOR_DEPTH=16 in settings.toml)")
         # The engine composites each dirty band OFF-SCREEN (a private scratch strip) and memcpys only
         # the finished band into the live scanout buffer, so the beam never samples a half-composited
@@ -181,12 +237,22 @@ def resolve_display(display=None):
         # must hold NATIVE RGB565 so the engine byte-swaps the scratch before the copy; a build that
         # disabled the HW swap reports `pixel_byte_swap=False` and we store the engine's WIRE order
         # directly. Absent property (normal firmware) -> assume native. Two-way firmware skew-tolerant.
-        native = bool(getattr(raw, "pixel_byte_swap", True))
-        try:
-            fb = pg.Framebuffer(raw, raw.width, raw.height, native_rgb565=native)
-        except TypeError:
-            raise RuntimeError("this firmware's picogame.Framebuffer lacks native_rgb565 - "
-                               "flash a newer picogame build")
+        if depth == 8:
+            # 8-bit picodvi scanout is RGB332 (the only depth the HW offers at
+            # 640x480, e.g. Fruit Jam full-res) - the engine quantizes each
+            # finished band 565->332 while publishing it.
+            try:
+                fb = pg.Framebuffer(raw, raw.width, raw.height, rgb332=True)
+            except TypeError:
+                raise RuntimeError("this firmware's picogame.Framebuffer lacks rgb332 - "
+                                   "flash a newer picogame build")
+        else:
+            native = bool(getattr(raw, "pixel_byte_swap", True))
+            try:
+                fb = pg.Framebuffer(raw, raw.width, raw.height, native_rgb565=native)
+            except TypeError:
+                raise RuntimeError("this firmware's picogame.Framebuffer lacks native_rgb565 - "
+                                   "flash a newer picogame build")
         _RESOLVED[key] = (display, fb, True)
         return fb, True
     _RESOLVED[key] = (display, display, False)

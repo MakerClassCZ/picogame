@@ -135,13 +135,63 @@ def _matrix_from_settings():
             "map": keymap, "cols_to_anodes": anodes != "rows"}
 
 
+def find_pads(vid=None, pid=None):
+    """Enumerate all matching USB gamepads as UsbPad source objects, in bus order - for LOCAL
+    MULTIPLAYER: hand pads[0] to player 1, pads[1] to player 2, each via Buttons(sources=[pad]).
+    [] on a board with no USB host or no matching pad (VID/PID default = DragonRise or
+    PICOGAME_USBPAD_ID). Two IDENTICAL pads come back in enumeration order; if the players want them
+    swapped they just swap the controllers (no engine-side identity tracking - on an MCU you set the
+    pads up once and a restart is cheap, so hot-swap isn't handled)."""
+    out = []
+    try:
+        import usb.core
+    except ImportError:
+        return out                          # no USB stack (non-host board / sim)
+    try:
+        usb.core.find()                     # host-port probe: raises with no host -> no pads
+    except Exception:
+        return out
+    import picogame_usbpad
+    if not (vid or pid):
+        vid, pid = picogame_usbpad._id_from_settings()
+    try:
+        for dev in usb.core.find(find_all=True, idVendor=vid, idProduct=pid):
+            try:
+                out.append(picogame_usbpad.UsbPad(dev=dev))
+            except Exception:
+                pass                        # a pad that fails to claim is skipped, not fatal
+    except Exception:
+        pass
+    return out
+
+
 class Buttons:
     # expose the constants as attributes too (btns.LEFT etc.)
     UP, DOWN, LEFT, RIGHT, A, B, X, Y = UP, DOWN, LEFT, RIGHT, A, B, X, Y
     L1, L2, R1, R2, START, SELECT, ALL = L1, L2, R1, R2, START, SELECT, ALL
 
     def __init__(self, profile=None, pull=None, prefer_keypad=True, debounce_s=0.02, matrix=None,
-                 usb=None):
+                 usb=None, sources=None):
+        # LOCAL MULTIPLAYER: `sources=[src, ...]` makes this Buttons ONE player driven by exactly those
+        # source objects (each `.read()`->logical mask) - NO board backend, NO USB auto-attach. Build one
+        # Buttons per player: a pad player = Buttons(sources=[pad]) (see find_pads()); a board-buttons
+        # player = Buttons(usb=False); a keyboard player = Buttons(sources=[picogame_usbkbd.UsbKbd()]).
+        # Everything else (poll/is_pressed/just_pressed/repeat/clear/Timer) is unchanged per instance -
+        # the game just reads p1.*/p2.* independently. `sources=None` = the classic all-in-one player.
+        if sources is not None:
+            self._sources = list(sources)
+            self._hw = 0
+            self._flush = False
+            self._keys = None                # -> poll() takes the polling branch; empty _pairs = raw 0,
+            self._pairs = []                 #    then it ORs the sources (the level-diff edge path fits)
+            self._active_low = True
+            self._bits = []
+            self._mapped = 0
+            for s in self._sources:
+                self._mapped |= getattr(s, "mapped", ALL)
+            self.state = self.prev = self._pressed = self._released = 0
+            self._hold = [0] * _NBITS
+            return
         # `matrix` = drive a scanned ROW x COLUMN key matrix (e.g. a QWERTY) instead of one-pin-per-
         # button; map only the keys you want onto game buttons, the rest are ignored. Pass:
         #   matrix={"rows": [pin/name, ...], "cols": [pin/name, ...],
@@ -225,11 +275,19 @@ class Buttons:
             # installed - only a genuine CircuitPython USB-host build should auto-attach.
             if getattr(sys.implementation, "name", "") != "circuitpython":
                 return
-            if os.getenv("PICOGAME_USB", "1") == "0":
+            if str(os.getenv("PICOGAME_USB", "1")) == "0":
                 return
         try:
             import usb.core            # only on a USB-host build; gate BEFORE importing picogame_usbpad
         except ImportError:            # (so a non-USB board never caches the unused pad module - RP2040 RAM)
+            return
+        # The universal firmware ships usb.core even on boards with NO USB HOST PORT (PicoPad
+        # RP2040/RP2350 - host is a Fruit Jam thing). Probe once: no host port is an EXPECTED
+        # condition on those boards, so skip ALL USB silently (not even a debug note - it's not a
+        # failure). Only a board with a real host port falls through to attach pad/keyboard.
+        try:
+            usb.core.find()           # raises "No usb host port initialized" when there's no host
+        except Exception:
             return
         try:
             import picogame_usbpad
@@ -239,6 +297,18 @@ class Buttons:
         except Exception as e:
             import picogame_debug
             picogame_debug.note("input: USB gamepad not attached ->", repr(e))
+        if str(os.getenv("PICOGAME_KBD", "1")) == "0":
+            return
+        try:
+            # a USB HID keyboard (wired, or wireless via a 2.4 GHz dongle) is one more
+            # OR'd source: arrows/WASD = D-pad, Z/Space = A, ... (see picogame_usbkbd)
+            import picogame_usbkbd
+            kbd = picogame_usbkbd.UsbKbd()
+            self._sources.append(kbd)
+            self._mapped |= kbd.mapped
+        except Exception as e:
+            import picogame_debug
+            picogame_debug.note("input: USB keyboard not attached ->", repr(e))
 
     def _init_matrix(self, m, debounce_s):
         """Row x column matrix backend (keypad.KeyMatrix). Same Event queue as keypad.Keys, so poll()
@@ -305,6 +375,14 @@ class Buttons:
             self.prev = self.state           # button HELD across the transition doesn't read as a fresh
             self._pressed = self._released = 0   # press (matters for USB sources, which keep holding it)
             self._flush = False
+            h = self._hold                   # pre-seed held bits so the loop below lands on 2, not 1 -
+            i = 0                            # repeat()'s first-press edge must not fire either (a menu
+            b = 1                            # opened by a held button would move its cursor one step)
+            while b < (1 << _NBITS):
+                if s & b:
+                    h[i] = 1
+                i += 1
+                b <<= 1
         # track held-frame counts (for repeat())
         h = self._hold
         s = self.state

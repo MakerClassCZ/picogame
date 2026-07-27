@@ -15,7 +15,7 @@
 #   ...each frame:  k = m.tick(btn)       # row key on A, ui.CANCEL on B, None navigating
 #   if k == "done": diff = m.value("diff")
 
-from picogame_ui import SceneBox, LINE_H, CANCEL
+from picogame_ui import SceneBox, CANCEL, _menu_step, _panel_h, _menu_lines, _menu_pick
 
 
 class OptionsMenu:
@@ -33,10 +33,11 @@ class OptionsMenu:
     Read a value any time with `m.value("diff")`. Call `m.show()` once; `scene.refresh()` paints it.
     """
 
-    def __init__(self, scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None):
+    def __init__(self, scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None, visible=None):
         self.rows = rows
         self.title = title
         self.sel = 0
+        self.top = 0
         self._t = 1 if title else 0
         for r in rows:                                        # normalise defaults + validate up front
             if r["kind"] == "choice":
@@ -51,8 +52,11 @@ class OptionsMenu:
                 r["value"] = max(lo, min(r["value"], hi))             # into the declared range
             elif r["kind"] == "toggle":
                 r.setdefault("value", False)
-        n = len(rows) + self._t
-        self.panel = SceneBox(scene, pg, font, x, y, w, 10 + n * LINE_H, fg, bg, nlines=n, border=border)
+        # `visible` caps how many option rows show at once - the rest scroll into view (like ui.Menu's
+        # `rows=`); default shows them all. A long list would otherwise overflow the panel off-screen.
+        self.vis = max(1, min(visible or len(rows), len(rows)))
+        n = self.vis + self._t
+        self.panel = SceneBox(scene, pg, font, x, y, w, _panel_h(n), fg, bg, nlines=n, border=border)
         self.active = False
 
     def value(self, key):
@@ -84,14 +88,12 @@ class OptionsMenu:
         return mark + r["label"] + ("  <%s>" % v if i == self.sel else "   %s " % v)
 
     def _render(self):
-        lines = [self.title] if self.title else []
-        for i in range(len(self.rows)):
-            lines.append(self._row_text(i))
-        self.panel.show(lines)
+        self.panel.show(_menu_lines(self.title, self._row_text, self.top, self.vis, len(self.rows)))
 
     def show(self, sel=0):
         self.active = True
         self.sel = max(0, min(sel, len(self.rows) - 1))
+        self.top = max(0, min(self.sel, len(self.rows) - self.vis))   # scroll so the cursor is visible
         self._render()
 
     def hide(self):
@@ -116,11 +118,9 @@ class OptionsMenu:
         live - read them with value()."""
         if not self.active or not self.rows:
             return None
-        osel = self.sel
-        if btn.repeat(btn.DOWN):
-            self.sel = (self.sel + 1) % len(self.rows)
-        elif btn.repeat(btn.UP):
-            self.sel = (self.sel - 1) % len(self.rows)
+        osel, otop = self.sel, self.top
+        # UP/DOWN cursor + scroll window (shared with ui.Menu; line scroll). L/R below edits the value.
+        self.sel, self.top, a = _menu_step(btn, self.sel, self.top, self.vis, len(self.rows), False)
         # a toggle flips on a FRESH press only (auto-repeat would oscillate it while held); steppers
         # and choices use repeat so holding L/R adjusts smoothly.
         if self.rows[self.sel]["kind"] == "toggle":
@@ -128,13 +128,11 @@ class OptionsMenu:
         else:
             right, left = btn.repeat(btn.RIGHT), btn.repeat(btn.LEFT)
         changed = self._change(1) if right else (self._change(-1) if left else False)
-        if self.sel != osel:                                  # repaint just the two affected rows
-            self.panel.set_line(self._t + osel, self._row_text(osel))
-            self.panel.set_line(self._t + self.sel, self._row_text(self.sel))
+        if self.top != otop:                                  # scrolled -> full repaint
+            self._render()
+        elif self.sel != osel:                                # moved in-window -> the two affected rows
+            self.panel.set_line(self._t + (osel - self.top), self._row_text(osel))
+            self.panel.set_line(self._t + (self.sel - self.top), self._row_text(self.sel))
         elif changed:
-            self.panel.set_line(self._t + self.sel, self._row_text(self.sel))
-        if btn.just_pressed(btn.A):
-            return self.rows[self.sel].get("key", self.sel)
-        if btn.just_pressed(btn.B):
-            return CANCEL
-        return None
+            self.panel.set_line(self._t + (self.sel - self.top), self._row_text(self.sel))
+        return _menu_pick(self.rows[self.sel].get("key", self.sel), a)
