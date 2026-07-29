@@ -691,6 +691,39 @@ class Canvas:
                 if v is not None:
                     self.data[base + cx] = v
 
+    def mode7(self, tex, horizon, y_off, z, rx0, ry0, rsx, ry_sx, cam_x, cam_y):
+        # Perspective ground plane (Mode-7). sy is a row WITHIN this surface; the
+        # absolute screen row is sy + y_off (0 for a full Canvas, strip y for a
+        # StripDraw view). Integer math IDENTICAL to the firmware C: per-row 1/z
+        # distance divide, per-pixel 16.16 texture accumulate with pow2 wrap.
+        # tex must have power-of-2 width/height. rx0/ry0 = left-ray dir (Q16),
+        # rsx/ry_sx = per-pixel ray delta (Q16), z = posZ (Q16), cam_x/y = Q16.
+        F = 16
+        tw, th = tex.width, tex.height
+        shx = F - (tw.bit_length() - 1)          # world(1.0)->one tile
+        shy = F - (th.bit_length() - 1)
+        mx, my = tw - 1, th - 1
+        stride = tex.stride
+        y0 = max(0, horizon - y_off + 1)
+        for sy in range(y0, self.h):
+            denom = (sy + y_off) - horizon
+            if denom <= 0:
+                continue
+            rowdist = z // denom
+            stepx = (rowdist * rsx) >> F
+            stepy = (rowdist * ry_sx) >> F
+            fx = cam_x + ((rowdist * rx0) >> F)
+            fy = cam_y + ((rowdist * ry0) >> F)
+            base = sy * self.w
+            for sx in range(self.w):
+                tx = (fx >> shx) & mx
+                ty = (fy >> shy) & my
+                v = _src_pixel_row(tex, ty * stride + tx, 0)
+                if v is not None:
+                    self.data[base + sx] = v
+                fx += stepx
+                fy += stepy
+
     def rect(self, x, y, w, h, color):
         self.fill_rect(x, y, w, 1, color)
         self.fill_rect(x, y + h - 1, w, 1, color)
@@ -1024,6 +1057,66 @@ def collide(*a):
         return x1 <= ax2 and ax1 <= x2 and y1 <= ay2 and ay1 <= y2
     x1, y1, x2, y2, px, py = a
     return x1 <= px <= x2 and y1 <= py <= y2
+
+
+def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc, top, bot, col, dist):
+    # Sim implementation of the native picogame.raycast wall-caster (the C DDA primitive on device;
+    # like Canvas.mode7, the sim provides the same op in Python). Same 16.16 inputs: pos/leftRay/rayStep
+    # are Q16; it reconstructs floats, runs the per-column DDA and fills top/bot (px), col (wire RGB565
+    # from wc[cell*2+side]) and dist (16.16 perpendicular distance). Used by picogame_ray.Raycaster.
+    px = posx / 65536.0
+    py = posy / 65536.0
+    half = sh >> 1
+    ipx = posx >> 16
+    ipy = posy >> 16
+    for c in range(ncols):
+        rdx = (lrx + c * srx) / 65536.0
+        rdy = (lry + c * sry) / 65536.0
+        mapx = ipx
+        mapy = ipy
+        ddx = abs(1.0 / rdx) if rdx else 1e30
+        ddy = abs(1.0 / rdy) if rdy else 1e30
+        if rdx < 0:
+            stepx = -1
+            sidex = (px - mapx) * ddx
+        else:
+            stepx = 1
+            sidex = (mapx + 1.0 - px) * ddx
+        if rdy < 0:
+            stepy = -1
+            sidey = (py - mapy) * ddy
+        else:
+            stepy = 1
+            sidey = (mapy + 1.0 - py) * ddy
+        side = 0
+        cell = 1
+        for _ in range(64):
+            if sidex < sidey:
+                sidex += ddx
+                mapx += stepx
+                side = 0
+            else:
+                sidey += ddy
+                mapy += stepy
+                side = 1
+            cell = flat[mapy * mw + mapx] if (0 <= mapx < mw and 0 <= mapy < mh) else 1
+            if cell:
+                break
+        perp = (sidex - ddx) if side == 0 else (sidey - ddy)
+        if perp < 0.01:
+            perp = 0.01
+        lh = int(sh / perp)
+        t = half - (lh >> 1)
+        b = t + lh
+        if t < 0:
+            t = 0
+        if b > sh:
+            b = sh
+        top[c] = t
+        bot[c] = b
+        ct = cell if (cell * 2 + 1) < len(wc) else 1
+        col[c] = wc[ct * 2 + side]
+        dist[c] = int(perp * 65536)
 
 
 # ---- procedural value-noise (the engine's noise lives here in the sim; on device
