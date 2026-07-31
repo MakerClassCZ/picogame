@@ -14,6 +14,10 @@ engine and build for it. The engine itself and the helper library live in their 
 
 👉 **Docs, guides and an in-browser playground:** <https://picogame.makerclass.cz/>
 
+🤖 **Building with an AI coding agent?** There's a ready-made [`picogame-game-design` skill](skills/picogame-game-design/)
+(design fundamentals, the full API, genre playbooks) and the whole docs site is published as
+[`llms.txt`](https://picogame.makerclass.cz/llms.txt). See <https://picogame.makerclass.cz/ai-agents/>.
+
 ---
 
 ## What's in this repo
