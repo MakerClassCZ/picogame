@@ -1,0 +1,395 @@
+---
+name: picogame-game-design
+description: >-
+  Design and build a 2D game for the picogame engine (a 2D engine for CircuitPython on
+  microcontrollers — RP2040 / RP2350 / ESP32-S3, e.g. the PicoPad) — use when
+  the task is making, designing, or implementing a small game or example for it, e.g. "make a tiny shooter".
+---
+
+# picogame game design
+
+You design and build small games for **picogame** — a retained-mode 2D engine for CircuitPython on
+microcontrollers (RP2040 / RP2350 / ESP32-S3), e.g. the PicoPad: D-pad + a few buttons, little RAM,
+most commonly a 320×240 display (but the game reads the resolution from `board.DISPLAY` — it's not
+hardcoded). The engine comes with a desktop simulator. **Your job is GOOD GAME DESIGN
+first, then mapping it onto the engine.** This file carries the design knowledge; reach for the
+references only for engine specifics, a genre recipe, or a named technique. Build in the simulator and
+validate with screenshots.
+
+The bar for "done" is not "it runs" — it's **fun in the first 10 seconds**. Everything below serves
+that and the **"one more go."**
+
+---
+
+## What the engine gives you — and its limits
+
+Design **inside this envelope** (details + costs in `references/engine-capabilities.md`):
+
+**You get:** a retained **Scene** with automatic dirty-rect redraw (mutate objects, call
+`scene.refresh()`); **Sprites** (move, flip, multi-frame animation, runtime `scale`/`angle`/90°
+`transpose`, and cheap blit effects `flash`/`tint`/`dither`/`shadow`); **Tilemaps** (big grids/boards,
+cheap); a **moving camera** (`set_view`) over a world bigger than the screen + fixed HUD layers;
+**Canvas** (a retained shape/panel surface), **StripDraw** (0-RAM drawing straight into the frame:
+full-screen animated effects (road, gradient sky, pseudo-3D) AND text/HUD/panels with no buffer —
+`picogame_ui` (HudBar, text boxes) is built on it — plus on-demand panels that repaint only on
+change), **Particles**; native **pseudo-3D** (`Canvas.mode7` perspective floor, `pg.raycast`
+first-person walls — both 0-RAM in a StripDraw, driven by `picogame_mode7`/`picogame_ray`); helpers
+for input (incl. auto USB gamepad/keyboard), timing, collision, pools, text/HUD, audio, NVM save,
+seeded random, juice (`picogame_fx`); and a **desktop simulator** so you build without hardware.
+
+**The limits (design around these):**
+- **Tiny RAM** — RP2040 ≈ 138 KB heap (RP2350 ≈ 520 KB). **Assets dominate.** Never a full-screen
+  `Canvas` (320×240 = 150 KB); use a Tilemap or StripDraw. Keep the **moving-object count low** (a
+  static background + a small moving foreground is the sweet spot).
+- **Few buttons** — D-pad + A/B (sometimes X/Y). No analog, no mouse. Map the whole game to these.
+- **No GPU / no alpha blending** — transparency is a single transparent color, plus the `dither`
+  (stipple) and `shadow`/`tint` blit modes. Rotation is nearest-neighbour (crisp at 90°/integer
+  scale, shimmery otherwise).
+- **Small screen, ~30 fps** — design for readability at 320×240 and short sessions.
+- **Paletted art is cheapest** — PAL8 = 1 byte/px; build every color with `pg.rgb565(r,g,b)`.
+
+These limits are your **style engine, not just a budget** — a constraint embraced becomes a
+signature. *Downwell* made its three-color palette (black, white, red) its calling card; *Canabalt*
+built the whole game on a single button (jump only) and black silhouettes; *Thomas Was Alone* turned
+plain colored rectangles into characters you remember. Lean *into* the limits
+(90°-crisp rotation, two-tone palettes, chunky pixels) rather than fighting toward fidelity the device
+can't give. If a design still needs more than the envelope, **cut it down** until it fits — that's the
+craft, not a failure.
+
+---
+
+## Part 1 — Design fundamentals (apply these every time)
+
+### 1.0 Fantasy before the verb (what the player gets to *be*)
+Before naming the verb, name the **fantasy** — what the player gets to be, or feel they're doing. The
+same verb under a different fantasy is a different game: *catch* = frantic short-order cook / catching
+dying stars before they hit the earth / last-line goalie. Pick the fantasy first and let it bias every
+later choice (palette, sound, name, the one twist). Then write two one-liners *before any code*:
+- **Identity** — "It's *$GENRE*, **and also** ___." If the "and also" doesn't spark curiosity, it's a
+  clone — keep going (one twist, not five).
+- **Anti-pillars** — 1–2 things this game is **NOT** (your defense against scope- and tone-drift).
+
+### 1.1 Core loop & one verb
+The **core mechanic** is the single verb the player repeats (jump, shoot, steer, match, dodge). The
+**core loop** is the tightest cycle on it: *act → see result → reward → act again, with a twist.*
+- Name the verb in ONE word (Tetris=fit, Snake=grow, Asteroids=thrust+shoot, Flappy=flap). If you
+  can't, the design isn't focused — cut until you can.
+- One game, one idea. Add depth by giving the **same verb new contexts** (Tetris adds speed, never a
+  button), not by adding verbs.
+- The loop must be legible by *watching* for ≤10 s, and **fun with no art and no sound** — prototype
+  with generated shapes and prove the loop before adding anything.
+
+### 1.2 Design backward from a feeling (MDA)
+Decide the **target feeling** first (tense reflexes / cozy puzzle / speed thrill), then **reason
+backward** down the MDA chain — from that feeling (aesthetic) to the dynamics that cause it to the
+mechanics (rules) that produce them.
+
+### 1.3 Game feel & juice (the cheap wins, ranked by fun-per-byte)
+Polish the *response*, not the simulation. On a handheld you own the whole pipeline — act on the
+**same frame** the button is read (≤1–2 frames latency). Then, roughly in value order:
+1. **Sound on the key action** — the single highest fun-per-byte feedback (see 1.7).
+2. **Hit-flash** — `sprite.flash = WHITE` for **1–3 frames** on impact; cheapest visual punch.
+3. **Screenshake (trauma model)** — keep a scalar `trauma 0..1`; events *add* (hit +0.3, big +0.6);
+   each frame offset = `max_off * trauma² * rand(-1,1)` via `picogame_fx.Shake`. `max_off ≈ 6 px` on
+   320×240 (>10 hides the action); decay ≈ 0.8/s. Square the trauma so small events barely shake.
+4. **Hit-stop** — freeze the sim **2–8 frames** (2–6 typical) on a big impact; makes hits *connect*.
+5. **A particle/pop on the event** — `picogame_fx`/`Particles`; a ring or sparks on catch/score.
+6. **Easing/tween** — UI and pickups ease in (`picogame_fx.Tween`, ~0.15–0.35 per frame), don't snap.
+7. **Number pop-ups**, screen flash (1–3 frames white) for big moments.
+Don't over-shake or juice gameplay-critical readability away. `picogame_fx` (Shake/Fade/Tween/Camera)
++ the native blit effects (`flash`/`tint`/`dither`/`shadow`) cover most of this for ~free.
+**Safety:** never flash the full screen faster than **3 Hz** (≥10 frames apart @30fps), and watch for
+clustered hit-flashes aggregating past that — it's a seizure risk; prefer localized `sprite.flash`.
+Keep effect intensity in a **named constant at the top of the file** (e.g. `SHAKE = 1.0`) — on
+CircuitPython the game's source sits on disk and is directly editable, so that fully stands in for
+an "effects setting"; no menu needed.
+
+### 1.4 Difficulty, flow & fairness
+Keep the player in the **flow channel** — challenge tracking rising skill. For a 1–3 min handheld run:
+- **Ramp by speed / density / variety, NOT by more HP.** Tetris speeds up; Pac-Man adds pressure.
+- **Give the ramp a shape** — don't climb monotonically (flat = boring by minute two). Use a
+  **sawtooth**: build tension 20–40 s → *release* at a milestone (wave clear, checkpoint) → re-engage
+  ~10–15 % harder. Land the first real spike at **~60–90 s** (after the teach window); every spike
+  earns a moment of relief.
+- **Announce every threat in advance** — a readable wind-up, a flash, a sound (telegraphing); no
+  unavoidable damage. The player must always feel
+  "my fault." Human reaction floor ≈ **250 ms (~8 frames @30fps)** — give at least that to react.
+- **Generosity mechanics** make games feel fair (frame counts @ 30 fps — the baseline; scale up for 60):
+  **coyote time 3–8 frames** (jump shortly after leaving a ledge), **jump buffer 3–6 frames** (honor
+  a jump pressed just before landing) — both in `picogame_input.Timer`; **i-frames** after a hit
+  (mercy window so one hit can't chain-kill); **hitbox smaller than the sprite** for the player.
+- **Instant restart** (< ~0.5 s, re-init in place) — failure must cost almost nothing.
+- **Keep tuning parameters as named constants at the top of the file** (enemy speed, spawn rate,
+  i-frames, shake strength). On CircuitPython the game's source sits on disk, so anyone can edit
+  difficulty and effect intensity right in the code — that's the local equivalent of a settings menu
+  and the **default path** (accessibility for free). Add a difficulty menu
+  (`picogame_options.OptionsMenu` + `picogame_save`) only where a game genuinely wants one on the
+  title screen — not out of obligation.
+
+### 1.5 The "one more go" (retention — ethically)
+Reward **skill** and keep the rules **readable** — the player must know what killed them. No hidden
+probability, no behind-the-scenes difficulty they can't read.
+- **Score chase + personal best**; show a rising, legible score (+1 per X beats opaque scoring).
+- **Near-miss** tension and **peak-end**: a run is remembered by its peak and its end — end on a high
+  (a flourish on death, the score front-and-center).
+- The hook is a **short, self-restarting loop** with escalating stakes — make restarting effortless.
+
+### 1.6 Game-state flow (most of a game's shape)
+Wrap the loop in a small **state machine** — decide the states up front; it's most of the game's
+shape. Canonical: **BOOT → TITLE/attract → PLAY → GAME-OVER → (restart)**, plus **PAUSE** if needed.
+Keep ONE `state` variable; each frame branch on it for what you update and draw. The skeleton:
+
+```python
+import picogame as pg
+import picogame_game, picogame_input, picogame_clock
+
+scene, bufA, bufB = picogame_game.setup()       # engine objects = module globals (built ONCE)
+btn = picogame_input.Buttons()
+clock = picogame_clock.Clock(30)
+
+TITLE, PLAY, OVER = 0, 1, 2                     # int states: cheaper compares than strings
+
+st = State()                                    # all mutable game state in ONE object (see below);
+                                                # State.__init__ sets st.state = TITLE
+def new_game():
+    st.reset()                                  # score/lives = start; reset positions, clear pools
+    st.state = PLAY
+
+def main():                                     # the per-frame loop lives in a FUNCTION, not module
+    poll = btn.poll; pressed = btn.just_pressed  # hoist hot lookups -> locals
+    refresh = scene.refresh; tick = clock.tick
+    A = btn.A
+    while True:
+        poll()
+        if st.state == PLAY:                    # most-frequent state first
+            # ... move, collide, score; on death: ...
+            if st.lives <= 0: st.state = OVER
+        elif pressed(A):                        # TITLE and OVER: A = (re)start
+            new_game()                          # INSTANT restart, no reload
+        refresh()
+        tick()
+
+main()                                          # module bottom: kick it off (starts in TITLE)
+```
+- Engine mapping: build the `Scene` **once and keep it across states** (rebuilding churns RAM); on
+  TITLE/GAME-OVER hide gameplay sprites (`visible=False`) and show an overlay on a **fixed (HUD)
+  layer** (`picogame_ui`); `picogame_fx.Fade` for clean transitions. Keep the state machine SIMPLE —
+  a `state` var + the branches above is enough. Don't build a class with states, transitions and
+  enter/exit hooks; don't over-engineer.
+- **State storage — rule of thumb:** **hold mutable game state in ONE `State` object** (`st.px`,
+  `st.score`; `st.reset()` re-inits in place — a **never-rebound singleton**, so `from x import st`
+  stays valid across restarts). A trivial game (≤3-4 vars) can use bare module globals, but the object
+  is the default because it's what makes the loop-in-function pattern (below) both **safe** and
+  **clean**. Every field documented in `__init__`; no name collisions with sprites/loop vars. Never a
+  bare `S={}` dict (string keys are typo-prone + slower). Keep engine objects (Sprites/Tilemap/Canvas/
+  pools/`clock`/`btn`/audio) and cross-run/persistent values (NVM best score) as module globals, not in `State`.
+- **Put the per-frame loop in a FUNCTION, not at module scope** (the skeleton above). This IS a
+  measured perf lever, not style: at module level every name reference is a globals-dict lookup
+  (`mp_map_lookup` is the **#1 hottest interpreter function** on-device, ~1 µs each, hundreds/frame);
+  inside a function the same names are **array-indexed locals** (~2× faster), and hot lookups you hoist
+  to locals (`poll = btn.poll`) are faster still. Measured on real games on RP2040: **logic
+  12 → 8 ms/frame (−33 %)** — the difference between wobbly and **steady 30 fps**; on a heavier game
+  **76 → 50 ms**. **Safety:** the wrap only breaks if the loop and a helper
+  share a bare mutable global — holding state in the `State` object (nothing bare rebound) makes it a
+  clean, mechanical wrap (in most finished games it's exactly that — a mechanical wrap). Full measured
+  hot-loop style guide: `engine-capabilities.md` §"Measured hot-loop style guide".
+
+### 1.7 Audio — the cheapest feedback channel
+A beep on the key action confirms what the eye is doing and is the best fun-per-byte juice.
+- **Minimal SFX set**: the main verb (jump/shoot), a hit/score, a pickup, a death/fail, a menu blip.
+  **`picogame_sfx.Kit` ships exactly this, hardware-tuned** — reach for it FIRST; hand-roll
+  `picogame_synth` notes only for a bespoke palette. Full usage:
+
+  ```python
+  import picogame_synth as snd
+  import picogame_sfx as sfx
+  kit = sfx.Kit(snd.Synth())      # builds the voices ONCE, at boot
+  # ...on events: kit.jump() / kit.coin() / kit.zap() / kit.hit() / kit.explosion()
+  # ...once per frame (next to clock.tick()): kit.tick()
+  ```
+
+  Available sounds: `blip coin powerup zap pew jump hit hurt boom explosion`. On audioless builds
+  everything silently degrades to a no-op — no guards needed.
+- **Same-frame** as the event (audio latency must be imperceptible).
+- Chiptune-style: square/triangle/noise + a quick **pitch sweep** = blip/zap/explosion; arpeggios as
+  cheap chords. `picogame_audio` (PWM/tone + wav) / `picogame_synth` (chiptune) — both auto-pick the
+  output (`picogame_audioout`: PWM, or the I2S DAC on a Fruit Jam), so **no board-specific audio code**;
+  volume/output live in `settings.toml` (`PICOGAME_HP_VOLUME`, `PICOGAME_AUDIO_OUT`).
+- **Crisp, not rich** (hard-won): short DRY **square** beeps read best on a tiny speaker. Use a pitch
+  sweep (`pitch_bend`) ONLY on zaps + death — it's a sine *wobble*, not a clean glide, and long decays
+  with bends everywhere sound mushy. Carry meaning in the **contour**: ascending = win/kill, descending
+  = lose/death, two alternating tones = warning/heartbeat, rising pitch = filling/charging.
+- **You can't judge sound yourself — have it listened to**: the simulator is **silent** (no audio
+  backend — but the libs import and no-op fine there, no guard needed), and you don't hear it either.
+  Don't design custom `picogame_synth` sounds blind: if `tools/synth_preview.py` is in the repo,
+  render them to WAV and ask the USER to listen and approve before shipping. The ready-made
+  `picogame_sfx.Kit` skips this — it's pre-tuned, which is why it's the first choice.
+- **Music is optional** — short loops fatigue, and handhelds are often played quietly; a tune helps
+  menus/title more than frantic play. **Never rely on audio alone** — always pair with a visual.
+
+### 1.8 Handheld constraints & readability (UX)
+The device decides what's possible — design within it:
+- **Readability first**: the player, the threats, and the goal must always be findable. Strong
+  **figure/ground contrast**; distinguish things by **shape AND colour** (colourblind-fair, and
+  clear at small size) — never colour alone. Keep the screen uncluttered. Readability is also
+  **identity**: give the player and each threat a distinct **silhouette** (recognizable as a black
+  shape) and a small **signature palette** (3–5 hues that *are* the game's look) — on this device
+  legibility and visual identity are the same budget, so spend it once, deliberately.
+- **Few buttons**: map the whole game to D-pad + A/B (+X/Y). Follow muscle memory — **A = confirm /
+  primary action, B = cancel / back** (never swap them); X/Y = secondary. Context-sensitive buttons
+  over chords; prefer one-button depth where it fits. On a USB-host board (Fruit Jam) a plugged-in
+  **USB gamepad works automatically** (`picogame_input` OR-adds it as a source) — design to the same
+  D-pad + A/B vocabulary either way.
+- **Short sessions**: instant start, instant restart, no long unskippable intros — "pick up for 2
+  minutes."
+- **HUD** in reserved edge zones (`picogame_ui` fixed layer); tiny, legible.
+- **Teach without a manual** — teach by play in 3 beats, all within ~15–30 s of a 90 s run:
+  **(1) safe intro** — one input, no threats, discover the controls exist; **(2) demonstrate → test**
+  — show the mechanic fire once (a harmless enemy walks into a hazard) *before* requiring it;
+  **(3) contextual hint** — a button icon the first time an action unlocks, then gone. No tutorial
+  screen to dismiss; affordances over text.
+
+### 1.9 Scope discipline
+The smaller, the more likely it's finished and fun.
+- **MVP first**: build the minimum that makes the core loop fun (a vertical slice), then stop and
+  feel it before adding. Take a genre's MVP feature set; defer the rest.
+- Cut ruthlessly: if a feature doesn't change how the verb feels or what it's worth, drop it. If the
+  design doesn't fit (RAM, fun, buttons), **go back and cut** — scope discipline is a feature.
+
+### 1.10 Assets — cheap first
+Prototype with **generated shapes** (`picogame_shapes`: circle/rect/ring/poly_frames/tileset_colors)
+so you reach fun with no art. Add real art later via `tools/png2picogame.py` (PAL8 = 1 byte/px;
+`--dither`, `--dedup` to save RAM). CC0 art (e.g. Kenney) is fine — attribute it. **AI-generated art
+(PixelLab.ai), incl. animated sprites** — the full workflow + size floors + the `pg.rgb565` byte-order
+gotcha live in `engine-capabilities.md §6` (generate big → downscale → bake; forced palette for cohesion).
+
+### 1.11 The core mechanics every game wires up
+Almost every small game is built from this short list — for a first game, this is the checklist of
+"parts you'll need." This table maps mechanics → which module; for the **exact method names and
+signatures see `engine-capabilities.md` §3 (the single source of truth)** — names below are only
+enough to recognize the helper:
+
+| Mechanic | What it is | Use |
+|---|---|---|
+| **Input → movement** | read buttons, move the player | `picogame_input.Buttons` (`is_pressed`/`just_pressed`; `.clear()` on state changes); move via `spr.x +=`/`spr.fx +=` (sub-pixel). Auto-adds a **USB gamepad and a USB keyboard** on USB-host boards (Fruit Jam) with no code change |
+| **Collision / hit** | "did these two touch?" — the heart of most rules | `a.overlaps(b)` (box; `b` = sprite/point/rect) / `a.near(b, r)` (circular), or raw `pg.collide(...)`; on a grid, probe `picogame_tiles` flags (solid/hazard) |
+| **Spawning many things** | bullets, enemies, coins, pipes | a fixed **`picogame_pool.Pool`** — never create/destroy sprites per frame (RAM) |
+| **Rules: score / lives / win-lose** | the game's economy + end condition | plain Python ints; drive the state machine (§1.6); show via `picogame_ui` HUD |
+| **Animation** | walk/idle/explode cycles | step `sprite.frame`, or `picogame_anim` for time-based; bake rotations as frames |
+| **A board / level** | maze, bricks, terrain, tiles | `Tilemap` (read/write cells at runtime — eat-grids, destructible terrain) |
+| **Camera / scrolling** | world bigger than the screen | `scene.set_view(ox, oy)` follow + clamp; HUD on a fixed layer |
+| **Timing** | same speed on any framerate | `picogame_clock.Clock(fps)` → `dt`; `FixedStep` for deterministic physics |
+
+Most first games = input→move + collision + score/lives + a win/lose state. Get that loop fun first
+(§ workflow), then add animation, juice, and a board.
+
+---
+
+## Part 2 — The references
+
+Don't load everything up front — pull a file only when a step points to it:
+
+| File | Pull it for |
+|---|---|
+| `engine-capabilities.md` | **the deep engine reference** — every building block and what it COSTS, the helper libs, idioms with code, the RAM budget, the asset pipeline, the sim loop, the example catalog, footguns. How to MAP a design onto picogame. |
+| `api-reference.md` | **the full API — exact signatures** for the native C engine (`pg.Sprite`, `Scene`, `Canvas`, `Tilemap`, `StripDraw`, `Canvas.mode7`, `pg.raycast`, …) and every helper lib. Read it when you need a precise call signature (the C engine has no `.py` source to grep). |
+| `genre-patterns.md` | **genre playbooks** — core loop, the one thing to get right, controls, tuning, pitfalls, MVP. **Read the "Cross-genre rules" header + only your genre's §:** 1 Breakout · 2 Shmup · 3 Asteroids · 4 Platformer · 5 Top-down/RPG · 6 Maze · 7 Puzzle · 8 Racing · 9 Endless/Arcade · 10 Tower defense · 11 Card/roguelite deckbuilder · 12 First-person raycaster/dungeon crawler. |
+| `techniques.md` | **cross-genre technique recipes** mapped to picogame — state machines, enemy/AI patterns, parallax, collision, procedural generation, palette/raster effects, level authoring, ghosts. |
+
+Templates in `templates/` (pull when the workflow says): `design-brief.md` — fill at step 1, before coding; `starter_game.py` — the skeleton to start step 7 from.
+
+---
+
+## Part 3 — The workflow
+
+1. **Frame the concept** (§1.1–1.2): who plays, how long, what feeling; the one core verb; the loop
+   in one sentence. Fill `templates/design-brief.md`.
+2. **Pick the genre & steal its grammar** → `genre-patterns.md` (read only your genre's §, see Part 2):
+   take the MVP set, the one-thing-to-get-right, the control scheme. State the twist (§1.0) before building.
+3. **Scope for the device** (§1.8–1.9) + the RAM budget in `engine-capabilities.md`.
+4. **Choose engine blocks** → `engine-capabilities.md`: Sprite (+ `picogame_pool` for many), Tilemap
+   for boards, StripDraw for full-frame effects, Canvas for rarely-changing panels, `set_view` camera,
+   `picogame_ui` HUD. For a specific mechanic (AI, parallax, procedural, ghosts) → `techniques.md`.
+   For a scrolling **tile-based world**, paint the map in the **scene editor** (`editor/`) and load the
+   exported `scene.json` instead of hand-coding the Tilemap; ASCII-string levels (`techniques.md`)
+   suit small single-screen puzzles.
+5. **Plan assets cheap** (§1.10): generated shapes first.
+6. **Structure the loop + state flow** (§1.6): set the state machine and the per-frame loop before
+   layering rules.
+7. **Build in the simulator** (start from `templates/starter_game.py`): core loop on screen FIRST,
+   confirm with a screenshot, then add rules.
+   ```sh
+   python3 sim/run.py examples/my_game.py --frames 80 --hold RIGHT,A --shot /tmp/shot.png  # headless
+   # live window FOR THE USER to actually play (don't run it yourself — you won't see it):
+   python3 sim/run.py examples/my_game.py --backend pygame
+   ```
+8. **Feel & fairness pass** (§1.3–1.5, 1.7): add the juice (sound + flash + a little shake), then make
+   it fair (telegraphing, generosity frames, instant restart), then the retention touch (score/peak-end).
+9. **Validate against the quality bar** (below) in the simulator.
+
+---
+
+## Quality bar (be self-critical — iterate until ALL hold)
+
+Split by who can check it. **Self-certify the machine-verifiable items** below; **fun and feel you
+CANNOT confirm from a static frame — surface those to the human, don't rubber-stamp them.** Declaring
+"fun: done" off a screenshot is the failure mode to avoid.
+
+**Machine-verifiable — the agent confirms these (sim run + screenshot + RAM estimate):**
+1. **Runs clean** — N frames in the sim with no exception (`sim/run.py … --frames N`), not just
+   "imports." Then a **`--frames 3600`** (≈2 min) run must also finish clean — it catches per-frame
+   allocations and heap fragmentation a short run hides (`engine-capabilities.md §5`).
+2. It **reads at a glance** in the PNG — *name* the player's shape+colour and each threat's from the
+   shot alone; if you can't tell them apart by **shape AND colour** (not colour alone), it fails. HUD legible.
+3. It controls cleanly on **D-pad + A/B**; nothing needs a manual. Drive the `--hold` edge cases:
+   hold-fire 300 f (pool must not exhaust), idle (title must not crash), `LEFT,RIGHT` (no NaN/escape),
+   A on frame 1.
+4. Clean **game flow** — title/play/game-over with **instant restart**. Prove it with a 3-shot
+   sequence (`--shot` title → `--hold A` play → `--shot-at <death>` game-over) showing *distinct*
+   states — execution evidence, not just code that compiles.
+5. It **fits the RAM target** (RP2040 is the primary budget; RP2350/Fruit Jam only adds slack) and uses
+   `rgb565()` / `sprite.touch()` correctly. **Measure, don't estimate** — with the right tool for
+   each environment:
+   - **In the sim** (where you build): compute the asset RAM budget statically (bitmap bytes — see
+     the RAM-budget § in `engine-capabilities.md`) and run `sim/run.py game.py --profile` — it prints
+     a report of the game's/libs' retained allocations after warm-up. Allocation growing with frame
+     count = a leak = a blocker.
+   - **On the device**: `dbg.ram("tag")` from `picogame_debug` (after `dbg.enabled = True`) at frame
+     10 and frame N/2 — a heap shrinking across the run is a blocker (free ≠ largest contiguous
+     block); plus a `picogame_debug.Watch(scene)` FPS/FREE overlay. In the sim `dbg.ram` is silent
+     (CPython has no `gc.mem_free`; it prints numbers only under `PYTHONTRACEMALLOC=1`, and even then
+     they're CPython allocations — good for deltas/leaks, not an absolute budget). (Don't hand-roll a
+     `gc.mem_free` guard — that's what `picogame_debug` is.)
+6. The code is **≈ one example's length** (not a sprawling engine), commented like the examples, and starts from `picogame_game.setup()`.
+
+**Human-verifiable — a single frame can't prove these; hand them to the player:**
+- The **core loop is fun in the first 10 seconds** ("one more go"), not just "technically runs."
+  *(Slower genres — puzzle, RPG, tower defense, card/roguelite — read "10 seconds" as **hooked/
+  curious**, not **scoring**, and "instant restart / 1–3 min run" as a session shape that fits the
+  genre, not a literal arcade timer. Don't warp a deckbuilder toward twitch pacing to satisfy the bar.)*
+- At least one **juice** touch lands and **difficulty feels fair** (telegraphing + a generosity mechanic).
+
+To *infer* motion before handing off, drive `--shot-at` across several frames — the live window
+(`--backend pygame`) you can neither launch nor see yourself; offer it to the USER so they can
+actually play, and get the fun/feel verdict from them. Hand off with **numbers, not vibes** — a short list:
+- **juice present**: flash frames, shake `max_off`, hit-stop frames;
+- **generosity mechanic** + its frame count;
+- **difficulty ramp**: spawn/speed curve + when the first threat lands — **flag any reaction window < 8 frames**;
+- if it seeds `picogame_rand.Rand(seed)`: a fixed seed + `--hold` gives a reproducible run to judge difficulty.
+
+---
+
+## Case studies (the loop in practice: design intent → MVP in sim → screenshot → adjust → validate)
+
+Short illustrations of how design decisions map onto engine blocks and what sim screenshots reveal.
+
+- **A top-down racing game**: verb = *steer*; a `Tilemap` track + a `Sprite` car rotated at runtime
+  (`sprite.angle`) + a camera (`set_view`) + a best-lap record/replay ghost (int16 arrays to
+  fit RAM); tuned entirely via sim screenshots.
+- **A pseudo-3D racing game**: wanted the OutRun feel with zero buffer → a `StripDraw` scanline road
+  + a replay ghost. Lesson: a flat top-down car sprite read as 2D against the perspective road — a
+  pre-rendered (slightly tilted) sprite fixed it; a *game-feel* bug only visible in a screenshot.
+- **Starfall** (endless/arcade): verb = *catch*;
+  readability via shape+colour (green circle gems vs red square bombs); fixed sprite pool (no per-frame
+  alloc); juice = pop-ring + beep on catch, tray-flash + shake on a hit; difficulty ramps fall-speed
+  and spawn-rate; instant restart. Designed and validated entirely in the simulator.

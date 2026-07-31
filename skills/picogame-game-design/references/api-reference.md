@@ -1,0 +1,248 @@
+<!-- Full picogame API reference (native C engine + helper libs), bundled into the skill so the
+     exact signatures are available OFFLINE — the C engine is a compiled native module with no
+     .py to read. SOURCE OF TRUTH: picogame-web/REFERENCE.md (regenerate this copy from there
+     when the engine API changes). -->
+
+# picogame — quick reference
+
+A one-page cheat sheet of the engine's everyday API: the native `picogame` C module
+and the pure-Python `picogame_*` helper libraries in `lib/`. Signatures show parameter
+names and defaults; `*` marks keyword-only arguments. Colours are wire-order RGB565 ints
+(build them with `rgb565`). For longer explanations see the [engine guide](PICOGAME.md).
+
+**See also:** [Fit it in RAM](/memory/) · [Drawing paths](/concepts/drawing-paths/) · [Performance](/performance/) · [Run on hardware](/hardware/) · [Coming from another engine](/concepts/coming-from/).
+
+---
+
+## Native module: `picogame` (`import picogame as pg`)
+
+### Constants & colour
+- `RGB565`, `PAL8` — bitmap pixel formats.
+- `API_LEVEL` — `int`; engine API generation, bumped when the Python-visible surface grows. Libraries check `getattr(pg, "API_LEVEL", 0) >= N` to diagnose a too-old firmware up front instead of failing later on a missing attribute.
+- `RGB444_SUPPORTED` — `bool`; whether this board's panel can drive 12-bit RGB444 (lets one game opt into `Display(rgb444=True)` only where it works).
+- `rgb565(r, g, b) -> int` — wire-order colour from 8-bit channels.
+- `collide(x1, y1, x2, y2, ax1, ay1, ax2, ay2) -> bool` — AABB overlap (8 args = box vs box) or point-in-box (6 args: `collide(x1, y1, x2, y2, px, py)`). Inclusive AABB, so boxes collide when they touch (pass sprite boxes as `(x, y, x+w, y+h)`; fires on contact).
+
+### `Bitmap(data, width, height, *, format=RGB565, palette=None, frames=1, stride=0, transparent=None)`
+An image atlas of equal-size frames (any size). `data` is a buffer; `palette` (array of wire colours) is required for `PAL8`. `transparent` = the index/colour skipped when blitting.
+- Read-only props: `width`, `height`, `frames`, `format`, [`stride`](/concepts/glossary/) (pixels per source row; leave `0` for tightly-packed data, set it only for a sub-window of a larger image), `palette` (the PAL8 palette buffer or `None`), `transparent` (the transparent value or `None`).
+
+### `Sprite(bitmap, x=0, y=0, *, frame=0, visible=True, flip_x=False, flip_y=False)`
+A positioned, animatable instance of a Bitmap.
+- Position/anim props: `x`, `y` (int px) · `fx`, `fy` (float sub-pixel) · `frame` · `visible` · `flip_x`, `flip_y` · `bitmap` (swap) · `data` (your payload).
+- Transform props (nearest-neighbour, about the anchor):
+  - `scale` — float draw scale; `1.0` = native (fast path), `2.0` = double size, fractional allowed (e.g. a pulse).
+  - `angle` — rotation in degrees; `0` = none (fast path). Combines with `scale`.
+  - `transpose` — bool; swaps X/Y axes. On its own that is a **diagonal mirror**, not a rotation; combine with a flip for a crisp, shimmer-free quarter-turn. With `flip_x`/`flip_y` it reaches all 8 orientations. Fast path only (scale 1, angle 0); footprint swaps w/h. Recipes (screen y-down): **90° CW** = `transpose+flip_y` · **180°** = `flip_x+flip_y` · **270° CW** = `transpose+flip_x`.
+  - `anchor` = `(fx, fy)` — pivot as fractions of the bitmap (0..1): `(0.5, 0.5)` = centre, `(0.5, 1.0)` = bottom-centre. `x`/`y` and rotation are about this point.
+- Blit-effect props (one at a time; setting one clears the others; cheap, no extra bitmaps):
+  - `shadow` — bool; opaque pixels darken the destination (drop-shadow / dim overlay).
+  - `flash` — wire-RGB565 colour (or `0`/`None` = off); opaque pixels drawn as that flat colour (hit-flash). Pulse 1–3 frames.
+  - `tint` — wire-RGB565 colour (or `0` = off); opaque pixels *multiplied* by it, colouring the sprite while **keeping its shading** (damage-red, freeze-blue, glow).
+  - `dither` — `0` (opaque) .. `16` (invisible); Bayer-stipple translucency, no alpha (ghosts, fog, fade-in/out).
+- `move(x, y)` — set position. · `touch()` — mark dirty after an in-place bitmap/palette edit.
+- `overlaps(other, inset=0) -> bool` · `near(other, r) -> bool` — native collision tests (see **Sprite collision** below).
+
+### `Display(busdisplay, *, rgb444=False)`
+Fast DMA backend wrapping a board's `busdisplay` (FourWire SPI). Pass to `Scene`. `rgb444=True` drives the panel in 12-bit RGB444 (~25% less SPI traffic) on panels that support it; gate with `RGB444_SUPPORTED`.
+
+### `Scene(display, buffer_a, buffer_b, *, background=0, top=0, bottom=0, left=0, right=0)`
+Retained-mode scene with dirty-rectangle rendering; `buffer_a/b` are strip buffers.
+- `add(item, *, fixed=False) -> item` — add a Sprite/Tilemap/Particles/Canvas/StripDraw (insertion order = bottom→top) and return it (so `spr = scene.add(Sprite(...))` works). `fixed=True` (keyword-only) pins it to the screen (ignores the camera) for HUD/dialog.
+- `add_all(items)` — add several (bottom→top).
+- `remove(item)` — unlink a previously added item (no ghost — next refresh repaints over it, like `invalidate()`); the item survives and can be `add()`ed again. `ValueError` if not in the scene.
+- `set_view(ox, oy)` — camera offset (screen position of the scene origin); changing it repaints all.
+- `view` — read-only `(ox, oy)` camera offset.
+- `invalidate()` — force a full repaint next refresh.
+- `refresh() -> list | None` — diff & repaint changed regions; returns the dirty rect `[x1,y1,x2,y2]` (reused) or None.
+
+### `Tilemap(tileset, cols, rows)`
+A grid of tile indices into a tileset Bitmap (each frame = one tile); a Scene layer.
+- `tile(tx, ty, value=None, *, flip_x=False, flip_y=False, transpose=False) -> int` — get tile, or set it (with optional keyword-only per-cell orientation: `flip_x`/`flip_y`/`transpose` give all 8 orientations of a tile; pair with a deduplicated tileset, see `png2picogame.py --dedup`). Out-of-range ignored. The orientation plane is allocated lazily (RAM only if a map uses it).
+- `fill(value)` — set every tile (clears orientation).
+- `move(x, y)` — position the map.
+- Read-only props: `x`, `y`, `cols`, `rows`.
+
+### `Particles(capacity, *, size=1, gravity=0.0, fade=False)`
+A pooled particle layer (small moving dots) drawn as one Scene layer.
+- `emit(x, y, count, speed=1, life=30, color=0xFFFF)` — burst `count` dots, random velocity ≤ `speed` px/tick, living `life` ticks.
+- `tick()` — advance one step (move, gravity, ageing). Call each frame.
+- `clear()` — remove all.
+
+### `Canvas(width, height, *, transparent=None, buffer=None)`
+A RAM RGB565 drawing surface composited as a Scene layer (`width*height*2` bytes). `transparent` makes it a shaped overlay; `buffer` backs it with external memory (e.g. an arena slice). For *animated full-frame* surfaces prefer `StripDraw` (no buffer).
+- `clear(color)` · `pixel(x, y, color)` · `fill_rect(x, y, w, h, color)` · `rect(x, y, w, h, color)`
+- `line(x0, y0, x1, y1, color)` · `circle(cx, cy, r, color)` · `fill_circle(cx, cy, r, color)` · `ring(cx, cy, r, thickness, color)`
+- `triangle(x0,y0, x1,y1, x2,y2, color)` · `fill_triangle(...)` · `ellipse(cx, cy, rx, ry, color)` · `fill_ellipse(...)`
+- `fill_round_rect(x, y, w, h, r, color)` · `frame3d(x, y, w, h, light, dark)` (beveled box) · `move(x, y)`
+- `blit(bitmap, x, y, frame=0, flip_x=False, flip_y=False)` — stamp a bitmap frame into the surface (honours its transparent key; the retained way to bake an icon/portrait/rendered text into a panel).
+- `text(x, y, s, fg, font, bg=None)` — composite a string in C, rasterizing each glyph of `font` (a `fontio.BuiltinFont`) on the fly: no Python glyph cache and no per-call Bitmap/Sprite. `bg=None` → transparent glyph background. ASCII/built-in font only. Works on a Canvas or a `StripDraw` view; the latter does not retain a separate text surface.
+- `mode7(texture, horizon, y_off, z, rx0, ry0, rsx, rsy, cam_x, cam_y)` — fill the rows below `horizon` with a **Mode-7 perspective floor** of `texture` (power-of-2 dims; one world unit = one tile). 10 fixed-point (16.16) args — you normally let `picogame_mode7.Camera` compute them from a camera pose. Draws into a Canvas or a 0-RAM `StripDraw` view (pass `y_off` = the strip top).
+- Read-only props: `x`, `y`, `width`, `height`.
+
+### `StripDraw(callback, x=0, y=0, width=0, height=0, *, always_dirty=True)`
+Immediate-mode layer with **no pixel buffer**: each refresh it calls `callback(view, vx, vy, vw, vh)` once per render strip inside its rect. `view` is a Canvas pointing at the live strip (use Canvas primitives, incl. `view.text`); view-local `(0,0)` = screen `(vx, vy)`. In a scrolling scene add it `fixed`.
+- `always_dirty=True` (default) repaints every frame → for animated/scanline content (pseudo-3D, gradients). `always_dirty=False` repaints only when invalidated or overlapped by another change → for static/on-change panels (it still renders once on first refresh).
+- `invalidate()` — mark it dirty so the next refresh repaints it (the way to update an `always_dirty=False` panel when its content changes).
+- Read/write props: `x`, `y`, `width`, `height` — move or resize the layer (after shrinking, call `scene.invalidate()`) · `always_dirty`.
+
+### Low-level draw functions
+Most games never call these (`picogame_game.setup` + `Scene` use them internally), but they are exposed for hand-built render loops.
+- `render(display, sprites, buffer, x0, y0, x1, y1, *, background=0)` — render a sprite list into the region `[x0,x1) × [y0,y1)` and push it to `display`. `buffer` is a reusable strip buffer (≥ region-width × 2 bytes). **Mixing with a retained scene:** the scene doesn't know `render()` changed the pixels — if the region overlaps the scene's play rect, call `scene.invalidate()` after (or use `picogame_game.overlay`, which does both); HUD bands outside the play rect don't need it.
+- `invert(display, on)` — toggle the panel's hardware colour inversion. Changes the panel's inversion state without sending pixel data, so a brief invert makes a full-screen negative flash (a 1-bit "hit" look) with no redraw. See `picogame_fx.InvertFlash`.
+
+### Procedural noise (coherent value noise, 0..1)
+- `value2d(x, y, *, seed=0) -> float` · `value1d(x, *, seed=0) -> float`
+- `fbm2d(x, y, *, octaves=4, seed=0, lacunarity=2.0, gain=0.5) -> float` · `fbm1d(x, *, octaves=4, seed=0, lacunarity=2.0, gain=0.5) -> float` — fractal (summed octaves).
+
+---
+
+## Helper libraries (`lib/picogame_*.py`, pure Python)
+
+### `picogame_game` — one-call boot
+- `setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, left=0, right=0, rgb444=False) -> (scene, buffer_a, buffer_b)` — take over the display, build a Scene + two strip buffers. `top/bottom/left/right` reserve fixed HUD margins; `rgb444=True` opts into 12-bit colour on a supporting SPI panel, and `rgb444="auto"` enables it only where the board reports `picogame.RGB444_SUPPORTED`.
+- `overlay(scene, display, items, buffer, x0, y0, x1, y1, *, background=0)` — immediate-draw `items` over a live scene (pause / menu / cutscene / banner) = `pg.render` + `scene.invalidate()`, so the next `refresh()` repaints the full frame instead of leaving overlay fragments.
+- `open_framebuffer(width, height, color_depth=None) -> display` — set the resolution from inside a game on a framebuffer board (Fruit Jam DVI), e.g. `open_framebuffer(640, 480)`; a no-op that returns `board.DISPLAY` on a fixed SPI panel. Pass the result to `setup(display=…)`.
+- `resolve_display(display=None) -> (display, is_framebuffer)` — normalise a display/framebuffer handle (used by the HUD / immediate-render helpers).
+
+### `picogame_clock` — frame pacing
+- `Clock(fps=30, max_dt=0.1)` · `.set_fps(fps)` · `.tick() -> dt` (sleep to frame, return seconds) · `.tick_async()` (the same, for `asyncio` loops).
+- `FixedStep(step_fps=60, max_steps=5)` · `.steps()` — generator yielding a constant dt per fixed step · `.step_count()`.
+
+### `picogame_input` — buttons
+- Masks: `UP DOWN LEFT RIGHT A B X Y L1 L2 R1 R2 START SELECT ALL` (a superset; each board maps the subset it has); profile `PICOPAD`.
+- `Buttons(profile=None, pull=None, prefer_keypad=True, debounce_s=0.02, matrix=None, usb=None, sources=None)` · `.poll() -> mask` · `.is_pressed(mask=ALL)` · `.just_pressed(mask=ALL)` · `.just_released(mask=ALL)` · `.has(mask=ALL)` (is the mask present in the profile) · `.repeat(button, delay=15, interval=4)` — PICO-8 `btnp` auto-repeat (menus / grid move) · `.clear()` (drop held state).
+  - `matrix=` — a scanned key-matrix source (also configured board-wide via the `PICOGAME_MATRIX_*` settings keys); `usb=` — one or more extra button **sources** (USB pad/keyboard, below). `Buttons` ORs every source together, so a game reads them all with no code change.
+- `Timer(frames)` — input-leniency window (coyote time / jump buffering): `.feed(condition)` (recharge while true, else decay) · `.charge()` · `.is_active` · `.consume()` (true once, then clears).
+
+### `picogame_usbpad` — USB HID gamepad source (USB-host boards, e.g. Fruit Jam)
+- `UsbPad(buttons=None)` — a button **source** for `Buttons(usb=…)` (auto-attached by default on a USB-host build). Reads a USB HID gamepad and ORs it into the button mask, so a plugged-in pad works with **zero game code changes**. Needs a USB-host CircuitPython build (`usb.core`); a no-op on boards without it.
+- Default map = the ubiquitous DragonRise `081f:e401` SNES-style pad; remap per pad from `settings.toml` (`PICOGAME_USBPAD`, no reflash — see [Custom board](/custom-board/)). Discover a new pad's report bytes with `tools/usbpad_probe.py`.
+- `.mapped` — mask of buttons this pad can report; `VERSION`, `MAPPED` module constants.
+
+### `picogame_usbkbd` — USB HID keyboard source (USB-host boards)
+- `UsbKbd(keys=None)` — the keyboard twin of `UsbPad`, a `Buttons(usb=…)` source. Found by its boot-keyboard HID interface (no fixed VID/PID); works with wired and 2.4 GHz-dongle keyboards (not Bluetooth).
+- Default map: arrows + WASD → D-pad, Z/Space → A, X → B, C → X, V → Y, Q → L1, E → R1, Enter → START, Esc → SELECT. Remap from `settings.toml` (`PICOGAME_USBKBD`, `NAME=HID-keycode`). For a combo dongle whose real keystrokes flow on a sibling interface, point it at the right channel with `PICOGAME_USBKBD_EP = "iface:endpoint"` (find it with `tools/usbkbd_probe.py`).
+
+### `picogame_font` — text bitmaps (external font module)
+Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view — and what each costs): see the decision matrix in [Drawing paths](/concepts/drawing-paths/).
+- `render_text(pg, font, text, fg, bg=None) -> (bitmap, w, h)` — render a string to a PAL8 Bitmap (`bg=None` → transparent).
+- `render_text_pal(pg, font, text, fg, bg=None) -> (bitmap, w, h, palette)` — same, plus the palette array; mutate `palette[1]` to recolour the text in place (no rebuild).
+- `Label(pg, font, x, y, fg, bg)` · `.move(x, y)` · `.set(text) -> changed` · `.draw(display, buffer)`.
+
+### `picogame_bitfont` — built-in font (no font module needed)
+- `render_text(pg, text, fg=None, outline=None, mid=None, bg=None) -> (bitmap, w, h)` — render with the bundled bitmap font; optional `outline`/`mid` give a cheap 2-tone outlined look.
+
+### `picogame_ui` — HUD & menu widgets (`LINE_H = 12`)
+- `SceneLabel(scene, pg, font, x, y, fg, bg)` · `.set(text)` · `.destroy()` — camera-independent text label (a fixed Scene layer); destroy() detaches a ONE-SHOT label so GC reclaims it (recurring HUD: build once + set/hide instead).
+- `SceneBox(scene, pg, font, x, y, w, h, fg, bg, nlines=3, key=None, border=None)` · `.show(lines)` · `.hide()` · `.set_line(i, text)` · `.destroy()` — a multi-line in-scene panel (dialog/log); destroy() = one-shot teardown (needs firmware with `Scene.remove`).
+- `HudBar(pg, display, buffer, x, y, w, h, bg)` · `.add(sprite)` (an icon Sprite) · `.label(font, x, y, fg, text=" ")` → a text handle; update it with `handle.set(text)` · `.draw()` (repaint the bar, call on HUD changes) — a fixed bar that composites sprites + labels (0 retained RAM).
+- `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
+- `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating · `.draw(display, buffer, force=False)`.
+- `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating — the same menu as an in-scene layer.
+- `GridCursor(cols, rows, tx=0, ty=0, wrap=False)` · `.index` · `.tick(btn)` — D-pad cursor over a grid (inventory / board).
+
+### `picogame_options` — settings menu
+- `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` — an in-scene options screen of toggles/choices.
+
+### `picogame_shapes` — single-colour bitmap generators
+- `rect(w, h, color)` · `circle(d, color)` · `ring(d, color, thickness=2)`
+- `from_mask(mask, color)` — Bitmap from a string mask (`'#'` = set).
+- `atlas(frames_data, w, h, color)` — pack w×h buffers into a multi-frame Bitmap.
+- `color_frames(w, h, colors)` — frame i = solid `colors[i]`.
+- `tileset_colors(w, h, colors)` — tileset: frame 0 empty, frames 1..N coloured.
+- `poly_frames(size, points, nframes, color, fill=True)` — bake `nframes` rotations of a polygon.
+
+### `picogame_pool` — reusable sprite pool
+- `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` · `.spawn() -> sprite | None` · `.free(s)` · `.free_all()` · `.count() -> int`. (`.items` = all sprites.)
+
+### Sprite collision (native methods)
+Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware (no separate module).
+- `Sprite.overlaps(other, inset=0) -> bool` — inclusive AABB box overlap (touch = hit). `other` = another `Sprite`, a point `(x, y)`, or a rect `(x1, y1, x2, y2)` (trigger zone / screen-cull). `inset` shrinks THIS sprite's box by N px per side for a fair hitbox.
+- `Sprite.near(other, r) -> bool` — circular: this sprite's centre within `r` px of `other`'s centre (squared distance, no sqrt). `other` = a `Sprite` or a point `(x, y)`.
+- Raw primitive (any coords, no sprite): `pg.collide(x1, y1, x2, y2, ax1, ay1[, ax2, ay2])` — 8 args box-vs-box, 6 args box-vs-point.
+- Tile-grid collision (walls/terrain): probe `picogame_tiles` flags (`at_px(tm, x, y, SOLID)`), not AABB.
+
+### `picogame_math` — numeric helpers, vectors & turn-based trig
+- `clamp(v, lo, hi)` · `mid(a, b, c)` · `lerp(a, b, t)` · `inv_lerp(a, b, v)` · `remap(v, a, b, c, d)` · `sgn(x)` · `approach(v, target, step)` · `wrap(v, lo, hi)`.
+- `sin_t(turns)` · `cos_t(turns)` · `atan2_t(dy, dx) -> turns` — angles as 0..1 turns (standard, not PICO-8's inverted sin).
+- `length(dx, dy)` · `distance(x1, y1, x2, y2)` · `normalize(dx, dy)` · `angle_rad(dx, dy)` (radians) · `from_angle_rad(a, mag=1.0)` — vector helpers.
+
+### `picogame_tiles` — per-tile metadata flags (PICO-8 `fget`/`fset`)
+- Bits/masks: `B_SOLID B_HAZARD B_LADDER …` (indices) and `SOLID HAZARD LADDER …` (masks).
+- `TileFlags(flags=None, tile_px=8)` — `flags` = `{tile_index: bitfield}` or a list. `.get(tile, bit=None)` · `.set(tile, bit, value=True)` · `.at(tilemap, tx, ty, bit)` · `.at_px(tilemap, px, py, bit)` (collision one-liner). Keyed by tile index (shared by all cells using it).
+
+### `picogame_seq` — generator-driven sequences (coroutine pattern)
+- `wait(frames)` · `over(frames, fn)` (fn(t), t 0..1) · `move_over(sprite, x, y, frames)` — all are generators; compose with `yield from`.
+- `Seq(gen=None)` · `.start(gen)` · `.tick() -> done` — advance one step per frame (cutscenes, "do X over N frames").
+
+### `picogame_anim` — frame animation over time
+- `FrameAnim(sprite, frames, *, fps=8, loop=True)` · `.configure(frames, fps=8, loop=True)` · `.reset()` · `.tick(dt)`.
+- `AnimatedSprite(sprite, anims)` · `.play(name)` · `.tick(dt)`.
+
+### `picogame_fx` — juice & raster effects
+- `Shake(scene, max_offset=6, decay=0.03, seed=0x9E37)` · `.add(amount)` (0.6 hit, 0.15 bump) · `.tick(cam_x=0, cam_y=0)` — trauma screen shake composed on top of the camera.
+- `Fade(scene, width, height, x=0, y=0, color=0, cell=8)` · `.to(target, speed=2.0)` · `.out()/.into()/.set(level)/.dim(level=8)/.clear()/.pulse(level=12, speed=2.0)` · `.is_done` · `.tick() -> done` — dither fade / dim / flash, full-screen or a region. Uses `StripDraw` without a retained pixel surface.
+- `Tween(value=0.0, speed=0.2)` · `.to(target, speed=None)` · `.set(value)` · `.tick() -> value` · `.is_done` — ease a scalar (UI/pop-ups).
+- `Camera(scene, w, h, lerp=0.18, world_w=0, world_h=0)` · `.follow(tx, ty, snap=False)` · `.offset() -> (ox,oy)` · `.apply()` — smoothed follow + world clamp (compose with `Shake` via `shake.tick(*cam.offset())`).
+- `Sky(scene, x, y, w, h, top, bottom)` — vertical gradient with a `2*h`-byte colour table. · `Scanlines(scene, x, y, w, h, step=2, dark=0)` — CRT overlay retaining one `w`-byte PAL8 row and its palette.
+- `InvertFlash(display, frames=3, normal=None)` · `.pulse(frames=None)` · `.tick()` — hardware-invert hit flash for a supported SPI panel. It does not redraw the scene and is not a framebuffer effect.
+
+### `picogame_palette` — Game-Boy palette tricks on PAL8 art (call `sprite.touch()` after)
+- `cycle(palette, lo, hi, step=1)` — rotate entries (animated water/lava/portals; ~0 extra art).
+- `swap(dst_palette, src_palette)` — recolour a shared bitmap (GBC-style; cheaper than a 2nd bitmap).
+- `fade(palette, base, t, target=0, skip=None)` — lerp toward a colour (smooth brightness fade; `base` = `snapshot()` of the original).
+- `snapshot(palette)` / `restore(palette, base)`.
+
+### `picogame_rand` — seedable RNG
+- `Rand(seed=None)` (deterministic xorshift; `None` = time-seeded) · `.below(n)` · `.randint(a, b)` · `.random()` · `.chance(p)` · `.choice(seq)` · `.shuffle(lst)` · `.weighted(weights) -> index` · `.seed(s)`.
+- `Bag(items, rng)` · `.next()` — shuffle-bag (7-bag) anti-streak randomizer.
+
+### `picogame_save` — NVM persistence
+- `Save(key, schema, *, offset=0)` · `.defaults()` · `.load() -> dict` · `.save(values)` · `.reset()`. Survives reboot/filesystem wipe.
+
+### `picogame_audioout` — one output device for any board
+- `make_output(sample_rate=22050, pin=None)` — returns this board's audio output, chosen automatically: an I2S DAC (Fruit Jam TLV320) when the board has `I2S_BCLK`, else a PWM output on `pin` (or the board default). Used by both `picogame_audio` and `picogame_synth`, so a game needs no board-specific audio code. Raises `RuntimeError` if no output exists.
+- The TLV320's output select + the three volume trims are set from `settings.toml` (`PICOGAME_AUDIO_OUT`, `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` — see [Custom board](/custom-board/)); the driver's defaults are deliberately quiet, so raise them toward 0 dB. `PICOGAME_DEBUG = 1` prints why a DAC failed to init.
+
+### `picogame_audio` — sample playback (PWM or I2S DAC)
+- `Audio(pin=None, voices=4, sample_rate=22050, channels=1, bits=16, signed=True)` · `.load(path)` · `.play(sample, *, voice=None, loop=False, volume=1.0)` · `.sfx(sample, volume=1.0)` · `.music(sample, loop=True, volume=1.0)` · `.stop(voice=None)` · `.stop_music()` · `.deinit()` · `.is_playing`.
+- `tone(frequency=440, ms=120, sample_rate=22050, volume=0.6)` — square-wave beep sample.
+
+### `picogame_synth` — synthio music & SFX
+- Waveforms: `sine()` · `saw()` · `triangle()` · `square()` · `noise()`.
+- `note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08, amplitude=0.6, bend=None, cutoff=None)` — build a reusable instrument note (`midi` 60 = middle C; `cutoff` = low-pass Hz).
+- `pitch_bend(semitones, ms, waveform=None, once=True)` — an LFO for a note's `bend` (slide / laser zap).
+- `Synth(pin=None, sample_rate=22050, buffer_size=2048, music_level=0.4, sfx_level=0.7)` · `.sfx(n)` · `.press(n)` · `.release(n)` · `.music(midi_track)` · `.stop_music()` · `.set_levels(music=None, sfx=None)` · `.mute(on)` · `.available` — self-guarding init: on audio-less firmware **or** a failed init (tight heap, claimed pin) the instance runs as silent no-ops instead of raising; no try/except needed in games.
+- `Drone(synth, waveform=None, amplitude=0.35, attack=0.03, release=0.12)` · `.start()` · `.set(frequency, amplitude=None)` · `.stop()` — a continuously-held note (engine/siren/drone): press once, then feed `set(freq, amp)` each frame so synthio tracks the live pitch/amplitude.
+- `load_midi(path, sample_rate=22050, waveform=None, envelope=None, tempo=120, ppqn=240)` — load a MIDI file into a playable track.
+
+### `picogame_sfx` — signature SFX kit (over `picogame_synth`)
+- `Kit(synth)` — build a ready-made, hardware-tuned SFX set once from a live `Synth` (silent no-op without audio). Fire by event: `.blip()` · `.coin()` · `.powerup()` · `.zap()` (your fire) · `.pew()` (enemy fire) · `.jump()` · `.hit(rotate=True)` (brightness rotates on rapid fire) · `.hurt()` · `.boom()` · `.explosion()`. Call `.tick()` once per frame — drives the coin/powerup arpeggios and the priority + protected-window arbitration through the single SFX voice. Volume via the `Synth`: `.set_levels()` / `.mute()`.
+
+### `picogame_cutscene` — full-screen image / story-scene player
+- `palette(pg, rgb)` — build the wire palette once (from a bake_cutscene.py palette module, RGB triplets, or wire ints).
+- `show(pg, display, buffer, path, pal=None, w=320, h=240, scale=None, band=24, bg=0)` — stream an image in row bands. The source band uses `w*band` bytes for PAL8 or `w*band*2` for RGB565, in addition to any render buffer passed in. `scale=None` derives an integer upscale from the display.
+- `play(pg, display, buffer, btn, path, pal=None, ..., caption=None, caption_lines=None, auto_hold=0, clock=None)` — show it, overlay an optional caption bar, and wait for A/B (or auto-advance after `auto_hold` ticks).
+
+### `picogame_stream` — stream sprite frames from flash
+- `StreamSheet(pg, path, w, h, frames, palette, transparent=None)` · `.use(i)` (select a frame, loaded on demand) · `.close()` — keep big sheets on flash instead of RAM.
+
+### `picogame_arena` — anti-fragmentation buffer
+- `Arena(pixels)` · `.alloc(nbytes, align=1) -> memoryview` · `.canvas(w, h, transparent=None) -> Canvas` · `.reset()` · `.mark() -> m` / `.release(m)` (nested LIFO lifetimes: mark on entering a mode, release on leaving — run-level buffers survive) · `.free() -> int`. Grab one big buffer up front, hand out slices.
+
+### `picogame_debug` — RAM watermarks + FPS overlay (testing aid)
+- `enabled` — module flag (default False: calls ship as no-ops; flip True while testing).
+- `ram(tag)` — gc.collect() + print `[RAM] <tag>: free N alloc M` at a transition (boot/battle/menu) — the on-device leak/fit diagnostic.
+- `Watch(scene, clock=None, every=30, x=2, y=2)` · `.step()` each frame · `.hide()/.show()` · `.remove()` — a corner `FPS 30 FREE 31k` overlay (one live text bitmap, re-rendered only on change). Pass your `Clock` as `clock=` for a true FPS reading; `every`/`x`/`y` are keyword args.
+
+### `picogame_scene` — declarative level loader
+- `load(pg, scene, display=None, strip_h=None, font=None, bank=None) -> View` — build a scene from a baked SCENE dict.
+- `load_bank(pg, bank)` — build a shared asset bank once (reuse across levels).
+- `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`.
+
+### `picogame_mode7` — Mode-7 perspective floor
+- `Camera(fov=0.66)` · `.draw(canvas, texture, x, y, angle, horizon, height, y_off=0)` — drive the C `Canvas.mode7` floor from a friendly camera pose (position in world/tile units, heading in radians, `height` = how high the camera sits). `texture` dims must be powers of two, one world unit = one tile. Draw into a 0-RAM `StripDraw` view. See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).
+
+### `picogame_ray` — first-person raycaster
+- `Raycaster(world, wall_colors, sky, floor, fov=0.66, stride=2)` · `.cast(px, py, ang, sw, sh)` (once/frame) · `.draw(view, vx, vy, vw, vh)` (StripDraw callback) · `.solid(x, y)` (wall test) · `.attach(sd)` (temporal repaint) · `.project_sprite(sx, sy)` (billboard) — DDA walls via the native `pg.raycast` caster (integer 16.16 C on device, Python in the sim) into a 0-RAM `StripDraw` view (~22-30 fps). `stride` = perf/quality knob; `attach(sd)` + `always_dirty=False` repaints only the changed column band (still/slow ~30 fps). See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).
