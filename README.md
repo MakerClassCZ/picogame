@@ -31,6 +31,7 @@ engine and build for it. The engine itself and the helper library live in their 
 | [`sim/`](sim/) | the desktop simulator (try/develop games on your PC) |
 | [`lib/`](lib/) | the `picogame_*` helper modules — a mirror of [picogame-libs](https://github.com/MakerClassCZ/picogame-libs) |
 | [`tools/`](tools/) | asset converters and build helpers |
+| [`skills/`](skills/) | the [`picogame-game-design`](skills/picogame-game-design/) skill for AI coding agents (design fundamentals, full API, genre playbooks) |
 
 > The `picogame_*` helper modules this code imports are bundled in **`lib/`** — a generated mirror of
 > **[picogame-libs](https://github.com/MakerClassCZ/picogame-libs)** (the single source of truth, with its
