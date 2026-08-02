@@ -790,6 +790,14 @@ class Canvas:
                 xs, xe = xe, xs
             self.fill_rect(xs, y, xe - xs + 1, 1, color)
 
+    def fill_triangles(self, verts, colors, n):
+        # Sim of the native Canvas.fill_triangles batch fill (C loops over the rasteriser in ONE
+        # Python/C crossing on device). verts = int16 x0,y0,x1,y1,x2,y2 per tri; colors = wire RGB565.
+        for i in range(n):
+            p = i * 6
+            self.fill_triangle(verts[p], verts[p + 1], verts[p + 2],
+                               verts[p + 3], verts[p + 4], verts[p + 5], colors[i])
+
     def triangle(self, x0, y0, x1, y1, x2, y2, color):
         self.line(x0, y0, x1, y1, color)
         self.line(x1, y1, x2, y2, color)
@@ -1117,6 +1125,34 @@ def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc,
         ct = cell if (cell * 2 + 1) < len(wc) else 1
         col[c] = wc[ct * 2 + side]
         dist[c] = int(perp * 65536)
+
+
+# The sim renders in float (CPython), so pseudo-3D primitives take the float path; a game reads
+# picogame.FPU to pack its camera/point buffers to match (float here, 16.16 fixed on RP2040).
+FPU = 1
+
+
+def project(cam, pts, n, osx, osy):
+    """Sim implementation of the native picogame.project batch projector (C on device: float on an
+    FPU board, 16.16 fixed on RP2040). Projects `n` world points to screen; a point behind the near
+    plane gets sentinel -32768. cam = ex,ey,ez, rx,rz, ux,uy,uz, fx,fy,fz, focal, cx0, cy0, near."""
+    ex, ey, ez = cam[0], cam[1], cam[2]
+    rx, rz = cam[3], cam[4]
+    ux, uy, uz = cam[5], cam[6], cam[7]
+    fx, fy, fz = cam[8], cam[9], cam[10]
+    focal, cx0, cy0, near = cam[11], cam[12], cam[13], cam[14]
+    for i in range(n):
+        X = pts[i * 3] - ex
+        Y = pts[i * 3 + 1] - ey
+        Z = pts[i * 3 + 2] - ez
+        cz = X * fx + Y * fy + Z * fz
+        if cz < near:
+            osx[i] = -32768
+            osy[i] = -32768
+            continue
+        k = focal / cz
+        osx[i] = int(cx0 + (X * rx + Z * rz) * k)
+        osy[i] = int(cy0 - (X * ux + Y * uy + Z * uz) * k)
 
 
 # ---- procedural value-noise (the engine's noise lives here in the sim; on device
