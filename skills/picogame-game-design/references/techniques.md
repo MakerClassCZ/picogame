@@ -385,3 +385,39 @@ reasons to play sharing one RNG and one saved record.
 
 (Recipes are in our own words — no upstream code copied.) `engine-capabilities.md`
 (the API + costs), `genre-patterns.md` (per-genre playbooks), `SKILL.md` (design philosophy).
+
+---
+
+## Audio recipes (full detail; the summary lives in SKILL.md §1.7)
+
+A beep on the key action confirms what the eye is doing and is the best fun-per-byte juice.
+- **Minimal SFX set**: the main verb (jump/shoot), a hit/score, a pickup, a death/fail, a menu blip.
+  **`picogame_sfx.Kit` ships exactly this, hardware-tuned** — reach for it FIRST; hand-roll
+  `picogame_synth` notes only for a bespoke palette. Full usage:
+
+  ```python
+  import picogame_synth as snd
+  import picogame_sfx as sfx
+  kit = sfx.Kit(snd.Synth())      # builds the voices ONCE, at boot
+  # ...on events: kit.jump() / kit.coin() / kit.zap() / kit.hit() / kit.explosion()
+  # ...once per frame (next to clock.tick()): kit.tick()
+  ```
+
+  Available sounds: `blip coin powerup zap pew jump hit hurt boom explosion`. On audioless builds
+  everything silently degrades to a no-op — no guards needed.
+- **Same-frame** as the event (audio latency must be imperceptible).
+- Chiptune-style: square/triangle/noise + a quick **pitch sweep** = blip/zap/explosion; arpeggios as
+  cheap chords. `picogame_audio` (PWM/tone + wav) / `picogame_synth` (chiptune) — both auto-pick the
+  output (`picogame_audioout`: PWM, or the I2S DAC on a Fruit Jam), so **no board-specific audio code**;
+  volume/output live in `settings.toml` (`PICOGAME_HP_VOLUME`, `PICOGAME_AUDIO_OUT`).
+- **Crisp, not rich** (hard-won): short DRY **square** beeps read best on a tiny speaker. Use a pitch
+  sweep (`pitch_bend`) ONLY on zaps + death — it's a sine *wobble*, not a clean glide, and long decays
+  with bends everywhere sound mushy. Carry meaning in the **contour**: ascending = win/kill, descending
+  = lose/death, two alternating tones = warning/heartbeat, rising pitch = filling/charging.
+- **You can't judge sound yourself — have it listened to**: the simulator is **silent** (no audio
+  backend — but the libs import and no-op fine there, no guard needed), and you don't hear it either.
+  Don't design custom `picogame_synth` sounds blind: if `tools/synth_preview.py` is in the repo,
+  render them to WAV and ask the USER to listen and approve before shipping. The ready-made
+  `picogame_sfx.Kit` skips this — it's pre-tuned, which is why it's the first choice.
+- **Music is optional** — short loops fatigue, and handhelds are often played quietly; a tune helps
+  menus/title more than frantic play. **Never rely on audio alone** — always pair with a visual.

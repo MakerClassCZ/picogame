@@ -52,6 +52,7 @@ starting point to tune.
 ---
 
 ## 1. Breakout / Block-Breaker
+*Device-proven: the Bounce tutorial ships this genre end-to-end.*
 
 *Exemplars: Breakout, Super Breakout, Arkanoid + Revenge of Doh, DX-Ball.*
 
@@ -106,6 +107,7 @@ multi-hit silver · Catch/sticky + Laser.
 ---
 
 ## 2. Fixed & Vertical Shooters / Shmups
+*Device-proven: Starship tutorial, boxshmup, picowing.*
 
 *Exemplars: Space Invaders, Galaga, 1942, Touhou, DoDonPachi, Ikaruga.*
 
@@ -170,6 +172,7 @@ for free self-balancing. Details in `techniques.md`.
 ---
 
 ## 3. Asteroids-Style / Vector Action
+*Device-proven: the asteroids example.*
 
 *Exemplars: Asteroids (1979), Geometry Wars, Robotron 2084, twin-stick shooters.*
 
@@ -231,6 +234,7 @@ multiplier.
 ---
 
 ## 4. Platformer
+*Device-proven: the platformer example (incl. a scene-format variant).*
 
 *Exemplars: Super Mario Bros, Celeste, Sonic, Mega Man.*
 
@@ -307,6 +311,7 @@ dash/run-button + momentum/slopes.
 ---
 
 ## 5. Top-Down Adventure / RPG-Lite
+*Device-proven: Quest tutorial, journey.*
 
 *Exemplars: Zelda 1, Pokémon, classic JRPGs.*
 
@@ -362,6 +367,7 @@ pushable blocks / simple environmental puzzles.
 ---
 
 ## 6. Maze / Collect (Pac-Man)
+*Device-proven: the maze example.*
 
 **CORE LOOP** — Clear every dot from a maze while evading four ghosts; eat power
 pellets to briefly turn the tables.
@@ -439,6 +445,7 @@ personalities. Details in `techniques.md`.
 ---
 
 ## 7. Puzzle (Falling-Block & Match-3)
+*Device-proven: the match-3 example.*
 
 *Exemplars: Tetris, Bejeweled/Candy Crush, Dr. Mario, Columns.*
 
@@ -502,6 +509,7 @@ Details in `techniques.md`.
 ---
 
 ## 8. Racing — Pseudo-3D & Top-Down
+*Device-proven both ways: picobike/ghostrace (pseudo-3D), topracer/microrace/kartracer (top-down/mode7).*
 
 *Exemplars: Pole Position, OutRun, Super Sprint, Micro Machines, Mario Kart.*
 
@@ -558,6 +566,17 @@ OutRun look: curves, hills, rumble strips, ~0 RAM — see `examples/picogame_str
 free rotation but no hills; the scanline road gives hills and crests but no true 2D ground. Traffic
 and scenery are ordinary Sprites with `sprite.scale = F/(F+z)`, sorted back-to-front.
 
+**The C road pair (2026-08, device-proven on picobike: 15 → 39 fps):** the per-scanline Python road
+loop is the genre's classic wall — replace it with the engine primitives. Once per frame
+`pg.road_edges(rl, rr, hw_q16, n, cx0_q16, int(dist), cfg)` runs the whole bottom-up curve
+accumulator in C (cfg = int32×7: two Q20 curve frequencies, two Q16 amp×gain terms, world step,
+curve step, row offset); per strip `view.road(vy - horizon, tab, rl, rr, d05_q8, d07_q8, colors)`
+draws sky/road/rumbles/dashes as spans (tab = static int16×5 per row: edge width, dash half-width,
+two Q8 stripe phases, flags; colors = uint16×6). Keep in Python only: grass fill (1 rect/strip), the
+finish-line chequer (a few rows near the lap line), hills/pitch, and gameplay. Guard with
+`hasattr(pg, "road_edges")` so the same file still runs on the sim/old firmware via the Python
+fallback — the integration pattern is `picobike_bench_c.py` in the workspace.
+
 ### 8B. Top-Down (Super Sprint / Micro Machines / Mario Kart)
 
 **CORE LOOP** — See the track from above, corner cleanly, grab boosts/items,
@@ -599,6 +618,7 @@ item · hazards + between-race upgrades.
 ---
 
 ## 9. Endless / Arcade
+*Device-proven: corona, Starfall.*
 
 *Exemplars: Flappy Bird, Snake, Doodle Jump, Canabalt, runners.*
 
@@ -658,6 +678,7 @@ feedback (sound/flash on tight clears) + screen-edge wrap.
 ---
 
 ## 10. Tower Defense / Grid Placement
+*Recipe only — no shipped exemplar yet; treat the tunings as starting points and validate on device early.*
 
 *Exemplars: SALVO (this project), Kingdom Rush, Bloons.*
 
@@ -700,6 +721,7 @@ enemy `Pool` on waypoints · currency + ~5 telegraphed waves + lose-on-leak.
 ---
 
 ## 11. Card / Menu-Driven Roguelite (Deckbuilder)
+*Device-proven: picatro, Star Cluster.*
 
 *Exemplars: picatro (this project), Slay the Spire, Balatro-likes.*
 
@@ -741,6 +763,7 @@ a daily seed.
 ---
 
 ## 12. First-person raycaster / dungeon crawler
+*Device-proven: the raycaster demos (native pg.raycast path).*
 
 *Exemplars: Wolfenstein 3D, Eye of the Beholder, Legend of Grimrock, DOOM (in
 atmosphere).*

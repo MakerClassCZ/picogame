@@ -41,3 +41,17 @@ or deciding until you can. (Workflow steps 1–4 in SKILL.md.)
 - [ ] One juice touch · fair difficulty
 - [ ] Fits RAM target · uses rgb565()/touch() correctly
 - [ ] Small, commented, starts from picogame_game.setup()
+
+## Device budget (fill BEFORE coding — the design must prove it fits)
+
+- Target board / resolution: (default RP2040 PicoPad 320×240; read `board.DISPLAY` anyway)
+- Target FPS: (30 default; 40 only with a measured frame budget)
+- Asset RAM estimate: (bitmap bytes summed — PAL8 = w×h per frame; budget vs ~138 KB heap)
+- Max simultaneous entities: (pool sizes; who despawns them)
+- Camera: (static screen / `set_view` scroll — scroll = full-screen recomposite each frame)
+- Full-frame StripDraw effects: (any `always_dirty=True`? that + scroll + many sprites = RED FLAG,
+  bench first — see engine-capabilities §9)
+- Save/persistence: (none / NVM best-score via `picogame_save`)
+- Sound: (Kit only / bespoke synth → needs WAV preview + user approval)
+- Hardware-verified items: (what MUST be checked on the real device before "done" — colors on the
+  panel, audio, input feel)

@@ -4,6 +4,10 @@ description: >-
   Design and build a 2D game for the picogame engine (a 2D engine for CircuitPython on
   microcontrollers — RP2040 / RP2350 / ESP32-S3, e.g. the PicoPad) — use when
   the task is making, designing, or implementing a small game or example for it, e.g. "make a tiny shooter".
+metadata:
+  api_level: 1  # picogame API level this skill was written against
+  validated_engine_commit: f242ee3c3e (MakerClassCZ/circuitpython, branch picogame)
+  last_validated: 2026-08-03
 ---
 
 # picogame game design
@@ -15,6 +19,15 @@ hardcoded). The engine comes with a desktop simulator. **Your job is GOOD GAME D
 first, then mapping it onto the engine.** This file carries the design knowledge; reach for the
 references only for engine specifics, a genre recipe, or a named technique. Build in the simulator and
 validate with screenshots.
+
+**How binding are the rules here?** Three levels, used consistently:
+- **MUST** — technical correctness on this platform (`pg.rgb565()`, no full-screen Canvas on RP2040,
+  `touch()` after in-place edits, pools instead of per-frame alloc). Breaking these breaks the game.
+- **DEFAULT** — measured best practice (State object, loop-in-function, A=confirm/B=cancel, constants
+  over settings menus). **Default to it unless the game's stated requirements justify an exception —
+  and say so.** A ≤50-line prototype proving a core loop may use 3 bare globals and skip the
+  architecture; graduate it when the loop earns it.
+- **TASTE** — design heuristics (one verb, sawtooth ramp, palette size). Strong guidance, not law.
 
 The bar for "done" is not "it runs" — it's **fun in the first 10 seconds**. Everything below serves
 that and the **"one more go."**
@@ -38,7 +51,7 @@ for input (incl. auto USB gamepad/keyboard), timing, collision, pools, text/HUD,
 seeded random, juice (`picogame_fx`); and a **desktop simulator** so you build without hardware.
 
 **The limits (design around these):**
-- **Tiny RAM** — RP2040 ≈ 138 KB heap (RP2350 ≈ 520 KB). **Assets dominate.** Never a full-screen
+- **Tiny RAM** — RP2040 ≈ 138 KB heap *typical for the supported build — measure yours* (RP2350 ≈ 520 KB). **Assets dominate.** Never a full-screen
   `Canvas` (320×240 = 150 KB); use a Tilemap or StripDraw. Keep the **moving-object count low** (a
   static background + a small moving foreground is the sweet spot).
 - **Few buttons** — D-pad + A/B (sometimes X/Y). No analog, no mouse. Map the whole game to these.
@@ -183,49 +196,24 @@ main()                                          # module bottom: kick it off (st
   **clean**. Every field documented in `__init__`; no name collisions with sprites/loop vars. Never a
   bare `S={}` dict (string keys are typo-prone + slower). Keep engine objects (Sprites/Tilemap/Canvas/
   pools/`clock`/`btn`/audio) and cross-run/persistent values (NVM best score) as module globals, not in `State`.
-- **Put the per-frame loop in a FUNCTION, not at module scope** (the skeleton above). This IS a
-  measured perf lever, not style: at module level every name reference is a globals-dict lookup
-  (`mp_map_lookup` is the **#1 hottest interpreter function** on-device, ~1 µs each, hundreds/frame);
-  inside a function the same names are **array-indexed locals** (~2× faster), and hot lookups you hoist
-  to locals (`poll = btn.poll`) are faster still. Measured on real games on RP2040: **logic
-  12 → 8 ms/frame (−33 %)** — the difference between wobbly and **steady 30 fps**; on a heavier game
-  **76 → 50 ms**. **Safety:** the wrap only breaks if the loop and a helper
-  share a bare mutable global — holding state in the `State` object (nothing bare rebound) makes it a
-  clean, mechanical wrap (in most finished games it's exactly that — a mechanical wrap). Full measured
-  hot-loop style guide: `engine-capabilities.md` §"Measured hot-loop style guide".
+- **Put the per-frame loop in a FUNCTION, not at module scope** (the skeleton above) — a measured
+  perf lever, not style (−33 % logic on device: globals-dict lookups become array-indexed locals;
+  hoisted locals faster still), and a safe mechanical wrap as long as state lives in the `State`
+  object rather than bare rebound globals. Numbers + the full style guide:
+  `engine-capabilities.md` §"Measured hot-loop style guide".
 
 ### 1.7 Audio — the cheapest feedback channel
 A beep on the key action confirms what the eye is doing and is the best fun-per-byte juice.
-- **Minimal SFX set**: the main verb (jump/shoot), a hit/score, a pickup, a death/fail, a menu blip.
-  **`picogame_sfx.Kit` ships exactly this, hardware-tuned** — reach for it FIRST; hand-roll
-  `picogame_synth` notes only for a bespoke palette. Full usage:
-
-  ```python
-  import picogame_synth as snd
-  import picogame_sfx as sfx
-  kit = sfx.Kit(snd.Synth())      # builds the voices ONCE, at boot
-  # ...on events: kit.jump() / kit.coin() / kit.zap() / kit.hit() / kit.explosion()
-  # ...once per frame (next to clock.tick()): kit.tick()
-  ```
-
-  Available sounds: `blip coin powerup zap pew jump hit hurt boom explosion`. On audioless builds
-  everything silently degrades to a no-op — no guards needed.
-- **Same-frame** as the event (audio latency must be imperceptible).
-- Chiptune-style: square/triangle/noise + a quick **pitch sweep** = blip/zap/explosion; arpeggios as
-  cheap chords. `picogame_audio` (PWM/tone + wav) / `picogame_synth` (chiptune) — both auto-pick the
-  output (`picogame_audioout`: PWM, or the I2S DAC on a Fruit Jam), so **no board-specific audio code**;
-  volume/output live in `settings.toml` (`PICOGAME_HP_VOLUME`, `PICOGAME_AUDIO_OUT`).
-- **Crisp, not rich** (hard-won): short DRY **square** beeps read best on a tiny speaker. Use a pitch
-  sweep (`pitch_bend`) ONLY on zaps + death — it's a sine *wobble*, not a clean glide, and long decays
-  with bends everywhere sound mushy. Carry meaning in the **contour**: ascending = win/kill, descending
-  = lose/death, two alternating tones = warning/heartbeat, rising pitch = filling/charging.
-- **You can't judge sound yourself — have it listened to**: the simulator is **silent** (no audio
-  backend — but the libs import and no-op fine there, no guard needed), and you don't hear it either.
-  Don't design custom `picogame_synth` sounds blind: if `tools/synth_preview.py` is in the repo,
-  render them to WAV and ask the USER to listen and approve before shipping. The ready-made
-  `picogame_sfx.Kit` skips this — it's pre-tuned, which is why it's the first choice.
-- **Music is optional** — short loops fatigue, and handhelds are often played quietly; a tune helps
-  menus/title more than frantic play. **Never rely on audio alone** — always pair with a visual.
+- **Minimal SFX set** = main verb + hit/score + pickup + death + menu blip — and
+  **`picogame_sfx.Kit` ships exactly this, hardware-tuned**: build once at boot, call `kit.jump()`
+  etc. on events, `kit.tick()` once per frame. Reach for it FIRST; on audioless builds it degrades
+  to a no-op, no guards needed.
+- **Same-frame** as the event; **never audio alone** — always pair with a visual.
+- **You can't judge sound yourself**: the sim is silent and so are you. The Kit is pre-tuned; any
+  bespoke `picogame_synth` design must be rendered to WAV (`tools/synth_preview.py`) and approved by
+  the USER before shipping.
+- Full recipes (chiptune palette, contour semantics, the crisp-not-rich lesson, music guidance):
+  **`techniques.md` §Audio recipes**.
 
 ### 1.8 Handheld constraints & readability (UX)
 The device decides what's possible — design within it:
@@ -294,6 +282,7 @@ Don't load everything up front — pull a file only when a step points to it:
 | `engine-capabilities.md` | **the deep engine reference** — every building block and what it COSTS, the helper libs, idioms with code, the RAM budget, the asset pipeline, the sim loop, the example catalog, footguns. How to MAP a design onto picogame. |
 | `api-reference.md` | **the full API — exact signatures** for the native C engine (`pg.Sprite`, `Scene`, `Canvas`, `Tilemap`, `StripDraw`, `Canvas.mode7`, `pg.raycast`, …) and every helper lib. Read it when you need a precise call signature (the C engine has no `.py` source to grep). |
 | `genre-patterns.md` | **genre playbooks** — core loop, the one thing to get right, controls, tuning, pitfalls, MVP. **Read the "Cross-genre rules" header + only your genre's §:** 1 Breakout · 2 Shmup · 3 Asteroids · 4 Platformer · 5 Top-down/RPG · 6 Maze · 7 Puzzle · 8 Racing · 9 Endless/Arcade · 10 Tower defense · 11 Card/roguelite deckbuilder · 12 First-person raycaster/dungeon crawler. |
+| `debugging.md` | **symptom → first move** triage for typical picogame failures (byte order, stale `.mpy`, `touch()`, pool exhaustion, sim-vs-device gaps, GC churn) + the measurement ladder. Pull the moment something misbehaves — BEFORE guessing. |
 | `techniques.md` | **cross-genre technique recipes** mapped to picogame — state machines, enemy/AI patterns, parallax, collision, procedural generation, palette/raster effects, level authoring, ghosts. |
 
 Templates in `templates/` (pull when the workflow says): `design-brief.md` — fill at step 1, before coding; `starter_game.py` — the skeleton to start step 7 from.
@@ -301,6 +290,11 @@ Templates in `templates/` (pull when the workflow says): `design-brief.md` — f
 ---
 
 ## Part 3 — The workflow
+
+0. **Check the skill is current**: run `python3 tools/check_skill_api.py` (repo root). If it fails,
+   trust `api-reference.md` + the live helper sources over any prose example here.
+   *No-repo environments* (web playground, "write me a code.py" chat): skip the check, write a
+   **single self-contained file** — no sibling imports, inline art — per the playground contract.
 
 1. **Frame the concept** (§1.1–1.2): who plays, how long, what feeling; the one core verb; the loop
    in one sentence. Fill `templates/design-brief.md`.
@@ -369,6 +363,11 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
   genre, not a literal arcade timer. Don't warp a deckbuilder toward twitch pacing to satisfy the bar.)*
 - At least one **juice** touch lands and **difficulty feels fair** (telegraphing + a generosity mechanic).
 
+**The fun-proxy** (the strongest machine-checkable stand-in until a human plays — verify ALL five
+and report them as the proxy, never as "fun confirmed"): (1) legible in ≤10 s from a screenshot,
+(2) input acts the SAME frame it's read, (3) restart < 0.5 s, (4) every threat telegraphed ≥ 8 frames,
+(5) a stated difficulty ramp with its first spike at ~60-90 s.
+
 To *infer* motion before handing off, drive `--shot-at` across several frames — the live window
 (`--backend pygame`) you can neither launch nor see yourself; offer it to the USER so they can
 actually play, and get the fun/feel verdict from them. Hand off with **numbers, not vibes** — a short list:
@@ -379,17 +378,8 @@ actually play, and get the fun/feel verdict from them. Hand off with **numbers, 
 
 ---
 
-## Case studies (the loop in practice: design intent → MVP in sim → screenshot → adjust → validate)
+## Case studies
 
-Short illustrations of how design decisions map onto engine blocks and what sim screenshots reveal.
-
-- **A top-down racing game**: verb = *steer*; a `Tilemap` track + a `Sprite` car rotated at runtime
-  (`sprite.angle`) + a camera (`set_view`) + a best-lap record/replay ghost (int16 arrays to
-  fit RAM); tuned entirely via sim screenshots.
-- **A pseudo-3D racing game**: wanted the OutRun feel with zero buffer → a `StripDraw` scanline road
-  + a replay ghost. Lesson: a flat top-down car sprite read as 2D against the perspective road — a
-  pre-rendered (slightly tilted) sprite fixed it; a *game-feel* bug only visible in a screenshot.
-- **Starfall** (endless/arcade): verb = *catch*;
-  readability via shape+colour (green circle gems vs red square bombs); fixed sprite pool (no per-frame
-  alloc); juice = pop-ring + beep on catch, tray-flash + shake on a hit; difficulty ramps fall-speed
-  and spawn-rate; instant restart. Designed and validated entirely in the simulator.
+Worked examples of the whole loop (racing ×2, endless-arcade Starfall — what the sim screenshots
+revealed and what changed): **`references/case-studies.md`**. Load only when you want a modelled
+end-to-end pass; the workflow above is self-sufficient.

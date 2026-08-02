@@ -45,7 +45,7 @@ Everything visible is a **scene layer** added with `scene.add(item, fixed=False)
 | **Canvas** | retained shape/HUD surface that changes **rarely** | `width*height*2` bytes (it holds its pixels) | a small framed gauge/panel; **NEVER** full-screen 320×240 (= **150 KB**) on RP2040 |
 | **StripDraw** | anything you can **draw from state** without holding pixels: full-frame animated effects (road, gradient sky, plasma, pseudo-3D), but also **text / HUD / panels** (`picogame_ui` is built on it — `HudBar`, text boxes) | **0 bytes** — no pixel buffer | whenever you want to save RAM and drawing is cheap; `always_dirty=True` (default) repaints every frame (animation), `always_dirty=False` + `.invalidate(x,y,w,h)` repaints only the sub-rect you mark (UI-on-change, temporal rendering) |
 | **Particles** | many cheap non-interactive dots (sparks, dust, explosions) | one pooled layer, ~`capacity` small entries | bursts/trails; **not** for things needing a bitmap, collision, or individual control |
-| **Pseudo-3D** (`Canvas.mode7` floor, `pg.raycast` walls) | Mode-7 perspective floor (track, flying carpet) and first-person walls/corridors (dungeon, maze); combinable (mode7 ground + raycast walls) | **0 bytes** — drawn into a StripDraw view | don't call the primitives directly — driven by the `picogame_mode7` / `picogame_ray` helpers (see §3 table); integer fixed-point, no FPU needed |
+| **Pseudo-3D** (`Canvas.mode7` floor, `pg.raycast` walls, `pg.road_edges`+`Canvas.road` racing road, `pg.project`+`Canvas.fill_triangles` blocky 3D, `picogame_iso` isometric) | Mode-7 floor (track, flying carpet); first-person walls (dungeon, maze); an OutRun-style road; flat-shaded perspective boxes/low-poly; iso RPG/strategy boards — combinable | **0 bytes** (StripDraw view) except blocky 3D, which draws into a half-res Canvas (~29-38 KB) shown through a 2× Sprite | drive floors/walls via `picogame_mode7`/`picogame_ray`; the road pair takes precomputed per-row tables (device-proven: picobike 15→39 fps); `pg.project` batch-projects points (fixed 16.16 on RP2040, float on FPU boards — **pack buffers per `pg.FPU`**, mixing formats renders garbage); iso needs no new C at all |
 | **`render(...)`** | a one-off immediate blit outside any Scene | uses your scratch strip buffer | quick HUD draw, reserved-zone bar (`HudBar`), portable fallback path |
 
 **The Canvas-vs-StripDraw rule:** *pick by whether you need to HOLD pixels, not by size.* Art that
@@ -103,6 +103,7 @@ objects stay cheap; only beyond ~6 scattered changes do they merge toward a full
 | `picogame_debug` | `dbg.ram(tag)` (gc.collect + `free/alloc` print on device, tracemalloc on the sim; a **no-op until `dbg.enabled=True`**, never crashes the game); `Watch(scene)` = a corner `FPS/FREE` overlay, alloc-free between changes | hunt `MemoryError` / measure RAM — use instead of a hand-rolled `gc.mem_free` dance |
 | `picogame_scene` | `load(pg, scene, …)->View`; `View`: `.is_solid/.tile_has/.point/.group/.in_zone/.tile_xy/.play/.tick` | data-driven levels baked from the web editor (SCENE_FORMAT.md) |
 | `picogame_mode7` | `Camera(fov=0.66).draw(canvas, texture, x, y, angle, horizon, height, y_off=0)` — drives the C `Canvas.mode7` floor from a camera pose (pos in world/tile units, heading rad, `height`=camera height); texture dims must be pow2, one world unit = one tile | a **Mode-7 perspective floor / ground plane** (racer track, flying floor) into a 0-RAM StripDraw view — the fast pseudo-3D path |
+| `picogame_iso` | `IsoView(ox, oy, tw, th)`: `.to_screen(gx,gy,h=0)`, `.depth(gx,gy,h=0)` (painter's key), `.screen_to_grid(sx,sy)` (picking), `.cube_faces(gx,gy,h)` (3 visible faces of a block), `.emit_blocks(cells, tv, tc)` — the **alloc-free batch builder**: writes flat-shaded cube triangles for many blocks straight into int16/uint16 arrays for ONE `Canvas.fill_triangles()` call (device: 3.9× faster than looping `cube_faces`) | **isometric** boards — iso RPG / strategy / builder / puzzle. Integer add/shift only, no divide. The idiomatic pattern is a STATIC board rendered once + a few moving unit sprites (dirty-rect) → locked 30 fps on RP2040; `emit_blocks` covers boards that must rebuild per frame (~20 fps at 8×8) |
 | `picogame_ray` | `Raycaster(world, wall_colors, sky, floor, fov=0.66, stride=2)`: `.cast(px,py,ang,sw,sh)` (once/frame, drives the native `pg.raycast`), `.draw(view,…)` (StripDraw callback), `.solid(x,y)` (wall test), `.attach(stripdraw)` (temporal repaint), `.project_sprite(sx,sy,margin=0.2)` → `(screen_x, size, depth)` or `None` (billboard enemies, depth-tested), `.zbuf` (Q16 wall distance per column) | first-person **walls/corridors** (dungeon, maze). The per-column DDA is the **native C `pg.raycast`** (integer 16.16) → **~22-30 fps** full-screen RP2040. Two Python levers on top: `.attach(sd)` on an `always_dirty=False` StripDraw repaints only the changed column band and skips the cast entirely when the camera pose is unchanged (a standing/grid-step dungeon is ~30 fps); `stride` (1 sharpest, 3 balanced, 6 fastest) trades wall sharpness for speed. Raise `strip_h` too. Use `mode7` instead if you only need a floor |
 | `picogame_seq` | `wait(n)`, `over(n,fn)`, `move_over(spr,x,y,n)` generators; `Seq(gen)`: `.start(gen)`, `.tick()->done`, `.done` | timed/sequenced logic as coroutines — cutscenes, "do X over N frames", staged AI; compose with `yield from` |
 | `picogame_tiles` | `TileFlags(flags, tile_px=8)`: `.get(tile,bit=None)`, `.set(tile,bit,value=True)`, `.at(tm,tx,ty,bit)`, `.at_px(tm,px,py,bit)`. `B_SOLID/B_HAZARD/B_LADDER/…`=bit INDICES (for get/set/at/at_px); `SOLID/HAZARD/…`=masks (only for the `{tile:flags}` table) | gameplay properties per tile (solid/hazard/ladder) without a parallel map |
@@ -175,6 +176,7 @@ import picogame as pg, picogame_game, picogame_input, picogame_clock
 scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(16, 18, 32))
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(60)
+dt = 1 / 60                                          # seed BEFORE the loop (first frame uses it)
 while True:
     btn.poll()
     if btn.is_pressed(btn.LEFT):  hero.fx -= 120 * dt   # scale by dt for FPS-independence
@@ -195,10 +197,10 @@ scene.set_view(ox, oy)                                # changing view repaints t
 import picogame_pool
 bullets = picogame_pool.Pool(scene, bullet_bm, 12, anchor=(0.5, 0.5))
 b = bullets.spawn()                       # first free sprite, made visible (None if full)
-if b: b.move(x, y); b.data = {"vy": -6}
-for b in bullets.items:                   # zero-alloc iteration
-    if not b.visible: continue
-    b.fy += b.data["vy"]
+if b: b.move(x, y); b.data = -6           # data = per-entity state: keep it a NUMBER or tuple
+for b in bullets.items:                   # zero-alloc iteration  (a string-key dict here is the
+    if not b.visible: continue            #  exact anti-pattern the hot-loop guide bans: slower
+    b.fy += b.data                        #  + typo-prone; pack multiple fields into a tuple)
     if b.fy < -8: bullets.free(b)         # hide to recycle — never del/create per frame
 ```
 
@@ -264,7 +266,7 @@ orientations from ONE tile, pairing with `png2picogame.py --dedup` to shrink the
 ## 5. RAM budget & the #1 gotcha
 
 RP2040 has **264 KB** SRAM; firmware uses ~72 KB static, leaving **~138–190 KB** Python heap
-(treat **~138 KB** usable as the planning number). RP2350 (Fruit Jam) has **~520 KB** heap — there a
+(treat **~138 KB** as the planning number for the supported RP2040 build — the real figure moves with firmware/build options, so measure YOUR target build with `gc.mem_free()` at boot). RP2350 (Fruit Jam) has **~520 KB** heap — there a
 full-screen Canvas (150 KB) *is* affordable. But **RP2040 stays the primary target** (nothing ships
 RP2350-only) unless the user explicitly asks otherwise (then build to the RP2350/Fruit Jam budget and
 use it fully): design to the RP2040 budget and treat the RP2350 headroom as slack, not a licence. **Assets
@@ -435,6 +437,16 @@ The shipped games ARE the worked references. Public repo: **https://github.com/M
 
 ## 9. Gotchas & footguns
 
+> **Debugging first-aid lives in `references/debugging.md`** — typical picogame bugs (byte order,
+> stale `.mpy`, `touch()`, pool exhaustion, sim-vs-device gaps) and what to try first when FPS
+> drops, the sim crashes, or the heap fragments.
+
+- **RED FLAGS — measure BEFORE building further** (each alone is fine; stacked they sink RP2040):
+  camera scroll (full-screen recomposite) **+** >12-16 moving sprites **+** a full-frame
+  `always_dirty` StripDraw effect **+** particles — pick the frame budget FIRST and bench the
+  combination in the sim + on device (see §7). The engine's own measured walls: full-screen SPI
+  refresh has a hard ~24 ms floor (~18.5 ms with `rgb444="auto"` on ST7789), and per-frame Python
+  row/entity loops dominate long before the C engine does.
 - **`sprite.frame` is forgiving (modulo-wraps).** An out-of-range frame index wraps at render
   (`frame % frame_count`), it does NOT raise. So `spr.frame += 1` cycles an animation safely with no
   manual `% n`. (Defined behaviour -- don't write code that depends on it raising.)

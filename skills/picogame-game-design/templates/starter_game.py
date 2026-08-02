@@ -120,7 +120,9 @@ def main():
         key = (st.score, st.lives, st.state)
         if key != last_hud:                       # only repaint the HUD when it changes
             last_hud = key
-            draw_hud()
+            draw_hud()                            # safe AFTER refresh() ONLY because the scene never
+                                                  # draws into the reserved band (top=BAR); an overlay
+                                                  # ON the play area needs picogame_game.overlay()
         tick()                                    # 4. hold the framerate
 
 
