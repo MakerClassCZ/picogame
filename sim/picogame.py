@@ -19,6 +19,7 @@ _KIND_TILEMAP = 1
 _KIND_PARTICLES = 2
 _KIND_CANVAS = 3
 _KIND_STRIPDRAW = 4
+_KIND_TRIANGLES = 5
 _SIM_STRIP_H = 8        # emulate the device's banded render so per-strip bugs surface
 
 
@@ -936,6 +937,57 @@ class StripDraw:
             sy += sh
 
 
+class Triangles:
+    """Retained SCREEN-SPACE triangle batch, drawn by the compositor in C on device (no
+    Python per strip -- unlike StripDraw it stays composable by core1/async refresh).
+    ``verts`` = int16 array (x0,y0,x1,y1,x2,y2 per triangle), ``colors`` = uint16 wire-RGB565
+    per triangle -- both CALLER-OWNED (fill them in place each frame). Assign ``count`` to
+    how many triangles should draw (marks the layer dirty). Mirrors the firmware type."""
+
+    def __init__(self, verts, colors):
+        self.verts = verts
+        self.colors = colors
+        self.cap = min(len(verts) // 6, len(colors))
+        self._count = 0
+        self._view = Canvas(1, 1)          # reused; data/w/h repointed per draw
+
+    @property
+    def count(self):
+        return self._count
+
+    @count.setter
+    def count(self, n):
+        self._count = max(0, min(int(n), self.cap))
+
+    def _draw(self, vx, vy, clip):
+        # Screen-space by design (the view offset is not applied) -- one full-region view.
+        if self._count == 0:
+            return
+        fb = _host.fb
+        cx0, cy0, cx1, cy1 = clip
+        cx0, cy0 = max(cx0, 0), max(cy0, 0)
+        cx1, cy1 = min(cx1, W), min(cy1, H)
+        if cx0 >= cx1 or cy0 >= cy1:
+            return
+        rw, rh = cx1 - cx0, cy1 - cy0
+        view = self._view
+        view.w = rw
+        view.h = rh
+        view.x = view.y = 0
+        view.has_transparent = False
+        data = [0] * (rw * rh)
+        for ly in range(rh):
+            drow = (cy0 + ly) * W + cx0
+            srow = ly * rw
+            data[srow:srow + rw] = fb[drow:drow + rw]
+        view.data = data
+        view.fill_triangles(self.verts, self.colors, self._count, -cx0, -cy0)
+        for ly in range(rh):
+            drow = (cy0 + ly) * W + cx0
+            srow = ly * rw
+            fb[drow:drow + rw] = data[srow:srow + rw]
+
+
 def _kind(item):
     if isinstance(item, Sprite):
         return _KIND_SPRITE
@@ -947,7 +999,9 @@ def _kind(item):
         return _KIND_CANVAS
     if isinstance(item, StripDraw):
         return _KIND_STRIPDRAW
-    raise TypeError("expected Sprite/Tilemap/Particles/Canvas/StripDraw")
+    if isinstance(item, Triangles):
+        return _KIND_TRIANGLES
+    raise TypeError("expected Sprite/Tilemap/Particles/Canvas/StripDraw/Triangles")
 
 
 def _draw_item(item, kind, vx, vy, clip):
