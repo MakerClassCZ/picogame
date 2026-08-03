@@ -790,13 +790,26 @@ class Canvas:
                 xs, xe = xe, xs
             self.fill_rect(xs, y, xe - xs + 1, 1, color)
 
-    def fill_triangles(self, verts, colors, n):
+    def fill_triangles(self, verts, colors, n, x_off=0, y_off=0):
         # Sim of the native Canvas.fill_triangles batch fill (C loops over the rasteriser in ONE
         # Python/C crossing on device). verts = int16 x0,y0,x1,y1,x2,y2 per tri; colors = wire RGB565.
+        # x_off/y_off translate every vertex before clipping (pass y_off=-vy to replay one
+        # screen-space batch into each StripDraw view; off-band triangles are rejected).
+        h = self.height
+        w = self.width
         for i in range(n):
             p = i * 6
-            self.fill_triangle(verts[p], verts[p + 1], verts[p + 2],
-                               verts[p + 3], verts[p + 4], verts[p + 5], colors[i])
+            y0 = verts[p + 1] + y_off
+            y1 = verts[p + 3] + y_off
+            y2 = verts[p + 5] + y_off
+            if (y0 < 0 and y1 < 0 and y2 < 0) or (y0 >= h and y1 >= h and y2 >= h):
+                continue
+            x0 = verts[p] + x_off
+            x1 = verts[p + 2] + x_off
+            x2 = verts[p + 4] + x_off
+            if (x0 < 0 and x1 < 0 and x2 < 0) or (x0 >= w and x1 >= w and x2 >= w):
+                continue
+            self.fill_triangle(x0, y0, x1, y1, x2, y2, colors[i])
 
     def triangle(self, x0, y0, x1, y1, x2, y2, color):
         self.line(x0, y0, x1, y1, color)
