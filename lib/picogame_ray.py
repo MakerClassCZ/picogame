@@ -26,13 +26,14 @@
 # The sprites must be add()ed to the Scene AFTER the StripDraw so they layer on
 # top of the walls.
 #
-# PERF (RP2040): the whole thing is interpreted Python, so the two hot loops -
-# the per-column DDA and the per-strip wall paint - dominate. Three levers keep
-# it playable: `stride` casts one ray per N screen columns (2 = half the rays
-# AND half the fill_rects for a small loss in wall crispness), the draw pass
-# run-length-merges adjacent identical columns into one wide fill_rect (a flat
-# wall face facing you collapses to a single rect), and both loops hoist every
-# attribute to a local. Bump `stride` to 3-4 on a big map or a slow board.
+# PERF (RP2040): the DDA is native (pg.raycast); the Python cost is the once-per-frame
+# run-length merge in cast() (adjacent identical columns -> one rect; a flat wall face
+# facing you collapses to a single run) plus a cheap per-strip paint of those runs in
+# draw(). The merge is deliberately HOISTED into cast(): it is strip-independent, and
+# doing it per strip callback (the old layout) multiplied it by strips-per-frame (30x at
+# strip_h=8 - measured 2.6x slower frames). Levers: `stride` casts one ray per N screen
+# columns (2 = half the rays for a small loss in wall crispness; 3-4 for a big map or a
+# slow board); attach() adds temporal repaint on top.
 import math
 from array import array
 
@@ -81,6 +82,16 @@ class Raycaster:
         self._sd = None
         self._ptop = self._pbot = self._pcol = None
         self._cang = None                    # last cast() heading (pose-cache: skip re-cast if unchanged)
+        # merged wall runs: the native caster emits them (pg.raycast runs plane) - x in PIXELS.
+        # All per-frame buffers are PERSISTENT (allocated once per ncols, reused every cast: no
+        # per-frame heap churn). Column arrays are DOUBLE-buffered (A/B swap) so the temporal
+        # diff in _after_cast still sees the previous frame after the swap.
+        self._r0 = self._r1 = self._rt = self._rb = self._rcol = None
+        self._runs = None
+        self._nruns = 0
+        self._alloc = -1                     # ncols the buffers are sized for
+        self._flip = False
+        self._colbufs = None                 # ((topA,botA,colA), (topB,botB,colB))
 
     def attach(self, stripdraw):
         """Enable TEMPORAL (dirty-band) rendering. Pass the buffer-less StripDraw that draws
@@ -108,23 +119,44 @@ class Raycaster:
         self.sw, self.sh = sw, sh
         stride = self.stride
         ncols = (sw + stride - 1) // stride
-        # native caster (picogame.raycast: C on device, Python in the sim) - trig here, integer DDA
-        # into the buffers; NO Python fallback (the caster is a required engine primitive).
+        # PERSISTENT buffers, sized once per ncols: two column sets (A/B, swapped each cast so
+        # the temporal diff still sees the previous frame) + the zbuf + the runs planes. Zero
+        # per-frame heap allocation (the old per-cast arrays churned ~3 KB/frame).
+        if self._alloc != ncols:
+            self._colbufs = (
+                (array("H", bytes(2 * ncols)), array("H", bytes(2 * ncols)), array("H", bytes(2 * ncols))),
+                (array("H", bytes(2 * ncols)), array("H", bytes(2 * ncols)), array("H", bytes(2 * ncols))),
+            )
+            self.zbuf = array("i", bytes(4 * ncols))
+            runs = array("H", bytes(2 * 5 * ncols))    # five planes: [x0 | x1 | top | bot | col]
+            mv = memoryview(runs)
+            self._runs = runs
+            self._r0 = mv[0:ncols]
+            self._r1 = mv[ncols:2 * ncols]
+            self._rt = mv[2 * ncols:3 * ncols]
+            self._rb = mv[3 * ncols:4 * ncols]
+            self._rcol = mv[4 * ncols:5 * ncols]
+            self._ptop = self._pbot = self._pcol = None    # sizes changed: full repaint next
+            self._alloc = ncols
+            self._flip = False
+        top, bot, col = self._colbufs[1 if self._flip else 0]
+        self._flip = not self._flip
+        # native caster (picogame.raycast: C on device, Python in the sim) - trig here, integer
+        # DDA + RLE run merge in ONE native pass; NO Python fallback (required engine primitive).
         dirx = math.cos(ang)
         diry = math.sin(ang)
         planex = -diry * self.fov
         planey = dirx * self.fov
-        top = array("H", bytes(2 * ncols))
-        bot = array("H", bytes(2 * ncols))
-        col = array("H", bytes(2 * ncols))
-        zb = array("i", bytes(4 * ncols))            # perpendicular distance, 16.16
         k = 2.0 * stride / sw                          # camx step per column
-        _pg.raycast(self._flat, self.mw, self.mh,
-                    int(px * 65536), int(py * 65536),
-                    int((dirx - planex) * 65536), int((diry - planey) * 65536),
-                    int(planex * k * 65536), int(planey * k * 65536),
-                    sh, stride, ncols, self._wc, top, bot, col, zb)
-        self.top, self.bot, self.col, self.zbuf = top, bot, col, zb
+        n = _pg.raycast(self._flat, self.mw, self.mh,
+                        int(px * 65536), int(py * 65536),
+                        int((dirx - planex) * 65536), int((diry - planey) * 65536),
+                        int(planex * k * 65536), int(planey * k * 65536),
+                        sh, stride, ncols, self._wc, top, bot, col, self.zbuf, self._runs)
+        if self._r1[n - 1] > sw:
+            self._r1[n - 1] = sw               # last run: stride rounding can overshoot the screen
+        self._nruns = n
+        self.top, self.bot, self.col = top, bot, col
         self._px, self._py = px, py
         self._cang = ang
         self._dirx, self._diry = dirx, diry
@@ -190,8 +222,8 @@ class Raycaster:
         return screen_x, int(self.sh / ty), ty
 
     def draw(self, view, vx, vy, vw, vh):
-        """StripDraw callback: sky/floor background for this band, then the wall
-        column runs that cross it. Adjacent equal columns merge into one rect."""
+        """StripDraw callback: sky/floor background for this band, then the pre-merged
+        wall runs that cross it (the RLE merge runs once per frame in cast(), not here)."""
         if self.top is None:
             return
         fr = view.fill_rect
@@ -206,35 +238,8 @@ class Raycaster:
         else:
             fr(0, 0, vw, half - y0, self.sky)
             fr(0, half - y0, vw, y1 - half, self.floor)
-        # walls: run-length-merge adjacent identical columns, clipped to THIS region.
-        # The region may be a horizontal sub-rect (vx>0, vw<full) when temporal rendering
-        # invalidated only a column band - so map column screen-x to view-local (x - vx).
-        top = self.top
-        bot = self.bot
-        col = self.col
-        stride = self.stride
-        ncols = len(top)
-        rx1 = vx + vw
-        c = vx // stride                         # first column touching the region
-        c_end = (rx1 + stride - 1) // stride      # one past the last
-        if c_end > ncols:
-            c_end = ncols
-        while c < c_end:
-            t = top[c]
-            b = bot[c]
-            cc = col[c]
-            c2 = c + 1
-            while c2 < c_end and top[c2] == t and bot[c2] == b and col[c2] == cc:
-                c2 += 1
-            st = t if t > y0 else y0
-            sb = b if b < y1 else y1
-            if sb > st:
-                sx0 = c * stride
-                sx1 = c2 * stride
-                if sx0 < vx:
-                    sx0 = vx
-                if sx1 > rx1:
-                    sx1 = rx1
-                if sx1 > sx0:
-                    fr(sx0 - vx, st - vy, sx1 - sx0, sb - st, cc)
-            c = c2
+        # walls: paint the pre-merged runs clipped to THIS region in ONE Python/C crossing -
+        # the engine's Canvas.vspans batch primitive (x_off/y_off = negated strip origin, like
+        # the fill_triangles replay). The per-strip cost does not scale with the run count.
+        # vspans is a REQUIRED engine primitive (like pg.raycast - no Python fallback).
+        view.vspans(self._r0, self._r1, self._rt, self._rb, self._rcol, self._nruns, -vx, -vy)

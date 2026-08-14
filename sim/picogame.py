@@ -10,6 +10,7 @@ import _host
 RGB565 = 0
 PAL8 = 1
 API_LEVEL = 1                # feature-gate level, mirrors the firmware module constant
+STRIP_H = 8                  # render-strip height default, mirrors the DMA-board firmware value
 RGB444_SUPPORTED = False     # capability flag (mirrors firmware); the desktop sim renders RGB565
 W = _host.W
 H = _host.H
@@ -812,6 +813,24 @@ class Canvas:
                 continue
             self.fill_triangle(x0, y0, x1, y1, x2, y2, colors[i])
 
+    def vspans(self, x0s, x1s, tops, bots, colors, n, x_off=0, y_off=0):
+        # Sim of the native Canvas.vspans batch fill (C loops over fill_rect in ONE Python/C
+        # crossing on device). Span i covers x0s[i]..x1s[i] by tops[i]..bots[i] (both exclusive)
+        # in colors[i]; all five are uint16 arrays. x_off/y_off translate before clipping (pass
+        # x_off=-vx, y_off=-vy to replay one screen-space batch into each StripDraw view).
+        h = self.height
+        w = self.width
+        for i in range(n):
+            t = tops[i] + y_off
+            b = bots[i] + y_off
+            if b <= 0 or t >= h or b <= t:
+                continue
+            x0 = x0s[i] + x_off
+            x1 = x1s[i] + x_off
+            if x1 <= 0 or x0 >= w or x1 <= x0:
+                continue
+            self.fill_rect(x0, t, x1 - x0, b - t, colors[i])
+
     def triangle(self, x0, y0, x1, y1, x2, y2, color):
         self.line(x0, y0, x1, y1, color)
         self.line(x1, y1, x2, y2, color)
@@ -1134,11 +1153,14 @@ def collide(*a):
     return x1 <= px <= x2 and y1 <= py <= y2
 
 
-def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc, top, bot, col, dist):
+def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc, top, bot, col, dist,
+            runs=None):
     # Sim implementation of the native picogame.raycast wall-caster (the C DDA primitive on device;
     # like Canvas.mode7, the sim provides the same op in Python). Same 16.16 inputs: pos/leftRay/rayStep
     # are Q16; it reconstructs floats, runs the per-column DDA and fills top/bot (px), col (wire RGB565
     # from wc[cell*2+side]) and dist (16.16 perpendicular distance). Used by picogame_ray.Raycaster.
+    # Optional `runs` (uint16 buffer, len>=5*ncols as five ncols planes [x0|x1|top|bot|col]): also
+    # emit the RLE-merged wall runs (x in pixels = column*stride) and return the run count.
     px = posx / 65536.0
     py = posy / 65536.0
     half = sh >> 1
@@ -1192,6 +1214,22 @@ def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc,
         ct = cell if (cell * 2 + 1) < len(wc) else 1
         col[c] = wc[ct * 2 + side]
         dist[c] = int(perp * 65536)
+    if runs is not None and ncols > 0:
+        cap = len(runs) // 5                      # five uint16 planes (mirrors the C layout)
+        n = min(ncols, cap)
+        nr = 0
+        rstart = 0
+        for c in range(1, n + 1):
+            if c == n or top[c] != top[rstart] or bot[c] != bot[rstart] or col[c] != col[rstart]:
+                runs[nr] = rstart * stride
+                runs[cap + nr] = c * stride
+                runs[2 * cap + nr] = top[rstart]
+                runs[3 * cap + nr] = bot[rstart]
+                runs[4 * cap + nr] = col[rstart]
+                nr += 1
+                rstart = c
+        return nr
+    return None
 
 
 # The sim renders in float (CPython), so pseudo-3D primitives take the float path; a game reads

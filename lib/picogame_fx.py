@@ -107,8 +107,59 @@ class Fade:
         self._hold = 0                                   # frames to stay at full before fading
         self._pulse = None                               # ramp-up target for pulse() (auto-reverses)
         self._active = False                             # is the overlay currently shown?
-        self.sd = pg.StripDraw(self._draw, 0, 0, 0, 0)   # collapsed until active
+        # always_dirty=False + invalidate-on-change: a HELD dim (menu/pause) costs ~0/frame -
+        # the overlay recomposites only where other layers dirty under it. The dither pattern
+        # depends only on int(level), so repaints are driven by _mark() below.
+        self.sd = pg.StripDraw(self._draw, 0, 0, 0, 0, always_dirty=False)   # collapsed until active
         scene.add(self.sd, fixed=True)                          # fixed: ignore the camera
+        # Pre-merged x-runs of LIT dither cells per Bayer row phase (4 phases), rebuilt only
+        # when int(level) changes; _draw paints them with ONE Canvas.vspans call per cell row
+        # (1-2 per strip) instead of a Python loop + fill_rect per cell (~1200 crossings/frame).
+        ncell = (width + cell - 1) // cell + 1
+        self._rx0 = [array.array("H", bytes(2 * ncell)) for _ in range(4)]
+        self._rx1 = [array.array("H", bytes(2 * ncell)) for _ in range(4)]
+        self._rn = [0, 0, 0, 0]
+        self._rt = array.array("H", bytes(2 * ncell))               # tops: all 0
+        self._rb = array.array("H", [cell] * ncell)                 # bots: all `cell`
+        self._rc = array.array("H", [color & 0xFFFF] * ncell)       # colors: all `color`
+        self._built = -1                                            # int(level) the runs are built for
+
+    def _rebuild(self, lvl):
+        # Rebuild the lit-cell x-runs for dither level `lvl` (screen-aligned cell grid, so a
+        # cell's Bayer phase is (screen_x // cell) & 3). Adjacent lit cells merge into one run.
+        S = self.cell
+        bx0 = self.X // S
+        bx1 = (self.X + self.W - 1) // S
+        bayer = _BAYER
+        for r in range(4):
+            brow = bayer[r]
+            x0 = self._rx0[r]
+            x1 = self._rx1[r]
+            n = 0
+            run = -1
+            for bx in range(bx0, bx1 + 1):
+                if brow[bx & 3] < lvl:
+                    if run < 0:
+                        run = bx
+                else:
+                    if run >= 0:
+                        x0[n] = run * S
+                        x1[n] = bx * S
+                        n += 1
+                        run = -1
+            if run >= 0:
+                x0[n] = run * S
+                x1[n] = (bx1 + 1) * S
+                n += 1
+            self._rn[r] = n
+        self._built = lvl
+
+    def _mark(self):
+        # Repaint when the DRAWN pattern changed (int(level) moved). always_dirty=False makes
+        # this the only trigger besides other layers dirtying the overlapped region.
+        lvl = int(self.level)
+        if lvl != self._built and self._active:
+            self.sd.invalidate()
 
     def _activate(self, on):
         self._active = on
@@ -116,7 +167,9 @@ class Fade:
         self.sd.y = self.Y
         self.sd.width = self.W if on else 0
         self.sd.height = self.H if on else 0
-        if not on:
+        if on:
+            self.sd.invalidate()                          # first paint (always_dirty=False)
+        else:
             self.scene.invalidate()                       # clean repaint once removed
 
     def to(self, target, speed=2.0):
@@ -135,6 +188,7 @@ class Fade:
     def set(self, level):
         self.level = self.target = max(0.0, min(float(self.LEVELS), float(level)))
         self._activate(self.level > 0)
+        self._mark()
         return self
 
     def dim(self, level=8):                                # hold a partial dim (menus)
@@ -172,24 +226,27 @@ class Fade:
             self._pulse = None
         if self.level <= 0 and self.target <= 0 and self._active:
             self._activate(False)        # deactivate ONCE on reaching idle - NOT every idle frame
+        else:
+            self._mark()                 # repaint only when int(level) moved this tick
         return self.level == self.target  # (the every-frame scene.invalidate() flickered HUDs)
 
     def _draw(self, view, vx, vy, vw, vh):
         lvl = int(self.level)
         if lvl <= 0:
             return
+        if lvl != self._built:
+            self._rebuild(lvl)
         S = self.cell
-        col = self.color
-        bayer = _BAYER
-        fill = view.fill_rect                          # bind once: this inner loop runs per dither cell
+        vs = view.vspans
         by0, by1 = vy // S, (vy + vh - 1) // S
-        bx0, bx1 = vx // S, (vx + vw - 1) // S
-        for by in range(by0, by1 + 1):
-            brow = bayer[by & 3]
-            sy = by * S - vy
-            for bx in range(bx0, bx1 + 1):
-                if brow[bx & 3] < lvl:
-                    fill(bx * S - vx, sy, S, S, col)
+        rx0 = self._rx0
+        rx1 = self._rx1
+        rn = self._rn
+        for by in range(by0, by1 + 1):                 # 1-2 cell rows per strip: ONE vspans each
+            r = by & 3
+            n = rn[r]
+            if n:
+                vs(rx0[r], rx1[r], self._rt, self._rb, self._rc, n, -vx, by * S - vy)
 
 
 class Tween:
@@ -310,30 +367,75 @@ class Sky:
     def __init__(self, scene, x, y, w, h, top, bottom):
         self.y = y
         self.h = max(1, h)
-        self.top = top
-        self.bottom = bottom
-        self._ktop = self._kbot = None                 # last LUT-built colours (two scalars, no tuple
-        self._lut = array.array("H", bytes(2 * self.h))  # allocated per frame just to compare)
-        self.sd = pg.StripDraw(self._draw, x, y, w, h)
+        self.w = w
+        self._top = top
+        self._bottom = bottom
+        self._ktop = self._kbot = None                 # colours the runs are built for
+        # Adjacent gradient rows quantize to the SAME RGB565 colour in long runs, so the band
+        # merges into a few dozen vertical spans - painted with ONE Canvas.vspans per strip.
+        # always_dirty=False: a static sky costs ~0/frame (repaints only where overlapped);
+        # assigning .top/.bottom (day-night) invalidates via the properties below.
+        self._rx0 = self._rx1 = self._rt = self._rb = self._rc = None
+        self._nruns = 0
+        self.sd = pg.StripDraw(self._draw, x, y, w, h, always_dirty=False)
         scene.add(self.sd, fixed=True)
 
-    def _draw(self, view, vx, vy, vw, vh):
-        if self.top != self._ktop or self.bottom != self._kbot:   # rebuild only on a colour change
-            self._ktop = self.top
-            self._kbot = self.bottom
-            lut = self._lut
-            hh = self.h
-            den = hh - 1 if hh > 1 else 1               # so the last row reaches `bottom` exactly
-            for r in range(hh):
-                lut[r] = _lerp565(self.top, self.bottom, r / den)
-        lut = self._lut
-        fill = view.fill_rect
-        y0 = self.y
+    @property
+    def top(self):
+        return self._top
+
+    @top.setter
+    def top(self, v):
+        if v != self._top:
+            self._top = v
+            self.sd.invalidate()
+
+    @property
+    def bottom(self):
+        return self._bottom
+
+    @bottom.setter
+    def bottom(self, v):
+        if v != self._bottom:
+            self._bottom = v
+            self.sd.invalidate()
+
+    def _rebuild(self):
+        # Merge equal-colour scanline runs (screen coords) once per colour change.
         hh = self.h
-        for ly in range(vh):                           # per scanline: an array index, no float divide/lerp
-            r = vy + ly - y0
-            if 0 <= r < hh:
-                fill(0, ly, vw, 1, lut[r])
+        den = hh - 1 if hh > 1 else 1                   # so the last row reaches `bottom` exactly
+        r0 = self._rx0
+        if r0 is None:
+            self._rx0 = array.array("H", bytes(2 * hh))            # x0 = 0: from the view's left edge
+            self._rx1 = array.array("H", [0xFFFF] * hh)            # x1 = huge: clipped to the view width
+            self._rt = array.array("H", bytes(2 * hh))
+            self._rb = array.array("H", bytes(2 * hh))
+            self._rc = array.array("H", bytes(2 * hh))
+        rt = self._rt
+        rb = self._rb
+        rc = self._rc
+        y0 = self.y
+        n = 0
+        prev = -1
+        top = self._top
+        bot = self._bottom
+        for r in range(hh):
+            c = _lerp565(top, bot, r / den)
+            if c != prev:
+                rt[n] = y0 + r
+                rb[n] = y0 + r
+                rc[n] = c
+                prev = c
+                n += 1
+            rb[n - 1] = y0 + r + 1
+        self._nruns = n
+        self._ktop = top
+        self._kbot = bot
+
+    def _draw(self, view, vx, vy, vw, vh):
+        if self._top != self._ktop or self._bottom != self._kbot:
+            self._rebuild()
+        view.vspans(self._rx0, self._rx1, self._rt, self._rb, self._rc, self._nruns, -vx, -vy)
 
 
 class Scanlines:
@@ -352,7 +454,11 @@ class Scanlines:
             row[i] = i & 1                              # 0 = transparent, 1 = dark
         pal = array.array("H", (dark, dark))            # entry 1 = dark (entry 0 unused; transparent)
         self._row = pg.Bitmap(row, w, 1, format=pg.PAL8, palette=pal, frames=1, stride=w, transparent=0)
-        self.sd = pg.StripDraw(self._draw, x, y, w, h)
+        # always_dirty=False: the overlay is static, so it repaints only where the layers UNDER it
+        # dirty (re-darkening exactly the refreshed rows). always_dirty=True here was the classic
+        # full-screen-StripDraw trap - it forced a full recomposite+push every frame for the whole
+        # session, defeating the scene's dirty-rect tracking for every game that stacked it on top.
+        self.sd = pg.StripDraw(self._draw, x, y, w, h, always_dirty=False)
         scene.add(self.sd, fixed=True)
 
     def _draw(self, view, vx, vy, vw, vh):

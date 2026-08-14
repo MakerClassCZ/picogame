@@ -217,6 +217,7 @@ class _UI:
         self.rows = max(3, (h - 16 - 16) // LINE_H)
         self.cur_icon = None
         self._loaded_sel = -1
+        self._desc_lines = ()
         # preview panel geometry
         self.pfx = self.list_w + 4
         self.pfy = 18
@@ -239,10 +240,14 @@ class _UI:
             return
         self._loaded_sel = self.sel
         self.cur_icon = None
+        self._desc_lines = ()
         if self.apps:
             a = self.apps[self.sel]
             if a.icon:
                 self.cur_icon = load_bmp(a.root + "/" + a.icon)
+            # cache the word-wrap per SELECTION: draw() runs once per render strip, so wrapping
+            # there redid the same split strips-per-repaint times (10x with the 24-row buffer)
+            self._desc_lines = _wrap(a.desc, self.pchars)
 
     def draw(self, view, vx, vy, vw, vh):
         w, h = self.w, self.h
@@ -301,7 +306,7 @@ class _UI:
                 badge = (badge + " " if badge else "") + "%dP" % a.players
             if badge:
                 txt(cx, ty + LINE_H * 2, badge, _ACC)
-            for j, ln in enumerate(_wrap(a.desc, self.pchars)):
+            for j, ln in enumerate(self._desc_lines):
                 txt(cx, ty + LINE_H * (3 + j), ln, _DIM)
         # hint bar
         box(0, h - 14, w, 14, _PANEL)
