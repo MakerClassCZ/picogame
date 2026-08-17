@@ -15,6 +15,11 @@
 # tools/ (prints the report bytes that change on each press). A wholly different report layout can be
 # passed to UsbPad(buttons=..., axes=...) in code.
 import os
+try:
+    from picogame_debug import note as _debug   # optional diagnostics (settings.toml PICOGAME_DEBUG=1)
+except ImportError:                             # not deployed -> silent no-op, never a dependency
+    def _debug(*args):
+        pass
 
 VERSION = "2026-07-23j"   # deploy sanity: print(picogame_usbpad.VERSION) in the REPL
 
@@ -211,8 +216,7 @@ class UsbPad:
                                 break
                         except Exception:
                             break
-                    import picogame_debug
-                    picogame_debug.note("usbpad: re-attached after bus drop")
+                    _debug("usbpad: re-attached after bus drop")
             except Exception:
                 pass
         return 0

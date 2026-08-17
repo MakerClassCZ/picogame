@@ -23,6 +23,11 @@
 # (a partial list MERGES over the defaults - only the named buttons change; one keycode per
 # button in the override, the defaults may alias several keycodes to one logical button.)
 import os
+try:
+    from picogame_debug import note as _debug   # optional diagnostics (settings.toml PICOGAME_DEBUG=1)
+except ImportError:                             # not deployed -> silent no-op, never a dependency
+    def _debug(*args):
+        pass
 
 VERSION = "2026-07-23g"   # deploy sanity: print(picogame_usbkbd.VERSION) in the REPL
 
@@ -274,8 +279,7 @@ class UsbKbd:
                     self._dev = dev
                     self._iface = iface
                     self._ep = ep
-                    import picogame_debug
-                    picogame_debug.note("usbkbd: re-attached after bus drop")
+                    _debug("usbkbd: re-attached after bus drop")
             except Exception:
                 pass
         return 0

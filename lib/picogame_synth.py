@@ -24,6 +24,11 @@
 import array
 import math
 import os
+try:
+    from picogame_debug import note as _debug   # optional diagnostics (settings.toml PICOGAME_DEBUG=1)
+except ImportError:                             # not deployed -> silent no-op, never a dependency
+    def _debug(*args):
+        pass
 
 try:
     import synthio
@@ -157,8 +162,7 @@ class Synth:
             self.mixer.voice[1].play(self.synth)
             self.available = True
         except Exception as e:       # MemoryError on a tight heap / pin in use -> run silent
-            import picogame_debug     # settings.toml PICOGAME_DEBUG=1 -> print the real reason (else silent)
-            picogame_debug.note("synth: init failed ->", repr(e))
+            _debug("synth: init failed ->", repr(e))   # printed only with PICOGAME_DEBUG=1 (else silent)
             out = getattr(self, "audio", None)
             if out is not None and not isinstance(out, _Null):
                 try:
