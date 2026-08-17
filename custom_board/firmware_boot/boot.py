@@ -3,6 +3,12 @@
 # board.DISPLAY slot). The display built here persists into code.py, so your game runs UNCHANGED as
 # code.py — no launcher, no extra lib. Copy this + settings.toml to CIRCUITPY root.
 #
+# *** THEN PRESS RESET ONCE (or unplug/replug USB). *** boot.py runs ONLY at power-on: saving a
+# file soft-reloads code.py but does NOT re-run boot.py, so until that reset board.DISPLAY is None
+# and your game dies with "AttributeError: 'NoneType' object has no attribute 'width'". Same after
+# changing any PICOGAME_DISPLAY/PINS/SIZE/FLIP/INVERT/BGR/BAUD key. (The console prints
+# "boot.py: display ready" when it has run.)
+#
 # settings.toml:
 #   PICOGAME_DISPLAY = "st7789" | "ili9341"
 #   PICOGAME_PINS    = "SCK=GP18 MOSI=GP19 DC=GP17 CS=GP21 RST=GP20 BL=GP16"

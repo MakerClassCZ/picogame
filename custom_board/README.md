@@ -8,7 +8,8 @@ Games use `board.DISPLAY`. How you get one depends on your board — **three pat
 2. **No `board.DISPLAY`, and you flashed a picogame *custom-board* firmware** (our pico / pico_w /
    pico2 / pico2_w builds, which expose a `board.DISPLAY` slot) → use **[`firmware_boot/`](firmware_boot/)**.
    A `boot.py` builds the display from `settings.toml`; your game runs **unchanged as `code.py`**.
-   The pleasant path.
+   The pleasant path. **After copying `boot.py` press RESET once** — `boot.py` only runs at power-on
+   (a save/soft-reload doesn't run it), until then `board.DISPLAY` is `None`.
 
 3. **No `board.DISPLAY`, stock/other firmware** → use **[`launcher/`](launcher/)**. A `code.py`
    launcher builds the display and runs your game (as `game.py`). A little more setup.

@@ -9,7 +9,15 @@ Copy to `CIRCUITPY`:
 - `code.py` = **your game, unchanged**.
 - `/lib/` = the `picogame_*` helpers your game imports (boot.py itself needs no extra lib).
 
+**Then press RESET (or unplug/replug USB) once.** `boot.py` runs **only at power-on** — saving files
+over USB soft-reloads `code.py` but does *not* re-run `boot.py`, so right after copying it your game
+still sees no display and dies with `AttributeError: 'NoneType' object has no attribute 'width'`
+(that is `board.DISPLAY` being `None`). One hard reset fixes it; from then on the display is there
+before your code runs.
+
 That's it — no launcher. Existing games and `stage`-based games work because `board.DISPLAY` exists
 before your code runs.
 
-**Note:** after changing a display setting in `settings.toml`, press RESET (or re-plug USB) — `boot.py` builds the display only at power-on, so a soft reload keeps the old one. Button/audio changes are picked up by a normal reload.
+**Note:** the same applies after changing a *display* key in `settings.toml` (`PICOGAME_DISPLAY`,
+`PICOGAME_PINS`, `PICOGAME_SIZE`, `PICOGAME_FLIP`, `PICOGAME_INVERT`, `PICOGAME_BGR`, `PICOGAME_BAUD`):
+press RESET. Button/audio keys are read by the game, so a normal reload picks those up.
