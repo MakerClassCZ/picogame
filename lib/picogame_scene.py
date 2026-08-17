@@ -23,8 +23,9 @@ class View:
         self.groups = {}
         self.anims = []          # AnimatedSprite instances to advance each frame
         self.camera = None
-        self.zones = []          # list of (tag, x, y, w, h)
+        self.zones = []          # list of (tag, x, y, w, h[, data]) - data only when authored
         self.points = {}         # name -> (x, y)
+        self.pdata = {}          # name -> custom data dict (points that carry any)
         self.sounds = {}         # id -> audio sample (or None if unavailable)
         self.audio = None        # picogame_audio.Audio (or None)
         self.tilemap = None      # the primary tilemap object (read/write tiles)
@@ -168,13 +169,19 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
     for layer in scene["layers"]:
         kind = layer[0]
         if kind == "tilemap":
-            _, aid, cols, rows, ox, oy, grid = layer
+            _, aid, cols, rows, ox, oy, grid = layer[:7]
+            orient = layer[7] if len(layer) > 7 else None
             tm = pg.Tilemap(bitmaps[aid], cols, rows)
             tm.move(ox, oy)
             for i in range(len(grid)):
                 gv = grid[i]
                 if gv:
-                    tm.tile(i % cols, i // cols, gv)
+                    o = orient[i] if orient else 0
+                    if o:
+                        tm.tile(i % cols, i // cols, gv,
+                                flip_x=bool(o & 1), flip_y=bool(o & 2), transpose=bool(o & 4))
+                    else:
+                        tm.tile(i % cols, i // cols, gv)
             v.scene.add(tm)
             if v._tm is None:                 # first (background) tilemap = primary
                 v._tm = (tm, aid, cols, rows)
@@ -187,6 +194,8 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
             s = pg.Sprite(bitmaps[aid], x, y, frame=frame)
             s.anchor = (ax, ay)
             s.data = data
+            if len(layer) > 10 and layer[10]:
+                s.angle = layer[10]
             v.scene.add(s)
             if name:
                 v.named[name] = s
@@ -225,6 +234,7 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
         v.audio, v.sounds = _build_sounds(scene.get("sounds"))
     v.zones = scene.get("zones", [])
     v.points = scene.get("points", {})
+    v.pdata = scene.get("pdata", {})
     music = scene.get("music")
     if music and v.audio and v.sounds.get(music):
         v.audio.music(v.sounds[music])

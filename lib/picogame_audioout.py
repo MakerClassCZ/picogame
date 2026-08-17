@@ -16,7 +16,11 @@
 # `PICOGAME_AUDIO_OUT` in settings.toml (default headphone). No external MCLK (BCLK-derived PLL).
 import os
 import board
-import picogame_debug as _dbg
+try:
+    from picogame_debug import note as _debug   # optional diagnostics (settings.toml PICOGAME_DEBUG=1)
+except ImportError:                             # not deployed -> silent no-op, never a dependency
+    def _debug(*args):
+        pass
 
 _KEEP = []   # holds DAC objects alive for the process: a native I2SOut can't carry the reference
 
@@ -56,7 +60,7 @@ def _try_i2s(sample_rate):
         # This board HAS I2S pins but the DAC driver isn't installed -> the #1 Fruit Jam "no sound"
         # cause. Diagnose it (falls back to PWM, which a DVI board lacks -> silent). Install
         # adafruit_tlv320 + adafruit_bus_device (circup / the Adafruit bundle).
-        _dbg.note("audioout: I2S DAC driver missing (install adafruit_tlv320) ->", repr(e))
+        _debug("audioout: I2S DAC driver missing (install adafruit_tlv320) ->", repr(e))
         return None
     try:
         import time
@@ -79,14 +83,14 @@ def _try_i2s(sample_rate):
             if sel in ("speaker", "both"):
                 dac.speaker_volume = _db("PICOGAME_SPK_VOLUME", -10)
         except Exception as e:
-            _dbg.note("audioout: DAC volume set failed ->", repr(e))
+            _debug("audioout: DAC volume set failed ->", repr(e))
         dac.configure_clocks(sample_rate=sample_rate)   # mclk_freq=None -> PLL from BCLK, no MCLK pin
         time.sleep(0.35)                                 # let the DAC output ramp before playback
         out = audiobusio.I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
         _KEEP.append(dac)        # keep the DAC + its I2C device alive (I2SOut can't hold the ref)
         return out
     except Exception as e:
-        _dbg.note("audioout: I2S DAC init failed ->", repr(e))
+        _debug("audioout: I2S DAC init failed ->", repr(e))
         return None
 
 

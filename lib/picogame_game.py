@@ -207,8 +207,9 @@ def resolve_display(display=None):
         except (ImportError, AttributeError):
             display = None
     if display is None:
-        raise RuntimeError("no display found; on a DVI board set "
-                           "CIRCUITPY_PICODVI_ENABLE=\"always\" in settings.toml")
+        raise RuntimeError("no display (board.DISPLAY is None): if you just added boot.py press "
+                           "RESET once (boot.py runs only at power-on, not on save/reload); on a "
+                           "DVI board set CIRCUITPY_PICODVI_ENABLE=\"always\" in settings.toml")
     key = id(display)
     hit = _RESOLVED.get(key)
     if hit is not None and hit[0] is display:      # verify identity: guards a reused id() (stale alias)

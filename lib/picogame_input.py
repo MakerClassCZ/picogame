@@ -24,6 +24,11 @@ import os
 
 import digitalio
 from micropython import const
+try:
+    from picogame_debug import note as _debug   # optional diagnostics (settings.toml PICOGAME_DEBUG=1)
+except ImportError:                             # not deployed -> silent no-op, never a dependency
+    def _debug(*args):
+        pass
 
 # Logical buttons - a SUPERSET; a board maps the subset it has.
 UP, DOWN, LEFT, RIGHT, A, B, X, Y = (1 << i for i in range(8))
@@ -69,7 +74,9 @@ PROFILES = {                                  # add new boards here, keyed by bo
 
 
 def _resolve_pin(name_or_obj):
-    """A profile pin: an actual Pin object, a board attribute name, or a bare 'GPn' (microcontroller)."""
+    """A profile pin: an actual Pin object, a board attribute name, or a bare 'GPn'/'GPIOn'
+    (microcontroller). 'GPn' also resolves on boards without Pico-style aliases (e.g. the
+    Fruit Jam), where microcontroller.pin names pins 'GPIOn'."""
     if not isinstance(name_or_obj, str):
         return name_or_obj
     pin = getattr(board, name_or_obj, None)
@@ -77,6 +84,8 @@ def _resolve_pin(name_or_obj):
         try:
             import microcontroller
             pin = getattr(microcontroller.pin, name_or_obj, None)
+            if pin is None and name_or_obj.startswith("GP") and not name_or_obj.startswith("GPIO"):
+                pin = getattr(microcontroller.pin, "GPIO" + name_or_obj[2:], None)
         except ImportError:
             pin = None
     return pin
@@ -267,6 +276,19 @@ class Buttons:
         sets PICOGAME_USB=0); `usb=True` = force (also on the CPython sim, for deliberate testing - still
         no-ops if no pad/driver). Silent on every failure (no usb.core, no pad plugged in, driver not
         copied) so games run unchanged on any board."""
+        # I2C gamepads first (independent of the `usb` gate): generic recipe-described pads
+        # (presets like the Pimoroni QwSTPad, or any expander via one settings line). OPT-IN
+        # via settings.toml because expanders have no identity to auto-probe safely. See
+        # picogame_i2cpad for the keys (PICOGAME_I2CPAD, PICOGAME_I2C).
+        spec = os.getenv("PICOGAME_I2CPAD")
+        if spec and str(spec) != "0":
+            try:
+                import picogame_i2cpad
+                for pad in picogame_i2cpad.attach(spec):
+                    self._sources.append(pad)
+                    self._mapped |= pad.mapped
+            except Exception as e:
+                _debug("input: I2C pad not attached ->", repr(e))
         if usb is False:
             return
         if usb is None:
@@ -295,8 +317,7 @@ class Buttons:
             self._sources.append(pad)
             self._mapped |= pad.mapped       # has() now reports the pad's actually-mapped buttons
         except Exception as e:
-            import picogame_debug
-            picogame_debug.note("input: USB gamepad not attached ->", repr(e))
+            _debug("input: USB gamepad not attached ->", repr(e))
         if str(os.getenv("PICOGAME_KBD", "1")) == "0":
             return
         try:
@@ -307,8 +328,7 @@ class Buttons:
             self._sources.append(kbd)
             self._mapped |= kbd.mapped
         except Exception as e:
-            import picogame_debug
-            picogame_debug.note("input: USB keyboard not attached ->", repr(e))
+            _debug("input: USB keyboard not attached ->", repr(e))
 
     def _init_matrix(self, m, debounce_s):
         """Row x column matrix backend (keypad.KeyMatrix). Same Event queue as keypad.Keys, so poll()
