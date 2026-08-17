@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>picogame asset converter</title>
+<link rel="stylesheet" href="../editor/style.css">
+<style>
+  body { margin: 0; }
+  .pg-editor { position: static; min-height: 100vh; }
+  .pg-editor #main { display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 0; flex: 1; min-height: 0; }
+  .pg-editor #side { background: var(--panel); border-right: 1px solid var(--line); padding: 12px; overflow: auto; }
+  .pg-editor #stage { padding: 14px 18px; overflow: auto; }
+  .pg-editor .drop { border: 2px dashed #3a4666; border-radius: 10px; padding: 26px 12px; text-align: center; color: var(--muted); cursor: pointer; }
+  .pg-editor .drop.hot { border-color: var(--accent2); color: var(--text); }
+  .pg-editor .drop b { color: var(--text); }
+  .pg-editor .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+  .pg-editor .row label { color: var(--muted); min-width: 92px; }
+  .pg-editor input[type=number] { width: 64px; background: #1b1f2a; color: #eef; border: 1px solid #3a4666; border-radius: 4px; padding: 3px 5px; }
+  .pg-editor input[type=text] { width: 140px; background: #1b1f2a; color: #eef; border: 1px solid #3a4666; border-radius: 4px; padding: 3px 5px; }
+  .pg-editor select { background: #1b1f2a; color: #eef; border: 1px solid #3a4666; border-radius: 4px; padding: 3px; }
+  .pg-editor h3 { margin: 14px 0 6px; font-size: 11px; letter-spacing: .08em; color: var(--accent2); text-transform: uppercase; }
+  .pg-editor .frames { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+  .pg-editor .frames canvas { image-rendering: pixelated; background: repeating-conic-gradient(#2a3142 0 25%, #1c212e 0 50%) 0 0/12px 12px; border: 1px solid #3a4666; }
+  .pg-editor .frames .fr { text-align: center; color: var(--muted); font-size: 10px; }
+  .pg-editor .pal { display: flex; flex-wrap: wrap; gap: 2px; max-width: 520px; }
+  .pg-editor .pal span { width: 14px; height: 14px; border: 1px solid #0008; display: inline-block; }
+  .pg-editor .stat { background: #1b1f2a; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre; }
+  .pg-editor .stat .warn { color: #ffb45f; }
+  .pg-editor .stat .ok { color: #7fe0a0; }
+  .pg-editor .actions button { width: auto; padding: 8px 14px; margin-right: 8px; }
+  .pg-editor .hint { color: var(--muted); font-size: 12px; margin: 6px 0; }
+  .pg-editor pre.code { background: #0f1218; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 11px; max-height: 260px; overflow: auto; color: #cfd6ea; }
+  .pg-editor #toasts { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); }
+</style>
+</head>
+<body>
+<div class="pg-editor" id="app">
+  <header id="top">
+    <b class="brand">picogame</b>
+    <span class="inline">Asset converter — PNG → picogame Bitmap module (PAL8 / RGB565)</span>
+    <span class="spacer"></span>
+    <a class="mini" href="https://picogame.makerclass.cz/tools/assets/" style="color:var(--muted);text-decoration:none">docs</a>
+    <a class="mini" href="../editor/" style="color:var(--muted);text-decoration:none">level editor ›</a>
+  </header>
+  <div id="main">
+    <aside id="side">
+      <div class="drop" id="drop"><b>Drop a PNG / GIF / BMP here</b><br>or click to choose. Sprite sheets = frames side by side; tilesets = any grid.</div>
+      <input type="file" id="file" accept="image/*" hidden>
+
+      <h3>Layout</h3>
+      <div class="row"><label>as</label>
+        <select id="mode">
+          <option value="frames">sprite sheet (frames in a row)</option>
+          <option value="tile">tileset (grid, repack to a strip)</option>
+          <option value="single">single image (background)</option>
+        </select></div>
+      <div class="row" id="rowFrames"><label>frames</label><input type="number" id="frames" value="1" min="1"></div>
+      <div class="row" id="rowTile" hidden><label>tile w×h</label><input type="number" id="tw" value="16" min="1"> × <input type="number" id="th" value="16" min="1">
+        <label class="inline" style="min-width:0"><input type="checkbox" id="dedup" checked> dedup identical tiles</label></div>
+
+      <h3>Format</h3>
+      <div class="row"><label>pixel format</label>
+        <select id="fmt"><option value="auto">auto (PAL8 if ≤255 colours)</option><option value="pal8">PAL8 (1 B/px)</option><option value="rgb565">RGB565 (2 B/px)</option></select></div>
+      <div class="row"><label>max colours</label><input type="number" id="colors" value="255" min="1" max="255"> <label class="inline" style="min-width:0"><input type="checkbox" id="dither"> dither</label></div>
+      <div class="row"><label>transparent</label>
+        <select id="transp"><option value="alpha">alpha &lt; 128</option><option value="topleft">colour of top-left pixel</option><option value="magenta">magenta #F800F8</option><option value="none">none (opaque)</option></select></div>
+      <div class="row"><label class="inline" style="min-width:0"><input type="checkbox" id="rle"> RLE-compress (single PAL8 image only)</label></div>
+
+      <h3>Output</h3>
+      <div class="row"><label>module name</label><input type="text" id="name" value="my_sprite"></div>
+      <div class="actions row">
+        <button id="btnDl" disabled>⬇ Download .py</button>
+        <button id="btnTry" disabled>▶ Try in playground</button>
+      </div>
+      <p class="hint">The .py module is what <code>tools/png2picogame.py</code> emits: <code>bitmap(pg)</code> returns the Bitmap. Copy it next to your code (or <code>build_mpy.sh</code> it) and <code>import</code> it. Big backgrounds: prefer PAL8 with dither and few colours; RGB565 is 2× the RAM.</p>
+    </aside>
+    <section id="stage">
+      <div class="stat" id="stat">Waiting for an image…</div>
+      <h3>Frames (as the engine will see them)</h3>
+      <div class="frames" id="framesView"></div>
+      <h3>Palette</h3>
+      <div class="pal" id="pal"></div>
+      <h3>Module preview</h3>
+      <pre class="code" id="code"></pre>
+    </section>
+  </div>
+  <div id="toasts"></div>
+</div>
+<script src="../editor/core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

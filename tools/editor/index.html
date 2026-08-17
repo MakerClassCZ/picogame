@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,follow">
+  <title>picogame level editor</title>
+  <link rel="stylesheet" href="style.css">
+  <style>body { margin: 0; }</style>
+</head>
+<body>
+<div class="pg-editor" role="region" aria-label="picogame level editor">
+  <header id="top">
+    <b class="brand">picogame</b>
+    <label class="inline">Level <select id="levelSel" aria-label="Level"></select></label>
+    <button id="btnAddLevel" class="mini opt" title="Add a level" aria-label="Add level">+ Level</button>
+    <span class="sep"></span>
+    <button id="btnUndo" class="mini icon" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+    <button id="btnRedo" class="mini icon" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+    <span class="sep"></span>
+    <button id="btnFit" class="mini" title="Fit whole map (F)">Fit</button>
+    <button id="btnZoom100" class="mini" title="Zoom to 100%">100%</button>
+    <button id="btnZoomOut" class="mini icon" title="Zoom out (−)" aria-label="Zoom out">−</button>
+    <button id="btnZoomIn" class="mini icon" title="Zoom in (+)" aria-label="Zoom in">+</button>
+    <span class="spacer"></span>
+    <button id="btnHelp" class="mini" title="Keyboard shortcuts (?)">? Help</button>
+    <details id="demosD" class="dd">
+      <summary class="mini">Demos ▾</summary>
+      <div class="ddmenu">
+        <button id="btnSample" data-demo="sample">Sample (one screen)</button>
+        <button id="btnDemoPlatformer" data-demo="platformer">Scrolling platformer (bounded)</button>
+        <button id="btnDemoOpen" data-demo="openworld">Open world (bigger both ways)</button>
+        <div class="hint">The two scrolling demos are the fastest way to learn the big-map workflow — load one and inspect how its map size + camera are set up.</div>
+      </div>
+    </details>
+    <button id="btnNew" class="mini opt">New</button>
+    <button id="btnSave" class="mini opt">Save</button>
+    <button id="btnLoad" class="mini opt">Load</button>
+    <button id="btnTryPlay" class="mini" title="Open this level running in the playground">&#9654; Try in playground</button>
+    <details id="exportD" class="dd">
+      <summary class="mini">Export ▾</summary>
+      <div class="ddmenu">
+        <button id="btnExportBaked">baked &lt;name&gt;_scene.py (this level, ready for the device)</button>
+        <button id="btnExport">scene.json (this level)</button>
+        <button id="btnExportProj">project.json (bank + levels)</button>
+        <div class="hint">Keep the PNGs next to it, then run <code>tools/scene_build.py</code>.</div>
+      </div>
+    </details>
+    <input type="file" id="file" accept="image/png" hidden>
+    <input type="file" id="projfile" accept=".json,.pgproj,.tmj,.tmx,.tsx,.tsj,.png,application/json" multiple hidden>
+  </header>
+
+  <div id="main">
+    <nav id="tools" aria-label="Tools">
+      <button class="tool on" data-tool="select"><span aria-hidden="true">⤡</span>Select</button>
+      <button class="tool"    data-tool="paint"><span aria-hidden="true">▦</span>Paint</button>
+      <button class="tool"    data-tool="place"><span aria-hidden="true">☺</span>Place</button>
+      <button class="tool"    data-tool="hud"><span aria-hidden="true">⊞</span>HUD</button>
+      <button class="tool"    data-tool="zone"><span aria-hidden="true">▭</span>Zone</button>
+      <button class="tool"    data-tool="point"><span aria-hidden="true">✕</span>Point</button>
+      <button class="tool"    data-tool="pan"><span aria-hidden="true">✋</span>Pan</button>
+    </nav>
+
+    <div id="center">
+      <canvas id="canvas" role="application" tabindex="0"
+        aria-label="Level canvas — pan/zoom a world larger than one screen; the dashed white box is one handheld screen"></canvas>
+      <div id="status" class="status" aria-live="polite"></div>
+      <div id="toolhelp" class="toolhelp" aria-live="polite"></div>
+      <canvas id="minimap" title="Minimap — click or drag to jump the view" aria-label="Minimap"></canvas>
+    </div>
+
+    <aside id="panel" aria-live="polite"></aside>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <!-- first-run getting-started overlay -->
+  <div id="gettingStarted" class="overlay">
+    <div class="card">
+      <h2>Build a picogame level</h2>
+      <ol>
+        <li><b>Paint</b> ground: pick the <b>Paint</b> tool, choose a tile, drag on the map.</li>
+        <li><b>Make it scroll:</b> in the Level panel (Select tool) set <b>World size</b> bigger than one screen — try the <b>3× wide</b> or <b>2×2 screens</b> preset. The dashed white box shows one screen.</li>
+        <li><b>Place</b> a sprite (import a PNG, or <b>+ Colour sprite</b> for a placeholder block) and name one <code>player</code> (Select tool → name field).</li>
+        <li><b>Camera:</b> in Select (nothing selected) set <b>follow → player</b> to make it scroll.</li>
+        <li><b>Export</b> → scene.json → bake with <code>tools/scene_build.py</code>.</li>
+      </ol>
+      <p class="hint">Best way to learn scrolling: load a <b>scrolling demo</b> below and inspect how its map size + camera are set up.</p>
+      <p class="hint">Pan: hold Space or middle-drag. Zoom: Ctrl+wheel or +/−. Undo: Ctrl+Z. Press <b>?</b> anytime for all shortcuts.</p>
+      <div class="row wrap">
+        <button id="gsPlatformer">Scrolling platformer ▸</button>
+        <button id="gsOpen">Open world ▸</button>
+      </div>
+      <div class="row wrap">
+        <button id="gsSample">Load the sample (one screen)</button>
+        <button id="gsClose">Start from scratch</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- shortcut cheatsheet (toggle with ? or Help) -->
+  <div id="cheatsheet" class="overlay" hidden>
+    <div class="card">
+      <h2>Shortcuts <button id="cheatsheetClose" class="mini" style="float:right">✕</button></h2>
+      <table class="keys">
+        <tr><td>1–6 / V B P H</td><td>Select · Paint · Place · Pan (+ HUD/Zone/Point)</td></tr>
+        <tr><td>Space-drag / middle-drag</td><td>Pan the view</td></tr>
+        <tr><td>Wheel / Ctrl+Wheel</td><td>Scroll / zoom to cursor</td></tr>
+        <tr><td>+ / − / 0 / F</td><td>Zoom in / out / 100% / Fit whole map</td></tr>
+        <tr><td>Arrows</td><td>Nudge selection (Shift = ×10), or pan when nothing selected</td></tr>
+        <tr><td>Shift-click (Select)</td><td>Add / remove objects from a multi-selection</td></tr>
+        <tr><td>Shift-drag (Paint)</td><td>Rectangle fill</td></tr>
+        <tr><td>Alt-click (Paint)</td><td>Flood fill</td></tr>
+        <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / redo</td></tr>
+        <tr><td>Ctrl+C / V / D</td><td>Copy / paste / duplicate selection</td></tr>
+        <tr><td>Delete</td><td>Delete selection</td></tr>
+        <tr><td>Esc</td><td>Deselect / close dialogs</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+  <script src="core.js"></script>
+  <script src="viewport.js"></script>
+  <script src="history.js"></script>
+  <script src="render.js"></script>
+  <script src="minimap.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

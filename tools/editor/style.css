@@ -1,0 +1,151 @@
+/* picogame level editor -- ALL selectors scoped under .pg-editor so the SceneEditor.astro
+   embed can inline this file (or a copy) without leaking into the Starlight docs page.
+   Designed for a WIDE / fullscreen working area: left tool rail, big canvas, right panel,
+   corner minimap. Degrades on small screens but does not target a narrow docs column. */
+
+.pg-editor, .pg-editor * { box-sizing: border-box; }
+.pg-editor {
+  --bg: #11141c; --bg2: #1c212e; --panel: #232838; --line: #2a3142;
+  --accent: #5b78d8; --accent2: #8fb0ff; --hi: #ffd23f; --text: #d8def0; --muted: #a8b4cc;
+  font: 13px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text);
+  position: fixed; inset: 0; display: flex; flex-direction: column; z-index: 2147483000;
+}
+/* NOTE: no bare `body{}` rule here — this file is injected into the Starlight docs page
+   when the embed opens, so every selector stays scoped under .pg-editor. The standalone
+   editor page zeroes its own body margin inline. */
+
+/* ---------------- top bar ---------------- */
+.pg-editor #top {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap;
+  background: var(--panel); border-bottom: 1px solid #0006; flex: 0 0 auto;
+}
+.pg-editor #top .brand { color: var(--accent2); font-size: 15px; margin-right: 4px; font-weight: 700; }
+.pg-editor #top .spacer { flex: 1; }
+.pg-editor #top .sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 3px; }
+.pg-editor .inline { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.pg-editor #levelSel { background: #1b1f2a; color: #eef; border: 1px solid #3a4666; border-radius: 4px; padding: 3px; }
+.pg-editor button.mini { width: auto; padding: 5px 9px; }
+.pg-editor button.icon { width: auto; min-width: 30px; padding: 5px 8px; font-size: 15px; line-height: 1; }
+
+.pg-editor .dd { position: relative; }
+.pg-editor .dd > summary { list-style: none; cursor: pointer; background: #34406a; color: #eef; border-radius: 4px; padding: 5px 9px; }
+.pg-editor .dd > summary::-webkit-details-marker { display: none; }
+.pg-editor .dd[open] > summary { background: var(--accent); }
+.pg-editor .ddmenu { position: absolute; right: 0; top: 110%; z-index: 45; width: 240px;
+  background: #2a3146; border: 1px solid #44569a; border-radius: 6px; padding: 8px; box-shadow: 0 6px 20px #0008; }
+
+/* ---------------- main 3-pane ---------------- */
+.pg-editor #main { flex: 1; display: flex; min-height: 0; }
+.pg-editor #tools {
+  flex: 0 0 92px; background: var(--bg2); padding: 8px 6px; display: flex; flex-direction: column; gap: 5px;
+  border-right: 1px solid #0006; overflow: auto;
+}
+.pg-editor #tools .tool {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px;
+  font-size: 11px; width: 100%; border-radius: 6px;
+}
+.pg-editor #tools .tool span { font-size: 20px; line-height: 1; }
+.pg-editor #tools .tool.on { background: var(--accent); box-shadow: 0 0 0 2px var(--hi) inset; }
+
+.pg-editor #center { flex: 1; position: relative; min-width: 0; background: #0b0d13; overflow: hidden; }
+.pg-editor #canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  image-rendering: pixelated; touch-action: none; cursor: default; }
+.pg-editor .status {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 10px; z-index: 5;
+  background: #0b0d13cc; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line);
+}
+.pg-editor .status b { color: var(--hi); }
+.pg-editor .toolhelp {
+  position: absolute; left: 10px; top: 10px; max-width: 60%; z-index: 5;
+  background: #0b0d13cc; color: var(--muted); font-size: 12px; padding: 5px 9px; border-radius: 6px;
+  border: 1px solid var(--line); pointer-events: none;
+}
+.pg-editor #minimap {
+  position: absolute; right: 10px; top: 10px; z-index: 6; width: 200px; height: 130px;
+  background: #0b0d13cc; border: 1px solid #44569a; border-radius: 6px; cursor: pointer;
+  box-shadow: 0 4px 16px #0007; image-rendering: pixelated;
+}
+
+.pg-editor #panel {
+  flex: 0 0 300px; background: var(--panel); padding: 12px; overflow: auto; border-left: 1px solid #0006;
+}
+
+/* ---------------- widgets ---------------- */
+.pg-editor h2 { font-size: 15px; color: var(--accent2); margin: 0 0 10px; }
+.pg-editor h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent2); margin: 16px 0 6px; }
+.pg-editor h3:first-child { margin-top: 0; }
+.pg-editor button { background: #34406a; color: #eef; border: 0; border-radius: 5px; padding: 7px 9px; margin: 2px 0; cursor: pointer; width: 100%; font: inherit; }
+.pg-editor button:hover { background: #44569a; }
+.pg-editor button.on { background: var(--accent); }
+.pg-editor button.danger { background: #7a3547; }
+.pg-editor button.danger:hover { background: #9c3f56; }
+.pg-editor button:focus-visible, .pg-editor select:focus-visible, .pg-editor input:focus-visible,
+.pg-editor summary:focus-visible, .pg-editor canvas:focus-visible, .pg-editor [tabindex]:focus-visible {
+  outline: 2px solid var(--hi); outline-offset: 2px; }
+.pg-editor .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+.pg-editor .row label { flex: 1; color: var(--muted); }
+.pg-editor .row.wrap { flex-wrap: wrap; }
+.pg-editor input[type=number] { width: 60px; }
+.pg-editor input[type=text] { width: 100%; }
+.pg-editor input, .pg-editor select, .pg-editor textarea {
+  background: #1b1f2a; color: #eef; border: 1px solid #3a4666; border-radius: 4px; padding: 4px; font: inherit; }
+.pg-editor textarea { width: 100%; }
+.pg-editor textarea.bad { border-color: #d05; background: #331a22; }
+.pg-editor .hint { color: var(--muted); font-size: 11px; margin: 4px 0; }
+.pg-editor .hint code, .pg-editor .keys code { color: #c6d0ee; }
+.pg-editor .addbox { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pg-editor .addbox input[type=text] { width: auto; flex: 1 1 80px; }
+
+.pg-editor .strip { display: flex; flex-wrap: wrap; gap: 14px 18px; padding: 8px 8px 0 0; }
+.pg-editor .chip { position: relative; width: 44px; }
+.pg-editor .chip canvas { width: 44px; height: 44px; image-rendering: pixelated; background: #0008; border: 2px solid #0006; border-radius: 4px; display: block; cursor: pointer; }
+.pg-editor .chip.sel canvas { border-color: var(--hi); }
+.pg-editor .chip .name { font-size: 9px; color: #b4bdd4; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-editor .chip .del { position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; padding: 0; border-radius: 50%; background: #8a3a4a; font-size: 12px; line-height: 20px; }
+.pg-editor .chip .del.dl { top: auto; bottom: 10px; right: -8px; background: #3a5a8a; font-size: 11px; }
+.pg-editor .tiles { display: flex; flex-wrap: wrap; gap: 5px; }
+.pg-editor .tiles canvas { width: 30px; height: 30px; image-rendering: pixelated; border: 2px solid transparent; cursor: pointer; background: #0006; border-radius: 3px; }
+.pg-editor .tiles .sel { border-color: var(--hi); }
+.pg-editor .lrow { display: flex; gap: 4px; align-items: center; margin: 3px 0; }
+.pg-editor .lrow .pick { text-align: left; }
+.pg-editor .lrow .pick.on { background: var(--accent); }
+.pg-editor .lrow .del, .pg-editor .swatch .del { width: 30px; flex: 0 0 30px; background: #5a3340; }
+.pg-editor .lrow .del:hover, .pg-editor .swatch .del:hover { background: #8a3a4a; }
+.pg-editor .objbtn { text-align: left; }
+.pg-editor .swatch { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
+.pg-editor .swatch input[type=color] { width: 34px; height: 26px; padding: 0; border: 0; background: none; }
+.pg-editor .swatch label { flex: 1; cursor: pointer; color: var(--text); }
+.pg-editor input[type=color] { width: 40px; height: 26px; padding: 0; border: 0; background: none; }
+.pg-editor .flagbox label { display: inline-flex; align-items: center; gap: 3px; margin: 0 10px 5px 0; }
+.pg-editor .flag { display: inline-block; width: 11px; height: 11px; }
+.pg-editor .flag.solid { color: #ff4d4d; } .pg-editor .flag.coin { color: #ffd23f; }
+.pg-editor .flag.goal { color: #45e08a; } .pg-editor .flag.hazard { color: #ff5fff; }
+.pg-editor details.help { margin: 6px 0; }
+.pg-editor details.help summary { cursor: pointer; color: var(--accent2); font-size: 11px; }
+
+/* ---------------- toasts ---------------- */
+.pg-editor #toasts { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
+.pg-editor .toast { background: #2a3146; color: #eef; border: 1px solid #44569a; border-radius: 6px; padding: 7px 14px; box-shadow: 0 4px 16px #0009; font-size: 13px; opacity: 1; transition: opacity .3s, transform .3s; }
+.pg-editor .toast.ok { border-color: #45e08a; } .pg-editor .toast.err { border-color: #ff5f6d; }
+.pg-editor .toast.out { opacity: 0; transform: translateY(8px); }
+
+/* ---------------- overlays ---------------- */
+.pg-editor .overlay { position: absolute; inset: 0; z-index: 70; background: #0009; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.pg-editor .overlay[hidden] { display: none; }
+.pg-editor .overlay .card { background: var(--panel); border: 1px solid #44569a; border-radius: 10px; padding: 20px 24px; max-width: 520px; width: 100%; box-shadow: 0 10px 40px #000b; max-height: 90%; overflow: auto; }
+.pg-editor .overlay .card ol { padding-left: 20px; margin: 8px 0; }
+.pg-editor .overlay .card li { margin: 6px 0; }
+.pg-editor .overlay .card .row { margin-top: 14px; }
+.pg-editor .keys { width: 100%; border-collapse: collapse; }
+.pg-editor .keys td { padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pg-editor .keys td:first-child { color: var(--hi); white-space: nowrap; font-family: monospace; }
+
+/* ---------------- small screens (phone/tablet opening fullscreen) ---------------- */
+@media (max-width: 640px) {
+  .pg-editor #main { flex-direction: column; }
+  .pg-editor #tools { flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid #0006; }
+  .pg-editor #tools .tool { flex: 1 0 auto; width: auto; flex-direction: row; }
+  .pg-editor #panel { flex: 0 0 auto; max-height: 42vh; border-left: 0; border-top: 1px solid #0006; }
+  .pg-editor #minimap { width: 128px; height: 84px; }
+  .pg-editor .opt { display: none; }
+}
