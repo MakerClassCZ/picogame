@@ -34,6 +34,11 @@ class View:
                                       # read off the C Tilemap (which doesn't expose them)
         self._props = {}         # asset_id -> {prop: bytes}
 
+    @property
+    def tile_size(self):
+        """(tile_w, tile_h) of the primary tilemap - what a game needs for probes and offsets."""
+        return (self._tile[2], self._tile[3])
+
     def tile_xy(self, px, py):
         """World pixel -> (tx, ty) tile coords of the primary tilemap."""
         ox, oy, tw, th = self._tile
