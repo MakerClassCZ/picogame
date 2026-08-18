@@ -20,13 +20,30 @@ engine and build for it. The engine itself and the helper library live in their 
 
 ---
 
+## Try it without installing anything
+
+Everything below runs in the browser - the engine itself is compiled to WebAssembly, so it is the
+real thing, not a mock-up:
+
+| | |
+|---|---|
+| **[Playground](https://picogame.makerclass.cz/playground/)** | write picogame code and run it, right on the page |
+| **[Examples gallery](https://picogame.makerclass.cz/examples/)** | every game and demo in this repo, playable in one click (try `corona` and `picatro`) |
+| **[Level editor](https://picogame.makerclass.cz/editor/)** | paint tilemaps, place sprites, set a follow-camera; **Try in playground** turns the level into a running game, **Export** gives you a ready `<name>_scene.py` |
+| **[Asset converter](https://picogame.makerclass.cz/assets/)** | drop a PNG, get an engine-ready `.py` module (the browser twin of `tools/png2picogame.py`) |
+
+Both browser tools are static apps you can also self-host - their source is right here in
+[`tools/editor/`](tools/editor/) and [`tools/assets/`](tools/assets/).
+
+---
+
 ## What's in this repo
 
 | Folder | What it holds |
 |---|---|
-| [`games/`](games/) | complete, polished games - ready to play |
-| [`demos/`](demos/) | short demos, varios game genres |
-| [`examples/`](examples/) | minimal examples of the engine features |
+| [`games/`](games/) | **finished games** - a demo that grew up: real assets, tuned mechanics, meant to be fun |
+| [`demos/`](demos/) | **one game genre each**, playable but with placeholder art - the skeleton to start from |
+| [`examples/`](examples/) | **one engine feature each**, the smallest code that shows it (FX, HUD, tilemaps, ...) |
 | [`tutorials/`](tutorials/) | three guided, build-it-yourself tutorials |
 | [`sim/`](sim/) | the desktop simulator (try/develop games on your PC) |
 | [`lib/`](lib/) | the `picogame_*` helper modules — a mirror of [picogame-libs](https://github.com/MakerClassCZ/picogame-libs) |
@@ -60,8 +77,10 @@ python sim/run.py demos/picogame_snake.py --shot shot.png    # + save a screensh
 | `X` or `Space` | B |
 | `A` / `S` | X / Y |
 
-**On the PicoPad:** copy a game's `code.py` and its assets, plus the `lib/` helpers it
-imports, to the board's `CIRCUITPY` drive. Each file's header comment lists what it needs.
+**On the PicoPad:** the fastest route is a ready-made **[quick-start pack](https://picogame.makerclass.cz/start/quickstart/)**
+- a CIRCUITPY drive image with the firmware's helper libs, a launcher and a selection of games and
+demos, for PicoPad and Fruit Jam. To install a single game instead, copy its folder plus the `lib/`
+helpers it imports onto the board; each file's header comment lists what it needs.
 
 ---
 
@@ -75,7 +94,10 @@ Complete features rich games - each in its own folder (`code.py` + assets):
 | [`picotris`](games/picotris/) | falling-block puzzle in a reserved play-area well |
 | [`picowing`](games/picowing/) | vertical shoot-'em-up - hold the sky against raiders |
 | [`squest`](games/squest/) | Seaquest-style underwater shooter (rescue divers, watch your air) |
-| [`train`](games/train/) | a logic "snake puzzle" - steer to the gate without crossing your trail, 50 levels |
+| [`corona`](games/corona/) | horde survivor - your lantern auto-fires, you only move; XP, level-ups, dashes |
+| [`train`](games/train/) | Miroslav Nemecek's Czech classic *Vlak* (1993): a snake-on-rails puzzle, all 50 levels |
+| [`picatro`](games/picatro/) | poker deck-builder - play hands against rising score targets, bank your discards |
+| [`bangbang`](games/bangbang/) | turn-based artillery duel on destructible terrain (1P vs AI or 2P hot-seat) |
 
 ## Demos
 
@@ -120,7 +142,9 @@ Helpers for turning art and sound into engine-ready assets:
 
 | Script | Run it | Purpose |
 |---|---|---|
-| `png2picogame.py` | `python tools/png2picogame.py art.png -o art.py` | convert a PNG/BMP into an asset module - a single image, a `--frames` animation atlas, a `--tile WxH` tile sheet, or a `--map` tilemap |
+| `png2picogame.py` | `python tools/png2picogame.py art.png -o art.py` | convert a PNG/BMP into an asset module - a single image, a `--frames` animation atlas, a `--tile WxH` tile sheet, or a `--map` tilemap (or use the [browser version](https://picogame.makerclass.cz/assets/)) |
+| `tiled2scene.py` | `python tools/tiled2scene.py map.tmx` | import a map made in **[Tiled](https://www.mapeditor.org/)** (`.tmx`/`.tmj`) as a picogame scene - tile layers with their flips/rotations, objects to sprites/zones/points, tile properties to flags. The [level editor](https://picogame.makerclass.cz/editor/) reads Tiled maps too (**Load**) |
+| `p8music.py` | `python tools/p8music.py song.p8 -o song.py` | import music written in a **PICO-8** tracker: bakes the `__sfx__`/`__music__` sections into a bank `picogame_music` plays |
 | `pack_sheet.py` | `python tools/pack_sheet.py IN.py NAME --outdir DIR` | pack a big sprite sheet into a raw `.bin` streamed from flash, so the pixels don't sit in RAM |
 | `scene_build.py` | `python tools/scene_build.py level.scene.json` | bake an editor scene file into a compact runtime `SCENE` module the loader reads |
 | `synth_preview.py` | `python3 tools/synth_preview.py` | render `picogame_synth` sound effects to `.wav` so you can tune them by ear (the simulator is silent) |
@@ -134,8 +158,8 @@ This repo is the games-and-learning side of picogame. The rest:
 
 | Repository | What it is |
 |---|---|
-| **[picogame-libs](https://github.com/MakerClassCZ/picogame-libs)** | the `picogame_*` Python helper library - input, HUD/UI, clock, juice effects, sprite pools, audio, save, and more. These are the `lib/` modules every game here imports — **mirrored into this repo's `lib/`** so a clone is self-contained. |
-| **[circuitpython](https://github.com/MakerClassCZ/circuitpython)** | the CircuitPython firmware fork that carries the **native C engine** (the `picogame` module). Build and flash this to run games on the device. |
+| **[picogame-libs](https://github.com/MakerClassCZ/picogame-libs)** | **the source of truth** for the `picogame_*` Python helpers - input, HUD/UI, clock, juice effects, sprite pools, audio, save. Releases carry `.mpy` builds per CircuitPython version and it installs with **`circup`**; the `lib/` folder here is a mirror of it (the desktop simulator needs the `.py` sources, which `.mpy` can't provide). Type stubs for the native module ship there too - see [editor setup](https://picogame.makerclass.cz/editor-setup/). |
+| **[circuitpython](https://github.com/MakerClassCZ/circuitpython)** | the CircuitPython firmware fork carrying the **native C engine**. Branch **`picogame`** is the working branch; **`picogame-fruitjam`** is just a proposed board patch (exposing `board.DISPLAY` like other boards); the branch behind the **upstream PR** deliberately leaves out what isn't settled yet (ROMFS, core1) and is kept as stable as possible. Prebuilt firmware: [downloads](https://picogame.makerclass.cz/supported-hardware/). |
 | **[picogame-stage](https://github.com/MakerClassCZ/picogame-stage)** | a compatibility layer to run existing `ugame`/`stage` games on the picogame engine. |
 
 And the home base - docs, feature guides, the glossary, and a playground that runs picogame
