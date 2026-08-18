@@ -23,7 +23,9 @@ import picogame_game
 import picogame_clock
 from picogame_input import Buttons
 try:
-    import supervisor          # device only; absent in the desktop sim
+    import supervisor          # the sim / playground shims provide only runtime.display + ticks_ms,
+    if not hasattr(supervisor, "set_next_code_file"):   # so chaining to another code file is
+        supervisor = None                               # device-only - fall back to a dry run
 except ImportError:
     supervisor = None
 
