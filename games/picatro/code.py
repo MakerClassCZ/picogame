@@ -72,9 +72,21 @@ for i, bm in enumerate(ACT_ICONS):
     scene.add(s)
     act_sprites.append(s)               # kept so the scoring tally can flash the Act that is firing
 acts_lbl = ui.SceneLabel(scene, pg, L, 92, 20, INK, CREAM)     # what each Act does, beside the icons
+# result / banked / mult breakdown lines: 3 SceneLabels, now PAL8 (via picogame_font._render_into) =
+# HALF the RAM of the old RGB565 path that OOM'd the RP2040. reserve() sizes each on the clean startup
+# heap, so a long breakdown shown later can't fail on a fragmented heap. Created BEFORE the banner so it
+# composites over them (banner sits over these rows on WIN/score).
 result_lbl = ui.SceneLabel(scene, pg, L, 4, 64, TEAL, CREAM)
-banked_lbl = ui.SceneLabel(scene, pg, L, 4, 88, TEAL, CREAM)     # chips-breakdown line on the score screen
-mult_lbl = ui.SceneLabel(scene, pg, L, 4, 108, VERM, CREAM)      # mult-breakdown line on the score screen
+banked_lbl = ui.SceneLabel(scene, pg, L, 4, 88, TEAL, CREAM)     # chips-breakdown line
+mult_lbl = ui.SceneLabel(scene, pg, L, 4, 108, VERM, CREAM)      # mult-breakdown line
+result_lbl.reserve(44)
+banked_lbl.reserve(48)
+mult_lbl.reserve(48)
+_SCORE_LBLS = (result_lbl, banked_lbl, mult_lbl)
+
+
+def _set_score(i, text):                                         # kept so all the call sites stay unchanged
+    _SCORE_LBLS[i].set(text)
 help_lbl = ui.SceneLabel(scene, pg, L, 4, 226, INK, CREAM)
 
 parts = pg.Particles(64, size=2, gravity=0.05, fade=True)    # slam pop + win/finale confetti fountains
@@ -368,9 +380,9 @@ def set_breakdown():
     # The full point structure as ONE combined line, shown IDENTICALLY on every result screen (mid-blind
     # and every decided outcome) so nothing reflows when a banner drops in. mult_lbl stays blank - the
     # banner sits over that row at y130.
-    result_lbl.set("%s   %d x %d = %d" % (HAND_NAME[st.sc_type], st.sc_chips, st.sc_mult, st.sc_val))
-    banked_lbl.set(breakdown_line(st.sc_type, st.sc_chips, st.sc_mult))
-    mult_lbl.set("")
+    _set_score(0, "%s   %d x %d = %d" % (HAND_NAME[st.sc_type], st.sc_chips, st.sc_mult, st.sc_val))
+    _set_score(1, breakdown_line(st.sc_type, st.sc_chips, st.sc_mult))
+    _set_score(2, "")
 
 
 def draw_back(k):
@@ -665,17 +677,17 @@ def main():
                 if key != st.h_peek:
                     st.h_peek = key
                     pt, pc, pm, pv = score_play(selected_cards())
-                    result_lbl.set("PEEK  %s   %d x %d = %d" % (HAND_NAME[pt], pc, pm, pv))
-                    mult_lbl.set(breakdown_line(pt, pc, pm))
+                    _set_score(0, "PEEK  %s   %d x %d = %d" % (HAND_NAME[pt], pc, pm, pv))
+                    _set_score(2, breakdown_line(pt, pc, pm))
             elif st.preview:
                 st.h_peek = -1
-                result_lbl.set("PEEK on - pick cards to see the score")
-                mult_lbl.set("")
+                _set_score(0, "PEEK on - pick cards to see the score")
+                _set_score(2, "")
             else:
                 st.h_peek = -1
-                result_lbl.set("")                          # (the running bank shows on banked_lbl - no dup line)
-                mult_lbl.set("")
-            banked_lbl.set(banked_label() if (st.bank_c or st.bank_m or st.bank_xc) else "")
+                _set_score(0, "")                          # (the running bank shows on banked_lbl - no dup line)
+                _set_score(2, "")
+            _set_score(1, banked_label() if (st.bank_c or st.bank_m or st.bank_xc) else "")
             help_lbl.set("L/R move  UP/DN pick  A PLAY  B DISCARD" + ("   Y=peek" if btn.has(btn.Y) else ""))
             # Harlequin is the one Act gated by the selection (suit variety). Show that as a calm on/off state:
             # keep it GHOSTED (dither) while the picked cards don't earn it, and pop it to FULL COLOUR the
@@ -703,20 +715,20 @@ def main():
             top_lbl.set("BLIND %d   %d / %d   hands %d  disc %d" % (st.blind, st.total, st.target, st.hands, st.discards))
             help_lbl.set("")
             if st.sc_t < P1:
-                result_lbl.set(name)
-                banked_lbl.set(""); mult_lbl.set("")
+                _set_score(0, name)
+                _set_score(1, ""); _set_score(2, "")
             elif st.sc_t < P2:                     # count the chips up
                 if st.sc_t == P1:
                     sfx_seq(SEQ_CHIPS)             # rising chip ticker
                 shown = int(st.sc_chips * (st.sc_t - P1) / (P2 - P1))
-                result_lbl.set("%s    %d" % (name, shown))
-                banked_lbl.set("counting chips..."); mult_lbl.set("")
+                _set_score(0, "%s    %d" % (name, shown))
+                _set_score(1, "counting chips..."); _set_score(2, "")
             elif st.sc_t < P3:                     # chips done, count the mult up
                 if st.sc_t == P2:
                     sfx_seq(SEQ_MULT)             # mult ticker
                 shownm = 1 + int((st.sc_mult - 1) * (st.sc_t - P2) / (P3 - P2))
-                result_lbl.set("%s    %d  x %d" % (name, st.sc_chips, shownm))
-                banked_lbl.set(""); mult_lbl.set("")
+                _set_score(0, "%s    %d  x %d" % (name, st.sc_chips, shownm))
+                _set_score(1, ""); _set_score(2, "")
             elif st.sc_t == P3:                    # SLAM: bank the score, retire cards, decide the outcome
                 st.total += st.sc_val
                 if DEBUG:
@@ -761,7 +773,7 @@ def main():
                 set_breakdown()
                 help_lbl.set("any button: continue")
                 if btn.just_pressed():
-                    result_lbl.set(""); banked_lbl.set("")    # clear breakdown before leaving the screen
+                    _set_score(0, ""); _set_score(1, "")    # clear breakdown before leaving the screen
                     st.state = SELECT
 
         elif st.state == WIN:
@@ -783,9 +795,9 @@ def main():
             # run ended: how far you got + how much you MADE vs NEEDED in the blind that ended it; the last
             # hand's breakdown stays visible; graded banner low; cards hidden.
             top_lbl.set("You cleared %d of %d blinds%s" % (cleared, LAST_BLIND, "   (with help)" if st.used_help else ""))
-            result_lbl.set("Blind %d:  %d / %d  (short %d)" % (st.blind, st.total, st.target, st.target - st.total))
-            banked_lbl.set(st.bust_flavor)                  # graded, upbeat circus quip (above the low banner)
-            mult_lbl.set("")                                # kept clear - the banner sits here
+            _set_score(0, "Blind %d:  %d / %d  (short %d)" % (st.blind, st.total, st.target, st.target - st.total))
+            _set_score(1, st.bust_flavor)                  # graded, upbeat circus quip (above the low banner)
+            _set_score(2, "")                                # kept clear - the banner sits here
             help_lbl.set("any button: new run")
             if _frame >= _lock_until and btn.just_pressed():
                 clear_banner()
@@ -794,9 +806,9 @@ def main():
 
         else:  # FINAL - all LAST_BLIND blinds cleared, the whole run is won
             top_lbl.set("YOU BEAT THE PICO CIRCUS!%s" % ("   (with help)" if st.used_help else ""))
-            result_lbl.set("Blind %d:  %d / %d  (crushed it by %d!)" % (st.blind, st.total, st.target, st.total - st.target))
-            banked_lbl.set("all %d blinds cleared - take a bow!" % LAST_BLIND)
-            mult_lbl.set("")                                # kept clear - the banner sits here
+            _set_score(0, "Blind %d:  %d / %d  (crushed it by %d!)" % (st.blind, st.total, st.target, st.total - st.target))
+            _set_score(1, "all %d blinds cleared - take a bow!" % LAST_BLIND)
+            _set_score(2, "")                                # kept clear - the banner sits here
             help_lbl.set("any button: new run")
             if _frame % 2 == 0:                             # nonstop dense multi-colour celebration fountain
                 parts.emit(random.randint(12, 306), 4, 3, 2, 58, (HILITE, VERM, TEAL)[(_frame // 2) % 3])
