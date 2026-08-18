@@ -61,7 +61,7 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
         _mad = os.getenv("PICOGAME_MADCTL")
         _bri = os.getenv("PICOGAME_BRIGHTNESS")
         if _inv is not None or _mad is not None or _bri is not None:
-            _d = _current_display()          # board.DISPLAY, else supervisor.runtime.display
+            _d = _current_display()          # supervisor.runtime.display, else board.DISPLAY
             if _inv is not None:
                 _on = (_inv != 0) if isinstance(_inv, int) else \
                     str(_inv).strip().lower() not in ("", "0", "false", "no")
@@ -190,22 +190,28 @@ def target(display):
 
 
 def _current_display():
-    """The board's display, wherever it comes from - `board.DISPLAY` on boards that hard-code one,
-    else `supervisor.runtime.display` (a Fruit Jam DVI output, or a display a boot.py built from
-    settings.toml on a bare Pico). Use this instead of `board.DISPLAY` so a game runs on both.
+    """The board's display, wherever it comes from - use this instead of `board.DISPLAY` so a game
+    runs on every board:
 
         hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, BG)
+
+    `supervisor.runtime.display` (the primary display) comes first: CircuitPython picks it right
+    after board_init() and before boot.py, so it is set on boards whose firmware builds a display
+    AND on boards where boot.py or a launcher built one; and unlike a board's static DISPLAY it is
+    validated - a released display reads back as None instead of a stale handle. `board.DISPLAY` is
+    the fallback for the desktop simulator and the WASM playground, which have no supervisor.
     """
-    d = getattr(board, "DISPLAY", None)
+    d = None
+    try:
+        import supervisor
+        d = supervisor.runtime.display
+    except (ImportError, AttributeError):
+        pass
     if d is None:
-        try:
-            import supervisor
-            d = supervisor.runtime.display
-        except (ImportError, AttributeError):
-            d = None
+        d = getattr(board, "DISPLAY", None)
     if d is None:
-        raise RuntimeError("no display: on a board without board.DISPLAY, build one in boot.py and "
-                           "publish it with `supervisor.runtime.display = disp` (see CUSTOM_BOARD)")
+        raise RuntimeError("no display: build one in boot.py and publish it with "
+                           "`supervisor.runtime.display = disp` (see CUSTOM_BOARD)")
     return d
 
 
@@ -225,8 +231,8 @@ def screen():
 def resolve_display(display=None):
     """Find and normalize the render target. Returns (backend, is_framebuffer).
 
-    Search order: the explicit `display` -> `board.DISPLAY` -> `supervisor.runtime.display`
-    (boards whose display the supervisor auto-constructs, e.g. the Fruit Jam DVI output).
+    Search order: the explicit `display` -> `supervisor.runtime.display` (the primary display,
+    set by the firmware or published by boot.py) -> `board.DISPLAY` (simulator / playground).
     Normalization:
       - a `pg.Framebuffer` passes through unchanged (the WASM playground's board.DISPLAY);
       - a framebuffer display (has `.framebuffer`, e.g. framebufferio.FramebufferDisplay
@@ -237,7 +243,7 @@ def resolve_display(display=None):
     Shared by setup() and picogame_scene.load() so the platform logic lives ONCE."""
     if display is None:
         try:
-            display = _current_display()          # board.DISPLAY -> supervisor.runtime.display
+            display = _current_display()          # supervisor.runtime.display -> board.DISPLAY
         except RuntimeError:
             raise RuntimeError("no display: if you just added boot.py press RESET once (boot.py runs "
                                "only at power-on, not on save/reload); on a DVI board set "

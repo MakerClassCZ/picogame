@@ -1,8 +1,10 @@
 # Running picogame on a custom board / bare Pico
 
-A game asks for the screen through `picogame_game.screen()` / `.display()`, which read
-`board.DISPLAY` where the firmware defines one and `supervisor.runtime.display` otherwise. So the
-job is to build the display once and publish it — **three paths, pick one:**
+A game asks for the screen through `picogame_game.screen()` / `.display()`. Those read
+`supervisor.runtime.display` — the board's **primary display**, which CircuitPython sets when the
+firmware builds one, and which a `boot.py` or a launcher can publish itself (`board.DISPLAY` is only
+a fallback, for the simulator and the browser playground). So the job is to build the display once
+and publish it — **three paths, pick one:**
 
 1. **Your board already has `board.DISPLAY`** (PicoPad, PicoSystem, µGame, Thumby, VIDI X, …)
    → nothing to do. Copy your game as `code.py` + the `lib/` it needs. Done.
