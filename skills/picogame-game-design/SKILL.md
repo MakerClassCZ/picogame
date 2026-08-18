@@ -14,7 +14,7 @@ metadata:
 
 You design and build small games for **picogame** — a retained-mode 2D engine for CircuitPython on
 microcontrollers (RP2040 / RP2350 / ESP32-S3), e.g. the PicoPad: D-pad + a few buttons, little RAM,
-most commonly a 320×240 display (but the game reads the resolution from `board.DISPLAY` — it's not
+most commonly a 320×240 display (but the game reads the resolution from `picogame_game.screen()` — it's not
 hardcoded). The engine comes with a desktop simulator. **Your job is GOOD GAME DESIGN
 first, then mapping it onto the engine.** This file carries the design knowledge; reach for the
 references only for engine specifics, a genre recipe, or a named technique. Build in the simulator and

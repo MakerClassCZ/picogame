@@ -1,6 +1,8 @@
 # Running picogame on a custom board / bare Pico
 
-Games use `board.DISPLAY`. How you get one depends on your board — **three paths, pick one:**
+A game asks for the screen through `picogame_game.screen()` / `.display()`, which read
+`board.DISPLAY` where the firmware defines one and `supervisor.runtime.display` otherwise. So the
+job is to build the display once and publish it — **three paths, pick one:**
 
 1. **Your board already has `board.DISPLAY`** (PicoPad, PicoSystem, µGame, Thumby, VIDI X, …)
    → nothing to do. Copy your game as `code.py` + the `lib/` it needs. Done.
@@ -11,8 +13,9 @@ Games use `board.DISPLAY`. How you get one depends on your board — **three pat
    The pleasant path. **After copying `boot.py` press RESET once** — `boot.py` only runs at power-on
    (a save/soft-reload doesn't run it), until then `board.DISPLAY` is `None`.
 
-3. **No `board.DISPLAY`, stock/other firmware** → use **[`launcher/`](launcher/)**. A `code.py`
-   launcher builds the display and runs your game (as `game.py`). A little more setup.
+3. **No display at all, stock/other firmware** → use **[`launcher/`](launcher/)**. A `code.py`
+   launcher builds the display, publishes it via `supervisor.runtime.display` and runs your game
+   (as `game.py`). A little more setup.
 
 **Use ONE folder** — `firmware_boot/` *or* `launcher/`, never both. Both read the **same `settings.toml`** (display, buttons, audio). Each file is self-contained
 (display driver inline) — you only copy the one file + your game + the `picogame_*` helpers your game

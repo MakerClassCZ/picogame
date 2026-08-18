@@ -102,7 +102,8 @@ Most games never call these (`picogame_game.setup` + `Scene` use them internally
 ### `picogame_game` — one-call boot
 - `setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, left=0, right=0, rgb444=False) -> (scene, buffer_a, buffer_b)` — take over the display, build a Scene + two strip buffers. `top/bottom/left/right` reserve fixed HUD margins; `rgb444=True` opts into 12-bit colour on a supporting SPI panel, and `rgb444="auto"` enables it only where the board reports `picogame.RGB444_SUPPORTED`.
 - `overlay(scene, display, items, buffer, x0, y0, x1, y1, *, background=0)` — immediate-draw `items` over a live scene (pause / menu / cutscene / banner) = `pg.render` + `scene.invalidate()`, so the next `refresh()` repaints the full frame instead of leaving overlay fragments.
-- `open_framebuffer(width, height, color_depth=None) -> display` — set the resolution from inside a game on a framebuffer board (Fruit Jam DVI), e.g. `open_framebuffer(640, 480)`; a no-op that returns `board.DISPLAY` on a fixed SPI panel. Pass the result to `setup(display=…)`.
+- `open_framebuffer(width, height, color_depth=None) -> display` — set the resolution from inside a game on a framebuffer board (Fruit Jam DVI), e.g. `open_framebuffer(640, 480)`; a no-op that returns the current display on a fixed SPI panel. Pass the result to `setup(display=…)`.
+- `screen() -> (width, height)` — the screen size; `display()` — the display object. Both read `board.DISPLAY` where the firmware defines one and `supervisor.runtime.display` otherwise, so the same game runs on a PicoPad, a Fruit Jam and a bare Pico. Lay games out from `screen()`, never from a hardcoded 320×240.
 - `resolve_display(display=None) -> (display, is_framebuffer)` — normalise a display/framebuffer handle (used by the HUD / immediate-render helpers).
 
 ### `picogame_clock` — frame pacing

@@ -6,7 +6,7 @@ device.
 **The kind of device you're designing for:** a microcontroller with a small display
 and a few buttons — typically D-pad + A/B (sometimes X/Y), no analog sticks, minimal
 RAM. Read the actual parameters (resolution, buttons) from the board
-(`board.DISPLAY`, `picogame_input`), not from this document. The concrete numbers
+(`picogame_game.screen()`, `picogame_input`), not from this document. The concrete numbers
 here are taken from the classics of each genre, not guessed — treat them as a
 starting point to tune.
 

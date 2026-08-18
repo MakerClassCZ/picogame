@@ -44,7 +44,7 @@ or deciding until you can. (Workflow steps 1–4 in SKILL.md.)
 
 ## Device budget (fill BEFORE coding — the design must prove it fits)
 
-- Target board / resolution: (default RP2040 PicoPad 320×240; read `board.DISPLAY` anyway)
+- Target board / resolution: (default RP2040 PicoPad 320×240; read `picogame_game.screen()` anyway)
 - Target FPS: (30 default; 40 only with a measured frame budget)
 - Asset RAM estimate: (bitmap bytes summed — PAL8 = w×h per frame; budget vs ~138 KB heap)
 - Max simultaneous entities: (pool sizes; who despawns them)

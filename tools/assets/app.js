@@ -337,8 +337,8 @@
     if (!last) return;
     const prog = last.module + "\n\n" +
       "# --- preview: the converted asset on screen (frames cycle; LEFT/RIGHT step) ---\n" +
-      "import board, picogame as pg, picogame_game, picogame_input, picogame_clock\n" +
-      "W, H = board.DISPLAY.width, board.DISPLAY.height\n" +
+      "import picogame as pg, picogame_game, picogame_input, picogame_clock\n" +
+      "W, H = picogame_game.screen()\n" +
       "scene, _, _ = picogame_game.setup(background=pg.rgb565(40, 44, 60))\n" +
       "bm = bitmap(pg)\n" +
       "spr = pg.Sprite(bm, W // 2, H // 2)\n" +
