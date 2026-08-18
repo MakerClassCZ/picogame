@@ -124,6 +124,12 @@ def open_framebuffer(width, height, color_depth=None):
       - a fixed-panel board (ST7789 SPI PicoPad) or the sim: a NO-OP - returns the existing
         display unchanged (the panel is a fixed size; the request is simply ignored).
 
+    If the new size does not fit in internal SRAM, the PREVIOUS mode is rebuilt and republished
+    before the MemoryError propagates - a failed switch must never leave the board displayless
+    (a soft reload does not re-run the firmware's display auto-construct, so that state survives
+    until a power cycle). CALL THIS BEFORE importing any module that captures the display at
+    import time.
+
     color_depth defaults to 16 (RGB565) for <= 320x240 and 8 (RGB332) above - 8-bit is the only
     depth picodvi offers at 640x480, and the engine already renders RGB332. 640x480 needs PSRAM.
     """
@@ -146,34 +152,58 @@ def open_framebuffer(width, height, color_depth=None):
         return cur                              # already the right size -> reuse
     if color_depth is None:
         color_depth = 16 if width * height <= 320 * 240 else 8
+    # The size we are leaving, so a failed switch can put it back. release_displays() frees the
+    # scanout buffer we are about to reuse the memory of, so it has to happen first - which is
+    # exactly why a failure here would otherwise leave the board with NO display until a power
+    # cycle (a soft reload does not re-run the firmware's auto-construct).
+    prev = (getattr(cur, "width", 0), getattr(cur, "height", 0)) if cur is not None else None
     displayio.release_displays()
-    fb = picodvi.Framebuffer(
-        width, height,
-        clk_dp=board.CKP, clk_dn=board.CKN,
-        red_dp=board.D0P, red_dn=board.D0N,
-        green_dp=board.D1P, green_dn=board.D1N,
-        blue_dp=board.D2P, blue_dn=board.D2N,
-        color_depth=color_depth)
-    disp = framebufferio.FramebufferDisplay(fb, auto_refresh=False)
-    # Best-effort: make the new display visible via board.DISPLAY too, so code that reads
-    # board.DISPLAY.width/height directly (e.g. a game's asset scaler) sees the new size. board
-    # is a C module and may reject attribute writes -> ignore; such callers should use the
-    # returned display (or supervisor.runtime.display) instead. CALL THIS BEFORE importing any
-    # module that captures board.DISPLAY at import time.
+
+    def _build(w, h, depth):
+        fb = picodvi.Framebuffer(
+            w, h,
+            clk_dp=board.CKP, clk_dn=board.CKN,
+            red_dp=board.D0P, red_dn=board.D0N,
+            green_dp=board.D1P, green_dn=board.D1N,
+            blue_dp=board.D2P, blue_dn=board.D2N,
+            color_depth=depth)
+        return framebufferio.FramebufferDisplay(fb, auto_refresh=False)
+
     try:
+        disp = _build(width, height, color_depth)
+    except MemoryError:
+        if prev is None or prev == (width, height):
+            raise
+        try:                                    # put the previous mode back, then report
+            disp = _build(prev[0], prev[1], 16 if prev[0] * prev[1] <= 320 * 240 else 8)
+        except MemoryError:
+            raise MemoryError(
+                "no memory for %dx%d, and %dx%d could not be restored - power-cycle the board"
+                % (width, height, prev[0], prev[1]))
+        _publish(disp)
+        raise MemoryError("no memory for %dx%d (kept %dx%d)" % (width, height, prev[0], prev[1]))
+    _publish(disp)
+    return disp
+
+
+def _publish(disp):
+    """Make `disp` the display everything else finds.
+
+    Publishing it as the PRIMARY display is not best-effort: release_displays() cleared the primary
+    slot, and display()/screen() read nothing else - a swallowed failure here would surface later
+    as "no display" from setup(). Only a host without supervisor is tolerated. board.DISPLAY is
+    set too where the slot is writable, as a courtesy to code that still reads it directly."""
+    try:
+        import board
         board.DISPLAY = disp                 # boards with a settable slot (our custom-board builds)
     except (AttributeError, TypeError):
         pass
-    # Publishing it as the PRIMARY display is not best-effort: release_displays() above cleared
-    # the primary slot, and display()/screen() read nothing else - a swallowed failure here would
-    # surface later as "no display" from setup(). Only a host without supervisor is tolerated.
     try:
         import supervisor
     except ImportError:
         supervisor = None
     if supervisor is not None:
         supervisor.runtime.display = disp
-    return disp
 
 
 def target(display):
