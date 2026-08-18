@@ -198,8 +198,12 @@ def _current_display():
     `supervisor.runtime.display` (the primary display) comes first: CircuitPython picks it right
     after board_init() and before boot.py, so it is set on boards whose firmware builds a display
     AND on boards where boot.py or a launcher built one; and unlike a board's static DISPLAY it is
-    validated - a released display reads back as None instead of a stale handle. `board.DISPLAY` is
-    the fallback for the desktop simulator and the WASM playground, which have no supervisor.
+    validated - a released display reads back as None instead of a stale handle.
+
+    `board.DISPLAY` stays as the fallback. The simulator and the playground now ship a `supervisor`
+    shim, so they no longer NEED it - but a lib bundle updated on its own (circup) can meet an older
+    `sim/` tree or a third-party host that only defines `board.DISPLAY`, and one getattr is a cheap
+    way to keep those running.
     """
     d = None
     try:
