@@ -1,9 +1,9 @@
 # Fake `supervisor` for the simulator: the small slice of CircuitPython's module the engine and
 # the helper libs actually use, so the sim exercises the SAME code path as the device.
 #
-# Why it exists: picogame_game.display()/screen() read `supervisor.runtime.display` first (the
-# board's primary display) and only fall back to `board.DISPLAY`. Without this shim the sim would
-# always take the fallback branch, i.e. never test the path every real board uses.
+# Why it exists: picogame_game.display()/screen() take the display from `supervisor.runtime.display`
+# and nowhere else - that one source is the contract on every platform. Without this shim the sim
+# would have no display at all.
 #
 # Deliberately NOT provided: set_next_code_file() / reload(). The sim runs one program in one
 # process and cannot chain to another code file; picogame_launcher checks for those two by name

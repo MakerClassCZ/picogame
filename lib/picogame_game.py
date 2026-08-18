@@ -61,7 +61,7 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
         _mad = os.getenv("PICOGAME_MADCTL")
         _bri = os.getenv("PICOGAME_BRIGHTNESS")
         if _inv is not None or _mad is not None or _bri is not None:
-            _d = _current_display()          # supervisor.runtime.display, else board.DISPLAY
+            _d = _current_display()          # supervisor.runtime.display (the primary display)
             if _inv is not None:
                 _on = (_inv != 0) if isinstance(_inv, int) else \
                     str(_inv).strip().lower() not in ("", "0", "false", "no")
@@ -71,7 +71,7 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
             if _bri is not None:
                 _d.brightness = max(0, min(100, int(_bri))) / 100
     except Exception:
-        pass                                  # no board.DISPLAY / no invert (sim variants): ignore
+        pass                                  # no display / no invert (sim variants): ignore
     backend, is_fb = resolve_display(display)
     if is_fb:
         # Framebuffer target (WASM playground, Fruit Jam DVI): the scene composites straight
@@ -104,7 +104,7 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
 
 
 _RESOLVED = {}   # id(display) -> (display, backend, is_fb): setup() and every HUD that normalizes
-                 # board.DISPLAY share ONE wrapper (no per-frame Framebuffer realloc). The original
+                 # the display share ONE wrapper (no per-frame Framebuffer realloc). The original
                  # display is kept as a STRONG ref in the tuple so its id can't be reused by a later
                  # object (stale-alias guard), and the hit is re-verified with `is` before reuse.
 
@@ -122,7 +122,7 @@ def open_framebuffer(width, height, color_depth=None):
         and this cleanly absorbs a resolution left behind by the previous game across a soft
         reload); otherwise release_displays() + a fresh picodvi.Framebuffer at this size;
       - a fixed-panel board (ST7789 SPI PicoPad) or the sim: a NO-OP - returns the existing
-        board.DISPLAY unchanged (the panel is a fixed size; the request is simply ignored).
+        display unchanged (the panel is a fixed size; the request is simply ignored).
 
     color_depth defaults to 16 (RGB565) for <= 320x240 and 8 (RGB332) above - 8-bit is the only
     depth picodvi offers at 640x480, and the engine already renders RGB332. 640x480 needs PSRAM.
@@ -131,7 +131,7 @@ def open_framebuffer(width, height, color_depth=None):
         import board
     except ImportError:
         return None
-    cur = getattr(board, "DISPLAY", None)
+    cur = _display_or_none()          # the display in use right now, if any
     # fixed-panel board / sim: no picodvi module or no DVI pins -> use whatever display exists
     try:
         import picodvi
@@ -176,7 +176,7 @@ def target(display):
     """Immediate-render target for pg.render: a framebuffer board's FramebufferDisplay -> its
     pg.Framebuffer (memoized via resolve_display); a BusDisplay / pg.Display / pg.Framebuffer (none of
     which carry a `.framebuffer` attr) passes straight through. Lets HUD / Label / overlay / cutscene
-    helpers accept a bare `board.DISPLAY` on every platform. Resolver errors (bad rotation / colour
+    helpers accept a bare display object on every platform. Resolver errors (bad rotation / colour
     depth / old firmware) propagate - the caller sees the real reason, not a later 'expected a BusDisplay'."""
     if getattr(display, "framebuffer", None) is None:
         return display
@@ -189,30 +189,34 @@ def target(display):
     return backend
 
 
+def _display_or_none():
+    """The board's primary display, or None where nothing published one (no raise)."""
+    try:
+        import supervisor
+        return supervisor.runtime.display
+    except (ImportError, AttributeError):
+        return None
+
+
 def _current_display():
     """The board's display, wherever it comes from - use this instead of `board.DISPLAY` so a game
     runs on every board:
 
         hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, BG)
 
-    `supervisor.runtime.display` (the primary display) comes first: CircuitPython picks it right
-    after board_init() and before boot.py, so it is set on boards whose firmware builds a display
-    AND on boards where boot.py or a launcher built one; and unlike a board's static DISPLAY it is
-    validated - a released display reads back as None instead of a stale handle.
-
-    `board.DISPLAY` stays as the fallback. The simulator and the playground now ship a `supervisor`
-    shim, so they no longer NEED it - but a lib bundle updated on its own (circup) can meet an older
-    `sim/` tree or a third-party host that only defines `board.DISPLAY`, and one getattr is a cheap
-    way to keep those running.
+    The source is `supervisor.runtime.display` - the board's PRIMARY display - and only that, so
+    there is ONE way a display reaches a game on every platform:
+      - the firmware built one: CircuitPython selects it right after board_init(), before boot.py;
+      - a boot.py, a launcher or open_framebuffer() built one: they publish it with
+        `supervisor.runtime.display = disp` (it survives into code.py - reset_displays() does not
+        clear the primary slot);
+      - the simulator and the WASM playground ship a `supervisor` shim whose runtime.display
+        proxies their own display.
+    Reading it (rather than a board's static DISPLAY) also means a RELEASED display reads back as
+    None instead of a stale handle. A host without `supervisor` - another MicroPython embedding -
+    adds the same small shim; it has no `board.DISPLAY` either, so there is nothing to fall back to.
     """
-    d = None
-    try:
-        import supervisor
-        d = supervisor.runtime.display
-    except (ImportError, AttributeError):
-        pass
-    if d is None:
-        d = getattr(board, "DISPLAY", None)
+    d = _display_or_none()
     if d is None:
         raise RuntimeError("no display: build one in boot.py and publish it with "
                            "`supervisor.runtime.display = disp` (see CUSTOM_BOARD)")
@@ -227,7 +231,7 @@ def screen():
 
         W, H = picogame_game.screen()
 
-    Same source as display(), so it also works where there is no `board.DISPLAY`."""
+    Same source as display(), so it works on every board and in the sim/playground alike."""
     d = _current_display()
     return (d.width, d.height)
 
@@ -235,10 +239,10 @@ def screen():
 def resolve_display(display=None):
     """Find and normalize the render target. Returns (backend, is_framebuffer).
 
-    Search order: the explicit `display` -> `supervisor.runtime.display` (the primary display,
-    set by the firmware or published by boot.py) -> `board.DISPLAY` (simulator / playground).
+    Search order: the explicit `display` -> `supervisor.runtime.display` (the primary display: set
+    by the firmware, or published by boot.py / a launcher / the sim+playground supervisor shim).
     Normalization:
-      - a `pg.Framebuffer` passes through unchanged (the WASM playground's board.DISPLAY);
+      - a `pg.Framebuffer` passes through unchanged (the WASM playground's display);
       - a framebuffer display (has `.framebuffer`, e.g. framebufferio.FramebufferDisplay
         over picodvi) is unwrapped: auto-refresh off, root group cleared, and its RAW
         scanout buffer wrapped as `pg.Framebuffer(..., native_rgb565=True)` - requires the
@@ -247,7 +251,7 @@ def resolve_display(display=None):
     Shared by setup() and picogame_scene.load() so the platform logic lives ONCE."""
     if display is None:
         try:
-            display = _current_display()          # supervisor.runtime.display -> board.DISPLAY
+            display = _current_display()          # the board's primary display
         except RuntimeError:
             raise RuntimeError("no display: if you just added boot.py press RESET once (boot.py runs "
                                "only at power-on, not on save/reload); on a DVI board set "
