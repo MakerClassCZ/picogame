@@ -243,6 +243,29 @@ def _spec_recipe(segment):
     return r, r["addr"]
 
 
+def _recover(i2c):
+    """Last-resort bus recovery when a pad times out: an expander interrupted mid-read (a soft
+    reload during a poll is enough) holds SDA low and every later transaction returns ETIMEDOUT,
+    even though a bare address scan still ACKs. _try_unstick can only clock it free while the
+    pins are UNCLAIMED, so the live bus has to be deinit'd first - CircuitPython rebuilds the
+    board singleton on the next board.I2C()/STEMMA_I2C() call. Returns the usable bus (the old
+    one if recovery was not possible), so the caller can simply retry."""
+    import board
+    scl = getattr(board, "SCL", None)
+    sda = getattr(board, "SDA", None)
+    if scl is None or sda is None:
+        return i2c
+    try:
+        i2c.deinit()                                 # frees the pins; assert_pin_free needs this
+    except Exception:
+        return i2c
+    _try_unstick(scl, sda)
+    try:
+        return _bus()
+    except Exception:
+        return i2c
+
+
 def attach(spec, i2c=None):
     """Pads for the PICOGAME_I2CPAD settings value — ";"-separated segments, one pad each.
     Used by picogame_input.Buttons; raises if a listed pad doesn't answer."""
@@ -259,6 +282,8 @@ def attach(spec, i2c=None):
             except OSError:
                 if attempt == 2:
                     raise
+                if attempt == 1:                     # plain retries did not help: unstick the bus
+                    i2c = _recover(i2c)
                 time.sleep(0.01)
         try:
             pad.led(len(pads) + 1, True)
