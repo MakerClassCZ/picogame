@@ -164,11 +164,15 @@ def open_framebuffer(width, height, color_depth=None):
         board.DISPLAY = disp                 # boards with a settable slot (our custom-board builds)
     except (AttributeError, TypeError):
         pass
+    # Publishing it as the PRIMARY display is not best-effort: release_displays() above cleared
+    # the primary slot, and display()/screen() read nothing else - a swallowed failure here would
+    # surface later as "no display" from setup(). Only a host without supervisor is tolerated.
     try:
-        import supervisor                    # the portable way: make it the primary display
+        import supervisor
+    except ImportError:
+        supervisor = None
+    if supervisor is not None:
         supervisor.runtime.display = disp
-    except (ImportError, AttributeError, TypeError, ValueError):
-        pass
     return disp
 
 
