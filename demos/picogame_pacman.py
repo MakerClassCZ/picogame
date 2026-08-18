@@ -8,7 +8,7 @@
 # Copy with picogame_game.py, picogame_input.py, picogame_clock.py,
 # picogame_ui.py to CIRCUITPY. Needs the latest firmware.
 
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -54,7 +54,7 @@ MAZE = [
 ]
 ROWS = len(MAZE)
 COLS = len(MAZE[0])
-XOFF = (board.DISPLAY.width - COLS * TILE) // 2   # centre the maze horizontally at any width
+XOFF = (picogame_game.screen()[0] - COLS * TILE) // 2   # centre the maze horizontally at any width
 YOFF = 22                                         # maze is ROWS*TILE=210 px -> +22 fits a 240-tall screen
 SPEED = 2                      # px per step pac/ghosts advance; must divide TILE so that
                                # px/py can hit an exact multiple of TILE -> aligned()'s
@@ -135,7 +135,7 @@ scene.add(pac)
 
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, pg.rgb565(255, 255, 0), BG)
 hud.reserve(24)
-flash = fx.Fade(scene, board.DISPLAY.width, board.DISPLAY.height,
+flash = fx.Fade(scene, *picogame_game.screen(),
                 color=pg.rgb565(255, 60, 60))   # juice: red flash when a ghost catches you
 
 DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))

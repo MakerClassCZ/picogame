@@ -4,7 +4,7 @@
 # Copy with picogame_game/input/clock/ui/audio/pool. Requires Particles firmware.
 
 import random
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -21,7 +21,7 @@ btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 GROUND = H - 14
 BLAST_R = 34
 

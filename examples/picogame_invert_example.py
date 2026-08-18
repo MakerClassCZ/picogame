@@ -9,7 +9,7 @@
 # NOTE: on the desktop simulator invert is a silent no-op (it's a hardware feature), so the scene
 # just sits there; run it on a real ST7789 PicoPad to see the screen flip. Copy picogame_* helpers.
 
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -19,7 +19,7 @@ import picogame_fx as fx
 import picogame_shapes as shp
 import picogame_ui as ui
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 # fast=False: the invert command (picogame.invert) goes out on the SAME synchronous bus as the
 # pixels, so INVON/INVOFF can't be lost in the fast Display's async DMA stream (which left the
 # panel stuck inverted - the revert command raced the DMA). Fine here: no scrolling, low FPS.
@@ -45,7 +45,7 @@ scene.add(ball)
 # The PicoPad's ST7789 init sends INVON, so the panel's NORMAL/correct state is invert=True.
 # InvertFlash(normal=True) (the default) flips to invert=False for the flash, then restores INVON.
 NORMAL = True
-flash = fx.InvertFlash(board.DISPLAY, frames=6, normal=NORMAL)   # the free hardware hit-flash
+flash = fx.InvertFlash(picogame_game.display(), frames=6, normal=NORMAL)   # the free hardware hit-flash
 inverted = False                                  # persistent-invert state (B toggles vs NORMAL)
 
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 6, 6, pg.rgb565(255, 255, 255), pg.rgb565(20, 24, 40))
@@ -60,7 +60,7 @@ while True:
         flash.pulse()                             # invert for `frames`, then auto-revert
     if btn.just_pressed(btn.B):
         inverted = not inverted                   # toggle relative to the panel's NORMAL state
-        pg.invert(board.DISPLAY, (not NORMAL) if inverted else NORMAL)
+        pg.invert(picogame_game.display(), (not NORMAL) if inverted else NORMAL)
 
     # a little motion so it doesn't look frozen
     bx += vx

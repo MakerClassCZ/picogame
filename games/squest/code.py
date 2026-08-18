@@ -12,7 +12,7 @@
 
 import gc
 import random
-import board
+
 import picogame as pg
 import picogame_game
 import picogame_input
@@ -80,7 +80,7 @@ scene, _, _ = picogame_game.setup(background=BG)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
-W, H = board.DISPLAY.width, board.DISPLAY.height   # size-independent: lay out from the real display
+W, H = picogame_game.screen()   # size-independent: lay out from the real display
 HUD_H = 26
 SURFACE_Y = HUD_H + 6            # sub at/above this depth = surfacing
 SURFACE_TOP = SURFACE_Y - 8      # the sub breaches only a few px above the waterline when surfacing

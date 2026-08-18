@@ -6,7 +6,7 @@
 # The trick: Scene(..., left=, right=, top=, bottom=) reserves a border the scene won't
 # touch. Here left=right=110 -> a 100px-wide column in the middle of a 320px screen.
 
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -14,7 +14,7 @@ import picogame_clock
 import picogame_ui as ui
 import picogame_shapes as shp
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 SIDE = (W - 100) // 2                            # reserve sides -> a 100px play column
 COL_BG = pg.rgb565(12, 14, 30)
 PANEL = pg.rgb565(34, 44, 78)
@@ -29,11 +29,11 @@ block.anchor = (0.5, 0.5)
 scene.add(block)
 
 # Static side panels: drawn once outside the scene (a HudBar each = bg fill + labels).
-left_panel = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, SIDE, H, PANEL)
+left_panel = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, SIDE, H, PANEL)
 left_panel.label(terminalio.FONT, 8, 10, WHITE, "SCORE")
 score_lbl = left_panel.label(terminalio.FONT, 8, 26, WHITE, "00000")
 left_panel.label(terminalio.FONT, 8, 60, WHITE, "LINES")
-right_panel = ui.HudBar(pg, board.DISPLAY, bufA, W - SIDE, 0, SIDE, H, PANEL)
+right_panel = ui.HudBar(pg, picogame_game.display(), bufA, W - SIDE, 0, SIDE, H, PANEL)
 right_panel.label(terminalio.FONT, W - SIDE + 8, 10, WHITE, "NEXT")
 # A real sprite in the reserved region: proves the border holds graphics the scene
 # never recomputes, not just text. The panel paints it once on redraw().

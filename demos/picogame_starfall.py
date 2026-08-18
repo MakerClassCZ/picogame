@@ -13,7 +13,7 @@
 # Run in the sim:  python3 sim/run.py examples/picogame_starfall.py --backend pygame
 #            or:   python3 sim/run.py examples/picogame_starfall.py --frames 120 --hold LEFT --shot out.png
 
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -26,7 +26,7 @@ import picogame_rand
 import picogame_synth as snd
 import picogame_sfx
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BAR = 16
 BG = pg.rgb565(16, 18, 34)
 INK = pg.rgb565(255, 255, 255)
@@ -66,7 +66,7 @@ shaker = fx.Shake(scene, max_offset=6)
 fader = fx.Fade(scene, W, H)                     # black dither fade overlay
 
 # --- HUD ---
-hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, pg.rgb565(10, 12, 24))
+hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, pg.rgb565(10, 12, 24))
 hud_l = hud.label(terminalio.FONT, 4, 3, INK, "SCORE 0   LIVES 3")
 hud.draw()
 

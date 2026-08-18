@@ -3,7 +3,7 @@
 # A adds to the score, B saves it as the highscore. The values are shown on screen AND printed.
 # Copy with picogame_save.py + picogame_ui.py to CIRCUITPY. No reflash needed (NVM is built in).
 
-import board
+
 import terminalio
 
 import picogame as pg
@@ -16,7 +16,7 @@ import picogame_ui as ui
 # A tiny scene (just a background) so the frame loop renders — that's also what lets the desktop
 # simulator cap the run with --frames. The persistence itself is all in picogame_save below.
 scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(12, 16, 34), top=40)
-W = board.DISPLAY.width
+W = picogame_game.screen()[0]
 btns = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
@@ -27,7 +27,7 @@ data = save.load()
 data["boots"] += 1
 save.save(data)        # persist the boot counter right away
 
-hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, 40, pg.rgb565(20, 26, 50))
+hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, 40, pg.rgb565(20, 26, 50))
 stat = hud.label(terminalio.FONT, 6, 6, pg.rgb565(255, 255, 255))
 help_ = hud.label(terminalio.FONT, 6, 22, pg.rgb565(255, 180, 120))
 score = 0

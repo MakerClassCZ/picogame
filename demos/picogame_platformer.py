@@ -9,7 +9,7 @@
 # picogame_font.py, picogame_ui.py, picogame_shapes.py. Needs the latest firmware.
 
 import array
-import board
+
 import picogame as pg
 import picogame_game
 import picogame_input
@@ -21,7 +21,7 @@ import picogame_tiles as tiles
 import picogame_synth as snd
 import picogame_sfx
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 TILE = 16
 ROWS = H // TILE                 # 15
 COLS = 80                        # level is 80*16 = 1280 px wide

@@ -13,7 +13,7 @@ import picogame_input
 import picogame_clock
 import picogame_ui as ui
 import terminalio
-import board
+
 import picatro_art as art        # PAL8 Act icons from PixelLab (Pico Circus)
 
 def C(r, g, b):
@@ -97,7 +97,7 @@ howto = ui.SceneBox(scene, pg, L, 14, 38, 292, 118, INK, C(244, 236, 210), nline
 
 # big WIN / BUSTED banner: ONE reusable sprite of scaled text. Text is re-rendered into a shared buffer
 # (via Canvas, in place) then revealed - no per-event Sprite churn, and Scene has no remove().
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 _BFW, _BFH = L.get_bounding_box()[:2]
 _BANNER_CH = 10                                         # widest word (8: "CLEARED!") + 1 char padding each side
 _BANNER_W = _BFW * _BANNER_CH

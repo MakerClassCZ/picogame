@@ -13,7 +13,7 @@
 
 import array
 import random
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -22,7 +22,7 @@ import picogame_clock
 import picogame_ui as ui
 import picogame_tiles as tiles
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BG = pg.rgb565(20, 60, 30)
 scene, bufA, bufB = picogame_game.setup(background=BG)
 btn = picogame_input.Buttons()

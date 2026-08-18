@@ -1,12 +1,12 @@
 # Smoke/demo for picogame_options.OptionsMenu (the provisional settings menu split out of ui).
-import board
+
 import picogame as pg
 import picogame_game
 import picogame_input
 import picogame_options as opt
 import terminalio
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 WHITE = pg.rgb565(255, 255, 255)
 NAVY = pg.rgb565(20, 24, 64)
 BORDER = pg.rgb565(120, 140, 220)

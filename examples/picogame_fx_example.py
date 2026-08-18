@@ -15,7 +15,7 @@
 
 import math
 import array
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -28,7 +28,7 @@ import picogame_rand as rnd
 import picogame_palette as palette
 import picogame_pool as pool
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BAR = 16
 WATER_H = 22
 scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(24, 26, 40), top=BAR)
@@ -105,7 +105,7 @@ scene.add(creature)
 shaker = fx.Shake(scene, max_offset=6)
 fader = fx.Fade(scene, W, H)
 
-hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, pg.rgb565(10, 12, 24))
+hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, pg.rgb565(10, 12, 24))
 hud_l = hud.label(terminalio.FONT, 3, 3, pg.rgb565(255, 255, 255), "")
 
 RED = pg.rgb565(255, 60, 60)

@@ -18,7 +18,7 @@
 # Run:  python3 sim/run.py games/picogame_picowing.py --backend pygame
 #   or: python3 sim/run.py games/picogame_picowing.py --frames 200 --hold A,LEFT --shot /tmp/lw.png
 
-import board
+
 import array
 import gc
 import terminalio
@@ -67,7 +67,7 @@ def C(r, g, b):
     return pg.rgb565(r, g, b)
 
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BAR = 16                                              # top HUD strip
 SKY = C(18, 44, 104)
 INK = C(10, 14, 36)
@@ -111,7 +111,7 @@ btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 rng = picogame_rand.Rand(0x5159)
 shake = fx.Shake(scene)
-bomb_flash = fx.InvertFlash(board.DISPLAY)   # FREE full-screen invert pulse for the bomb (HW)
+bomb_flash = fx.InvertFlash(picogame_game.display())   # FREE full-screen invert pulse for the bomb (HW)
 
 # --- art ---
 PLANE = plane.bitmap(pg)
@@ -177,7 +177,7 @@ scene.add(ps)
 # HudBar labels are a buffer-less StripDraw: a label only stores its string (nothing is rasterized or
 # sized at creation), so the initial text below is just a placeholder - hud_refresh() sets the real
 # values. (The WIDEST-text sizing idiom is only for SceneLabel/.reserve(), which owns a retained buffer.)
-hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, INK)
+hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, INK)
 l_score = hud.label(terminalio.FONT, 4, 4, TEXT, "SCORE 00000")
 l_chain = hud.label(terminalio.FONT, CHAIN_X, 4, C(250, 220, 120), "x99  CHAIN 999")
 # Lives + bombs shown as ICON sprites: the number VISIBLE = the count (toggled in hud_refresh).

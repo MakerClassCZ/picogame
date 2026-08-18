@@ -115,7 +115,7 @@ for grp in (enemies, bolts, gems):
 
 parts = pg.Particles(24, size=2, gravity=0.0, fade=True)   # warm death-bursts / pickup pops / level-up flare
 scene.add(parts)
-iflash = fx.InvertFlash(board.DISPLAY)     # free full-screen negative - RATIONED to level-up + death only
+iflash = fx.InvertFlash(picogame_game.display())     # free full-screen negative - RATIONED to level-up + death only
 
 top_lbl = ui.SceneLabel(scene, pg, terminalio.FONT, 2, 2, INK, BG)
 bot_lbl = ui.SceneLabel(scene, pg, terminalio.FONT, 2, H - 12, RED, BG)

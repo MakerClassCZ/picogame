@@ -7,7 +7,7 @@
 # picogame_ui.py, picogame_shapes.py. Needs the latest firmware.
 
 from collections import deque
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -19,7 +19,7 @@ import picogame_ui as ui
 import picogame_synth as snd
 import picogame_sfx
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 TILE = 10
 COLS, ROWS = W // TILE - 2, (H - 20) // TILE - 1   # leave a margin (1 tile each side/bottom, YOFF top)
 XOFF = (W - COLS * TILE) // 2

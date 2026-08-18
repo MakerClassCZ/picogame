@@ -5,7 +5,7 @@
 #
 # Controls: arrows = move one cell, A = briefly reveal the door (help). Copy picogame_* helpers.
 
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -17,7 +17,7 @@ import picogame_synth as snd
 import picogame_sfx
 import picogame_rand
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 T = 8                                           # tile size
 BAR = 14
 scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(8, 8, 14), strip_h=12, top=BAR)
@@ -38,7 +38,7 @@ tm = pg.Tilemap(TILES, COLS, ROWS)
 scene.add(tm)
 tm.move(0, BAR)
 
-hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, pg.rgb565(14, 16, 30))
+hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, pg.rgb565(14, 16, 30))
 title = hud.label(terminalio.FONT, 4, 1, pg.rgb565(255, 255, 255), "MAZE  LVL 1")
 
 rng = picogame_rand.Rand(0x1234)               # seeded -> reproducible maze layouts

@@ -11,7 +11,7 @@
 
 import math
 import array
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -24,7 +24,7 @@ import picogame_fx as fx
 import picoracer_track as track
 import race_cars
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 T = track.TILE                                   # 32
 BAR = 16                                          # HUD bar height
 GRASS = pg.rgb565(96, 168, 78)
@@ -119,7 +119,7 @@ g_len = [0] * NGHOST
 g_pos = [0.0] * NGHOST                            # float playback cursor (samples), advances 1/REC_STEP per frame
 g_done = [False] * NGHOST                         # reached the end of its lap -> park at the finish until re-sync
 
-hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, pg.rgb565(14, 16, 30))
+hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, pg.rgb565(14, 16, 30))
 info = hud.label(terminalio.FONT, 4, 3, pg.rgb565(255, 255, 255), "LAP 1")
 
 banner = ui.SceneLabel(scene, pg, terminalio.FONT, 0, H // 2 - 6,

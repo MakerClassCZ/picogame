@@ -11,7 +11,7 @@
 # Needs train_tiles + train_levels. 320-wide board -> PicoPad (won't fit 240).
 
 import gc
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -22,7 +22,7 @@ import train_tiles
 import train_levels as L
 import picogame_cutscene as cut
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BARH = 16                                          # reserved info strip (top)
 MAPW, MAPH = L.MAPW, L.MAPH                         # 20 x 12
 ANIM_DT = 0.16                                      # animation tick (~6/s); the train steps every
@@ -70,7 +70,7 @@ Dir = bytearray(MAPW * MAPH)                        # train trail (not drawn)
 # score/level during play, and the editable code field when A activates code entry. It renders via
 # pg.render into bufA (no persistent text buffer to speak of) - so there is NO 31 KB overlay Canvas
 # and no 4 prewarmed SceneLabels eating the heap; that headroom is what lets the synth audio fit.
-info = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BARH, BG)
+info = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BARH, BG)
 # HudBar labels are buffer-less StripDraw: they just hold a string (no per-label glyph buffer to size),
 # so there's nothing to init to a widest line - show_info() sets the real text before the first draw.
 info_lbl = info.label(FONT, 4, 3, INK)

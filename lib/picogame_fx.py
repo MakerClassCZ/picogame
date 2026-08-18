@@ -475,7 +475,7 @@ class InvertFlash:
     frames. Cheaper than a Fade overlay; great for a sharp 1-bit "hit". Needs a controller
     that supports INVON/INVOFF (ST7789/ST7735); the sim emulates it (preview shows the negative).
 
-        flash = InvertFlash(board.DISPLAY)
+        flash = InvertFlash(picogame_game.display())
         ...on hit:      flash.pulse()
         ...each frame:  flash.tick()
     """

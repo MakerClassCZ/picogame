@@ -103,10 +103,16 @@ def build_display():
 
 
 try:
-    if build_display() is None:    # lands in board.DISPLAY slot 0; persists into code.py
+    _disp = build_display()        # lands in board.DISPLAY slot 0; persists into code.py
+    if _disp is None:
         print("boot.py: PICOGAME_DISPLAY not set in settings.toml -- no display built. "
               "code.py will raise 'expected a Display' until you configure it.")
     else:
+        try:                       # also publish it as the primary display, so a game finds it
+            import supervisor      # through picogame_game.display() even without a board.DISPLAY slot
+            supervisor.runtime.display = _disp
+        except (ImportError, AttributeError):
+            pass
         print("boot.py: display ready")
 except Exception as e:             # noqa: BLE001 - never brick boot; code.py reports the problem
     print("boot.py: display setup FAILED -- check settings.toml "

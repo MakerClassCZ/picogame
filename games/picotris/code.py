@@ -5,7 +5,7 @@
 # flash, level/speed ramp. Copy with picogame_game/input/clock/ui/rand (+ optional audio).
 
 import array
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -67,7 +67,7 @@ except Exception:
         pass
 
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 COLS, ROWS, TILE = 10, 18, 12
 WELL_W, WELL_H = COLS * TILE, ROWS * TILE             # 120 x 216
 SIDE = (W - WELL_W) // 2                               # 100 -> reserve both margins
@@ -132,14 +132,14 @@ NPX = TILE                                             # mini cell = one tileset
 next_cells = [pg.Sprite(tileset, 0, 0, visible=False) for _ in range(4)]
 
 # --- side panels: static chrome the scene never repaints (one redraw; updated only on change) ---
-left_panel = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, SIDE, H, PANEL)
+left_panel = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, SIDE, H, PANEL)
 left_panel.label(terminalio.FONT, 18, 14, VALUE, "PICOTRIS")
 left_panel.label(terminalio.FONT, 8, H - 54, LABEL, "< >  move")
 left_panel.label(terminalio.FONT, 8, H - 40, LABEL, "A   rotate")
 left_panel.label(terminalio.FONT, 8, H - 26, LABEL, "v   drop")
 left_panel.draw()
 
-right_panel = ui.HudBar(pg, board.DISPLAY, bufA, RX, 0, SIDE, H, PANEL)
+right_panel = ui.HudBar(pg, picogame_game.display(), bufA, RX, 0, SIDE, H, PANEL)
 right_panel.label(terminalio.FONT, RX + 10, 10, LABEL, "SCORE")
 # HudBar labels are buffer-less (just hold a string); "0" is only a placeholder refresh_hud() overwrites.
 score_lbl = right_panel.label(terminalio.FONT, RX + 10, 24, VALUE, "0")

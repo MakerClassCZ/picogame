@@ -8,7 +8,7 @@
 #   * beeps on every press.
 # Use it to check wiring + the button profile on a freshly built board.
 #
-# Works with no changes on a PicoPad (board.DISPLAY + the built-in profile). On a
+# Works with no changes on a PicoPad (picogame_game.display() + the built-in profile). On a
 # bare Pico wired like the PicoPad it builds the ST7789 itself and reads the button
 # map from settings.toml (PICOGAME_BUTTONS) — see the "Supported hardware" docs.
 import board
@@ -16,7 +16,7 @@ import picogame as pg
 import picogame_game
 import picogame_input
 
-# --- display: use board.DISPLAY if the board has one, else build a PicoPad-clone ST7789 ---
+# --- display: use picogame_game.display() if the board has one, else build a PicoPad-clone ST7789 ---
 display = getattr(board, "DISPLAY", None)
 built_display = False
 if display is None:
@@ -31,7 +31,7 @@ if display is None:
         display = ST7789(bus, width=320, height=240, rotation=0, backlight_pin=board.GP16)
         built_display = True
     except Exception as e:                       # noqa: BLE001 — bring-up aid: report and stop
-        raise SystemExit("No board.DISPLAY and could not build one: %r\n"
+        raise SystemExit("No picogame_game.display() and could not build one: %r\n"
                          "Wire a display (see the Supported hardware docs) or pass one to setup()." % e)
 
 scene, _a, _b = picogame_game.setup(display=display, background=pg.rgb565(16, 18, 26))
@@ -121,7 +121,7 @@ mapped = [name for name, mask, _ in
           [("UP", btn.UP, 0), ("DOWN", btn.DOWN, 0), ("LEFT", btn.LEFT, 0), ("RIGHT", btn.RIGHT, 0),
            ("A", btn.A, 0), ("B", btn.B, 0), ("X", btn.X, 0), ("Y", btn.Y, 0)]
           if btn.has(mask)]
-disp_src = "built ST7789 (PicoPad pins)" if built_display else "board.DISPLAY"
+disp_src = "built ST7789 (PicoPad pins)" if built_display else "picogame_game.display()"
 audio_src = "ok" if audio else "none"
 
 print("=" * 40)

@@ -15,7 +15,7 @@
 
 import math
 import random
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -64,7 +64,7 @@ PIP_LOW  = pg.rgb565(70, 200, 80)
 PIP_MID  = pg.rgb565(240, 190, 40)
 PIP_HIGH = pg.rgb565(235, 72, 56)
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BAR = 16                              # reserved top HUD strip
 TILE = 2
 COLS = W // TILE                      # 160
@@ -97,7 +97,7 @@ btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)
 
 # --- HUD bar (0-RAM strip in the reserved border) ---
-hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, HUDBG)
+hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, HUDBG)
 # whose-turn chip: a red (P1) / blue (P2) dot at the far left - the player colour, kid-readable
 chip_bm = [shp.circle(10, P1COL), shp.circle(10, P2COL)]
 turn_chip = hud.add(pg.Sprite(chip_bm[0], 4, 3))

@@ -7,7 +7,7 @@
 #
 # Deploy: copy this file to CIRCUITPY as code.py plus the picogame_* helpers it imports.
 
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -21,7 +21,7 @@ BG = pg.rgb565(18, 22, 36)
 INK = pg.rgb565(255, 255, 255)
 HERO = pg.rgb565(240, 90, 90)
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BAR = 16                                          # reserve a top HUD strip
 
 # --- tuning knobs: named constants at the top of the file. On CircuitPython the game's
@@ -35,7 +35,7 @@ buttons = picogame_input.Buttons()
 clock = picogame_clock.Clock(30)                  # frame cap (fps)
 
 # --- HUD (camera-independent text bar) ---
-hud = ui.HudBar(pg, board.DISPLAY, bufA, 0, 0, W, BAR, pg.rgb565(12, 14, 26))
+hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, pg.rgb565(12, 14, 26))
 score_label = hud.label(terminalio.FONT, 4, 3, INK, "SCORE 0")
 msg_label = hud.label(terminalio.FONT, W - 100, 3, INK, "A = START")
 hud.draw()

@@ -96,11 +96,17 @@ def build_display():
 
 _disp = build_display()
 if _disp is not None and getattr(board, "DISPLAY", None) is None:
-    import board as _real
-    class _B:                       # board shim: real board + the display we built
-        DISPLAY = _disp
-        def __getattr__(self, n):
-            return getattr(_real, n)
-    sys.modules["board"] = _B()
+    # Publish it the portable way: picogame_game.display()/screen() read board.DISPLAY first and
+    # supervisor.runtime.display second, so a game needs no board shim to find this display.
+    try:
+        import supervisor
+        supervisor.runtime.display = _disp
+    except (ImportError, AttributeError):   # very old CircuitPython: fall back to a board shim
+        import board as _real
+        class _B:
+            DISPLAY = _disp
+            def __getattr__(self, n):
+                return getattr(_real, n)
+        sys.modules["board"] = _B()
 
 __import__(os.getenv("PICOGAME_GAME") or "game")   # run the unchanged game

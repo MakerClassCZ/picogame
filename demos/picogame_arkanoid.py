@@ -8,7 +8,7 @@
 # to write an example (don't hardcode 320x240). Copy with picogame_game.py / picogame_input.py /
 # picogame_clock.py / picogame_shapes.py / picogame_ui.py (+ picogame_font.py, used by ui) to CIRCUITPY.
 
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -24,7 +24,7 @@ scene, bufA, bufB = picogame_game.setup(background=BG)
 btn = picogame_input.Buttons()
 clock = picogame_clock.Clock(40)
 
-W, H = board.DISPLAY.width, board.DISPLAY.height   # 240x240 on PicoSystem
+W, H = picogame_game.screen()   # 240x240 on PicoSystem
 COLS, ROWS = 10, 6                                 # brick wall: 10 x 6
 BW, BH = W // COLS, 16                              # brick size (BW = 24 at W=240)
 BRICK_Y = 28                                       # wall top (HUD strip above it)

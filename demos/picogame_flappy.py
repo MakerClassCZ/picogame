@@ -8,7 +8,7 @@
 # Needs the latest firmware.
 
 import random
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -20,7 +20,7 @@ import picogame_pool
 import picogame_synth as snd
 import picogame_sfx
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BG = pg.rgb565(90, 180, 230)
 scene, bufA, bufB = picogame_game.setup(background=BG)
 btn = picogame_input.Buttons()

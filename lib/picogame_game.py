@@ -61,8 +61,7 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
         _mad = os.getenv("PICOGAME_MADCTL")
         _bri = os.getenv("PICOGAME_BRIGHTNESS")
         if _inv is not None or _mad is not None or _bri is not None:
-            import board as _board
-            _d = _board.DISPLAY
+            _d = _current_display()          # board.DISPLAY, else supervisor.runtime.display
             if _inv is not None:
                 _on = (_inv != 0) if isinstance(_inv, int) else \
                     str(_inv).strip().lower() not in ("", "0", "false", "no")
@@ -162,8 +161,13 @@ def open_framebuffer(width, height, color_depth=None):
     # returned display (or supervisor.runtime.display) instead. CALL THIS BEFORE importing any
     # module that captures board.DISPLAY at import time.
     try:
-        board.DISPLAY = disp
+        board.DISPLAY = disp                 # boards with a settable slot (our custom-board builds)
     except (AttributeError, TypeError):
+        pass
+    try:
+        import supervisor                    # the portable way: make it the primary display
+        supervisor.runtime.display = disp
+    except (ImportError, AttributeError, TypeError, ValueError):
         pass
     return disp
 
@@ -185,6 +189,39 @@ def target(display):
     return backend
 
 
+def _current_display():
+    """The board's display, wherever it comes from - `board.DISPLAY` on boards that hard-code one,
+    else `supervisor.runtime.display` (a Fruit Jam DVI output, or a display a boot.py built from
+    settings.toml on a bare Pico). Use this instead of `board.DISPLAY` so a game runs on both.
+
+        hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, BG)
+    """
+    d = getattr(board, "DISPLAY", None)
+    if d is None:
+        try:
+            import supervisor
+            d = supervisor.runtime.display
+        except (ImportError, AttributeError):
+            d = None
+    if d is None:
+        raise RuntimeError("no display: on a board without board.DISPLAY, build one in boot.py and "
+                           "publish it with `supervisor.runtime.display = disp` (see CUSTOM_BOARD)")
+    return d
+
+
+display = _current_display          # public name (resolve_display's parameter shadows it inside)
+
+
+def screen():
+    """Screen size as `(width, height)` - the size-independent way to lay a game out:
+
+        W, H = picogame_game.screen()
+
+    Same source as display(), so it also works where there is no `board.DISPLAY`."""
+    d = _current_display()
+    return (d.width, d.height)
+
+
 def resolve_display(display=None):
     """Find and normalize the render target. Returns (backend, is_framebuffer).
 
@@ -199,17 +236,13 @@ def resolve_display(display=None):
       - anything else is a busdisplay (SPI) returned as-is; setup() picks fast/portable.
     Shared by setup() and picogame_scene.load() so the platform logic lives ONCE."""
     if display is None:
-        display = getattr(board, "DISPLAY", None)
-    if display is None:
         try:
-            import supervisor
-            display = supervisor.runtime.display
-        except (ImportError, AttributeError):
-            display = None
-    if display is None:
-        raise RuntimeError("no display (board.DISPLAY is None): if you just added boot.py press "
-                           "RESET once (boot.py runs only at power-on, not on save/reload); on a "
-                           "DVI board set CIRCUITPY_PICODVI_ENABLE=\"always\" in settings.toml")
+            display = _current_display()          # board.DISPLAY -> supervisor.runtime.display
+        except RuntimeError:
+            raise RuntimeError("no display: if you just added boot.py press RESET once (boot.py runs "
+                               "only at power-on, not on save/reload); on a DVI board set "
+                               "CIRCUITPY_PICODVI_ENABLE=\"always\" in settings.toml; on a bare "
+                               "board publish yours with `supervisor.runtime.display = disp`")
     key = id(display)
     hit = _RESOLVED.get(key)
     if hit is not None and hit[0] is display:      # verify identity: guards a reused id() (stale alias)

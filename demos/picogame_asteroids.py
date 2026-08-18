@@ -6,7 +6,7 @@
 # Copy with picogame_game.py, picogame_input.py, picogame_clock.py,
 # picogame_font.py, picogame_shapes.py, picogame_math.py. Needs the latest firmware.
 
-import board
+
 import terminalio
 import picogame as pg
 import picogame_game
@@ -19,7 +19,7 @@ import picogame_sfx
 import picogame_math as m
 import picogame_pool
 
-W, H = board.DISPLAY.width, board.DISPLAY.height
+W, H = picogame_game.screen()
 BG = pg.rgb565(0, 0, 8)
 scene, bufA, bufB = picogame_game.setup(background=BG)
 btn = picogame_input.Buttons()
