@@ -18,6 +18,24 @@
 from picogame_ui import SceneBox, CANCEL, _menu_step, _panel_h, _menu_lines, _menu_pick
 
 
+def _normalise(rows):
+    """Fill in and clamp each row's stored value, so a row written by hand (or restored from a save)
+    can omit `i`/`value` and a stale one can't IndexError later in _vtext/_change/value."""
+    for r in rows:
+        if r["kind"] == "choice":
+            if not r.get("choices"):                          # fail fast here, not mid-render
+                raise ValueError("choice row needs a non-empty 'choices' list")
+            r.setdefault("i", 0)
+            r["i"] = max(0, min(r["i"], len(r["choices"]) - 1))   # clamp a stale persisted index
+            #   (choices shrank between versions) so show()/value() can't IndexError
+        elif r["kind"] == "stepper":
+            r.setdefault("value", r.get("min", 0))
+            lo, hi = r.get("min", 0), r.get("max", r["value"])     # clamp a stale persisted value
+            r["value"] = max(lo, min(r["value"], hi))              # into the declared range
+        elif r["kind"] == "toggle":
+            r.setdefault("value", False)
+
+
 class OptionsMenu:
     """A scene-layer menu whose rows carry an adjustable VALUE - the settings/recruit pattern the
     plain `ui.Menu` (pick-an-index) can't do. UP/DOWN move the cursor, LEFT/RIGHT change the selected
@@ -31,6 +49,10 @@ class OptionsMenu:
         {"key": "snd",  "label": "Sound",      "kind": "toggle",  "value": True}
         {"key": "done", "label": "Start",      "kind": "action"}
     Read a value any time with `m.value("diff")`. Call `m.show()` once; `scene.refresh()` paints it.
+
+    The row list is not fixed: `set_rows(rows, sel=0)` swaps it wholesale - a sub-level's rows and
+    back (the tree pattern), or a rebuilt list after a recruit/join/delete. Pass `visible=` to fix the
+    window height up front, so a list that grows and shrinks keeps one panel size.
     """
 
     def __init__(self, scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None, visible=None):
@@ -39,25 +61,23 @@ class OptionsMenu:
         self.sel = 0
         self.top = 0
         self._t = 1 if title else 0
-        for r in rows:                                        # normalise defaults + validate up front
-            if r["kind"] == "choice":
-                if not r.get("choices"):                      # fail fast here, not mid-render in _vtext/
-                    raise ValueError("choice row needs a non-empty 'choices' list")   # _change/value
-                r.setdefault("i", 0)
-                r["i"] = max(0, min(r["i"], len(r["choices"]) - 1))   # clamp a stale persisted index
-                #   (choices shrank between versions) so show()/value() can't IndexError
-            elif r["kind"] == "stepper":
-                r.setdefault("value", r.get("min", 0))
-                lo, hi = r.get("min", 0), r.get("max", r["value"])    # clamp a stale persisted value
-                r["value"] = max(lo, min(r["value"], hi))             # into the declared range
-            elif r["kind"] == "toggle":
-                r.setdefault("value", False)
+        _normalise(rows)
         # `visible` caps how many option rows show at once - the rest scroll into view (like ui.Menu's
-        # `rows=`); default shows them all. A long list would otherwise overflow the panel off-screen.
-        self.vis = max(1, min(visible or len(rows), len(rows)))
+        # `rows=`); a long list would otherwise overflow the panel off-screen. Passed explicitly it IS
+        # the window height, so a list that grows (a roster, the connected players) keeps ONE panel
+        # size instead of resizing as rows come and go; omitted, the panel fits the rows it was given.
+        self.vis = max(1, visible if visible else len(rows))
         n = self.vis + self._t
         self.panel = SceneBox(scene, pg, font, x, y, w, _panel_h(n), fg, bg, nlines=n, border=border)
         self.active = False
+
+    def set_rows(self, rows, sel=0):
+        """Replace the rows and repaint - the whole-list rebuild a growing menu does (recruit a unit,
+        a player joins, stock changes), and the way to swap in a sub-level's rows and back. New rows
+        are normalised like the constructor's, so they may omit `i`/`value`."""
+        self.rows = rows
+        _normalise(rows)
+        self.show(sel)
 
     def value(self, key):
         """Current value of the row with this key (choice -> the chosen string, stepper -> int,
@@ -92,6 +112,8 @@ class OptionsMenu:
 
     def show(self, sel=0):
         self.active = True
+        # A rebuilt (shorter) list must not leave the cursor or the scroll window past its end - both
+        # clamp here, so set_rows()/show() after a delete is safe.
         self.sel = max(0, min(sel, len(self.rows) - 1))
         self.top = max(0, min(self.sel, len(self.rows) - self.vis))   # scroll so the cursor is visible
         self._render()
