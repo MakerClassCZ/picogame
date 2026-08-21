@@ -5,6 +5,7 @@
 #   python sim/run.py examples/picogame_pacman.py --shot out.png  # headless + save a screenshot
 #   python sim/run.py examples/picogame_pacman.py --backend pil   # force headless
 #   python sim/run.py examples/picogame_picowing.py --profile     # cProfile + allocation report
+#   python sim/run.py my_game.py --keys "20:RIGHT,40:X:2" --shot-at 45 --shot out.png
 #
 # Resolves imports: sim/ provides `picogame` + the CircuitPython stubs, lib/ the
 # picogame_* helpers, and the game's own dir its assets (we chdir there so relative
@@ -22,6 +23,54 @@ import traceback
 os.environ.setdefault("PICOGAME_INVERT", "0")
 
 
+def _button_pin(name):
+    """Logical button name -> pin name. A full pin (SW2_LEFT for player 2) passes through."""
+    n = name.strip().upper()
+    return n if n.startswith("SW") else "SW_" + n
+
+
+def _parse_keys(spec):
+    """Parse a --keys timeline into {frame: [(pin, down), ...]}.
+
+    `20:X` presses X at frame 20 and holds it, `25:-X` releases it, `40:X:2` taps it for 2
+    frames (= press at 40, release at 42). A tap of 1-2 frames is what `just_pressed` needs;
+    holding is what `is_pressed` needs.
+    """
+    events = {}
+    for item in spec.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        parts = item.split(":")
+        if len(parts) not in (2, 3):
+            raise SystemExit("[sim] --keys: expected FRAME:BUTTON[:HELD_FRAMES], got %r" % item)
+        try:
+            frame = int(parts[0])
+            held = int(parts[2]) if len(parts) == 3 else None
+        except ValueError:
+            raise SystemExit("[sim] --keys: frame and HELD_FRAMES must be integers, got %r" % item)
+        name = parts[1].strip().upper()
+        down = not name.startswith("-")
+        pin = _button_pin(name.lstrip("-"))
+        events.setdefault(frame, []).append((pin, down))
+        if held is not None:
+            if not down:
+                raise SystemExit("[sim] --keys: HELD_FRAMES makes no sense on a release, got %r" % item)
+            events.setdefault(frame + held, []).append((pin, False))
+    return events
+
+
+def _keys_applier(host, events):
+    """Return fn(frame) that applies the timeline's presses/releases for `frame`."""
+    def apply(frame):
+        for pin, down in events.get(frame, ()):
+            if down:
+                host.pressed_pins.add(pin)
+            else:
+                host.pressed_pins.discard(pin)
+    return apply
+
+
 def _run_profiled(host, code, g, game_path, game_dir, root, frames):
     """Headless run under cProfile + tracemalloc, then print a STRUCTURE report.
     The sim engine is Python (C on-device), so absolute times over-weight it — read call
@@ -34,7 +83,11 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
     warm = min(8, max(1, frames // 3))     # snapshot after warm-up so setup allocs don't count
     snap = {}
 
+    prev = host._frame_hook            # keep a --keys timeline running under --profile
+
     def hook(fr):
+        if prev is not None:
+            prev(fr)
         if fr == warm:
             snap["t"] = tracemalloc.take_snapshot()
 
@@ -99,6 +152,12 @@ def main():
     ap.add_argument("--hold", default=None,
                     help="buttons held for the whole run, e.g. --hold RIGHT,B "
                          "(logical names UP/DOWN/LEFT/RIGHT/A/B/X/Y) -- for testing input")
+    ap.add_argument("--keys", default=None,
+                    help="scripted input timeline, FRAME:BUTTON[:HELD_FRAMES] items separated by "
+                         "commas: --keys \"20:RIGHT,40:X:2,60:-RIGHT\" walks right from frame 20, "
+                         "taps X for 2 frames at 40 (a tap is what just_pressed needs) and lets go "
+                         "at 60. FRAME counts polled frames from 1: the button is down on that "
+                         "frame's input read. Headless only (a live window reads the real keyboard).")
     ap.add_argument("--profile", action="store_true",
                     help="headless run under cProfile + tracemalloc; print a perf report "
                          "(call counts, time [sim-skewed], per-frame game/lib allocation)")
@@ -107,7 +166,7 @@ def main():
     # Backend default: a human running `run.py game.py` wants to SEE it, so open a live pygame window
     # when pygame is available. A screenshot/profile run (or a box without pygame) stays headless (pil).
     if args.backend is None:
-        if args.shot or args.shot_at or args.profile:
+        if args.shot or args.shot_at or args.profile or args.keys:
             args.backend = "pil"
         else:
             try:
@@ -137,9 +196,18 @@ def main():
               "R / Q = X,  T / E = Y,  close the window to quit")
     if args.hold:                      # hold buttons for the whole run (input testing)
         for name in args.hold.split(","):
-            n = name.strip().upper()
-            # a full pin name (e.g. SW2_LEFT for player 2) passes through; a bare button -> SW_<name>
-            _host.pressed_pins.add(n if n.startswith("SW") else "SW_" + n)
+            _host.pressed_pins.add(_button_pin(name))
+    if args.keys:                      # scripted timeline: press/release at given frames
+        if args.backend == "pygame":
+            print("[sim] --keys is ignored with a live window (it reads the real keyboard).")
+        else:
+            apply_keys = _keys_applier(_host, _parse_keys(args.keys))
+            # The hook runs after frame N is presented, i.e. just before the game polls input for
+            # N+1 -- so schedule N+1 there and apply frames 0/1 up front. A game therefore SEES the
+            # button down on the frame the timeline names.
+            apply_keys(0)
+            apply_keys(1)
+            _host.set_frame_hook(lambda fr: apply_keys(fr + 1))
 
     os.chdir(game_dir)                 # so open("cavern.bin") etc. work
     src = open(game_path).read()

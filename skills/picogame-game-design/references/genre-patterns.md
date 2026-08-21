@@ -93,6 +93,13 @@ camp.
   (multiball), Break/Warp, extra life. One capsule on screen at a time; **never**
   drop from silver/gold bricks. Extra-life/Warp ~half as likely as others.
 
+**WHERE BRICK STATE LIVES** — the wall is a `Tilemap`, which stores exactly **one byte per
+cell**: the tile index. So brick *state* has to BE the index — give silver 3 tile indices
+(cracked stages) and decrement by writing the next one, which repaints just that cell and shows
+the damage for free; gold is its own index that the hit handler and the clear-count both skip.
+Don't bolt a parallel Python HP array onto a tilemap wall (extra RAM, two things to keep in
+sync); do use `techniques.md §5`'s tile-flag idiom to classify indices.
+
 **PITFALLS** — Don't just invert velocity on paddle hit (recompute from hit
 position). Keep the ball speed constant and compute bounces yourself (no "real"
 physics — see Cross-genre); cap it so the ball can't skip the paddle or a brick
@@ -302,6 +309,17 @@ X, then Y), probing the leading edge at 2+ points and sub-stepping fast falls so
 tunnel through a floor — the stable, corner-snag-free idiom (it's also what makes corner
 correction above implementable). Recipe + code in `techniques.md §5`.
 Plain per-object Python (cheap, no C) — keep it inline per game, don't build a collision module.
+
+**DECIDE ONE-WAY VS SOLID PER TILE, AND SAY SO OUT LOUD.** A *one-way* platform is only
+tested while falling (`if vy > 0`), so the player jumps up through it and lands on top — the
+cheapest possible platformer and what the shipped `demos/picogame_platformer.py` does
+(see its `ONE-WAY platforms` comment). A *solid* tile also needs the rising branch (head bump:
+`vy < 0` → stop and zero `vy`) and the horizontal one (walls). The consequence matters the
+moment the level gains anything above the player: **a ceiling or a full wall built from the
+one-way tile is passable from below**, which reads as a bug even though the collision code is
+"working as written". So when a request adds geometry (ceiling, wall, shaft, closed room) to a
+one-way game, either extend the resolver first or tell the player which tiles stay one-way —
+never silently reuse the platform tile for a solid.
 
 **MVP:** tunable jump with asymmetric rise/fall gravity + variable height · coyote
 time + jump buffer · AABB tile collision with checkpoints.

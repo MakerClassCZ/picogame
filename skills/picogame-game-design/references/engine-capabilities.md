@@ -420,11 +420,18 @@ python sim/run.py game.py                                   # default 150 frames
 python sim/run.py game.py --shot out.png                    # save final frame to a PNG
 python sim/run.py game.py --frames 300 --shot-at 120 --shot mid.png   # grab frame 120
 python sim/run.py game.py --hold RIGHT,B --shot out.png      # hold buttons (input testing)
+python sim/run.py game.py --keys "5:RIGHT,25:B:3" --shot-at 30 --shot jump.png   # TAP a button
 python sim/run.py game.py --backend pygame                  # live interactive window
 ```
 CLI: `game` (positional), `--frames N` (default 150), `--backend pil|pygame`, `--shot PATH`,
-`--shot-at N`, `--hold NAME,NAME` (logical `UP/DOWN/LEFT/RIGHT/A/B/X/Y`), `--profile` (per-frame
-timing). Env `PICOGAME_SIM_SIZE=WxH` sets the screen size (e.g. `240x240` for a PicoSystem, `320x240`
+`--shot-at N`, `--hold NAME,NAME` (logical `UP/DOWN/LEFT/RIGHT/A/B/X/Y`), `--keys TIMELINE`,
+`--profile` (per-frame timing).
+`--keys` is `FRAME:BUTTON[:HELD_FRAMES]` items separated by commas — `25:B:3` taps B for 3 frames at
+frame 25, `40:X` presses and holds, `60:-X` releases. This is how you test anything read with
+`just_pressed` (shoot, jump, confirm, place): `--hold` can only express "down the whole run", so a
+tap needs the timeline. Frames count polled frames from 1, so pair it with a `--shot-at` a few frames
+later to see the result. Headless only (a live window reads the real keyboard); composes with
+`--profile`. Env `PICOGAME_SIM_SIZE=WxH` sets the screen size (e.g. `240x240` for a PicoSystem, `320x240`
 default) — smoke a game at BOTH sizes, since games must read `picogame_game.screen()`, not hardcode.
 The **headless
 screenshot loop is HOW you iterate**: render N frames, dump a PNG, eyeball it, fix, repeat —

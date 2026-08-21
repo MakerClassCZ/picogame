@@ -25,6 +25,7 @@ names and defaults; `*` marks keyword-only arguments. Colours are wire-order RGB
 
 ### `Bitmap(data, width, height, *, format=RGB565, palette=None, frames=1, stride=0, transparent=None)`
 An image atlas of equal-size frames (any size). `data` is a buffer; `palette` (array of wire colours) is required for `PAL8`. `transparent` = the index/colour skipped when blitting.
+- **Limits** (violating one raises `ValueError` naming the argument): `width`/`height` 1..65535, `frames` 1..255, `width*frames` ≤ 65535, `stride` ≤ 65535 and ≥ `width*frames`, `palette` ≥ 1 entry, `data` big enough for the frames.
 - Read-only props: `width`, `height`, `frames`, `format`, [`stride`](/concepts/glossary/) (pixels per source row; leave `0` for tightly-packed data, set it only for a sub-window of a larger image), `palette` (the PAL8 palette buffer or `None`), `transparent` (the transparent value or `None`).
 
 ### `Sprite(bitmap, x=0, y=0, *, frame=0, visible=True, flip_x=False, flip_y=False)`
@@ -57,20 +58,20 @@ Retained-mode scene with dirty-rectangle rendering; `buffer_a/b` are strip buffe
 - `refresh() -> list | None` — diff & repaint changed regions; returns the dirty rect `[x1,y1,x2,y2]` (reused) or None.
 
 ### `Tilemap(tileset, cols, rows)`
-A grid of tile indices into a tileset Bitmap (each frame = one tile); a Scene layer.
+A grid of tile indices into a tileset Bitmap (each frame = one tile); a Scene layer. **Limits:** `cols`/`rows` 1..1024 (the grid costs `cols*rows` bytes; `tile()` outside the grid is ignored, not an error).
 - `tile(tx, ty, value=None, *, flip_x=False, flip_y=False, transpose=False) -> int` — get tile, or set it (with optional keyword-only per-cell orientation: `flip_x`/`flip_y`/`transpose` give all 8 orientations of a tile; pair with a deduplicated tileset, see `png2picogame.py --dedup`). Out-of-range ignored. The orientation plane is allocated lazily (RAM only if a map uses it).
 - `fill(value)` — set every tile (clears orientation).
 - `move(x, y)` — position the map.
 - Read-only props: `x`, `y`, `cols`, `rows`.
 
 ### `Particles(capacity, *, size=1, gravity=0.0, fade=False)`
-A pooled particle layer (small moving dots) drawn as one Scene layer.
-- `emit(x, y, count, speed=1, life=30, color=0xFFFF)` — burst `count` dots, random velocity ≤ `speed` px/tick, living `life` ticks.
+A pooled particle layer (small moving dots) drawn as one Scene layer. **Limits:** `capacity` 1..4096, `size` 1..8 px.
+- `emit(x, y, count, speed=1, life=30, color=0xFFFF)` — burst `count` dots, random velocity ≤ `speed` px/tick, living `life` ticks. **Limits:** `count` ≥ 0, `speed` **0..127**, `life` 1..65535, `color` 0..0xFFFF (`x`/`y` are unrestricted — off-screen is fine). Anything computed from a delta or a velocity must be clamped BEFORE the call (`max(0, min(127, v))`): a negative `speed` from e.g. `dx = target - source` raises `ValueError` at the moment the effect fires, which in a game means a crash on impact rather than at startup.
 - `tick()` — advance one step (move, gravity, ageing). Call each frame.
 - `clear()` — remove all.
 
 ### `Canvas(width, height, *, transparent=None, buffer=None)`
-A RAM RGB565 drawing surface composited as a Scene layer (`width*height*2` bytes). `transparent` makes it a shaped overlay; `buffer` backs it with external memory (e.g. an arena slice). For *animated full-frame* surfaces prefer `StripDraw` (no buffer).
+A RAM RGB565 drawing surface composited as a Scene layer (`width*height*2` bytes). `transparent` makes it a shaped overlay; `buffer` backs it with external memory (e.g. an arena slice). For *animated full-frame* surfaces prefer `StripDraw` (no buffer). **Limits:** `width`/`height` 1..1024; a supplied `buffer` must hold `width*height*2` bytes and have an even length. Drawing calls CLIP — off-surface coordinates are dropped, not an error.
 - `clear(color)` · `pixel(x, y, color)` · `fill_rect(x, y, w, h, color)` · `rect(x, y, w, h, color)`
 - `line(x0, y0, x1, y1, color)` · `circle(cx, cy, r, color)` · `fill_circle(cx, cy, r, color)` · `ring(cx, cy, r, thickness, color)`
 - `triangle(x0,y0, x1,y1, x2,y2, color)` · `fill_triangle(...)` · `ellipse(cx, cy, rx, ry, color)` · `fill_ellipse(...)`

@@ -312,11 +312,22 @@ Templates in `templates/` (pull when the workflow says): `design-brief.md` — f
    layering rules.
 7. **Build in the simulator** (start from `templates/starter_game.py`): core loop on screen FIRST,
    confirm with a screenshot, then add rules.
+   **Starting from a shipped example instead?** (`demos/`, `games/`, a tutorial step — the usual way a
+   jam starts.) **Copy it to a new file named for YOUR game and work there; never edit the example in
+   place.** The user's starting point has to stay runnable so they can diff against it and fall back to
+   it, and an example is also the reference other games are read against. If you do need a snapshot,
+   put it next to the game (`my_game.py.orig`), never in `/tmp` — the user has to find it without you.
    ```sh
    python3 sim/run.py examples/my_game.py --frames 80 --hold RIGHT,A --shot /tmp/shot.png  # headless
+   # a BUTTON-driven feature: script the press instead of reasoning about it (FRAME:BTN[:HELD])
+   python3 sim/run.py examples/my_game.py --keys "5:RIGHT,25:B:3" --shot-at 30 --shot /tmp/jump.png
    # live window FOR THE USER to actually play (don't run it yourself — you won't see it):
    python3 sim/run.py examples/my_game.py --backend pygame
    ```
+   `--hold` presses for the whole run (movement); `--keys` is a timeline, so a *tap* (what
+   `just_pressed` reads: shoot, jump, confirm) is testable — `40:X:2` taps X for 2 frames at frame 40.
+   Shoot at a screenshot a few frames later and you can SEE whether the feature fired. Never report a
+   button-driven feature as verified from a run that never pressed the button.
 8. **Feel & fairness pass** (§1.3–1.5, 1.7): add the juice (sound + flash + a little shake), then make
    it fair (telegraphing, generosity frames, instant restart), then the retention touch (score/peak-end).
 9. **Validate against the quality bar** (below) in the simulator.
@@ -335,7 +346,11 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
    allocations and heap fragmentation a short run hides (`engine-capabilities.md §5`).
 2. It **reads at a glance** in the PNG — *name* the player's shape+colour and each threat's from the
    shot alone; if you can't tell them apart by **shape AND colour** (not colour alone), it fails. HUD legible.
-3. It controls cleanly on **D-pad + A/B**; nothing needs a manual. Drive the `--hold` edge cases:
+   This applies to **every object you just added**, not only the player: find it in the shot and check
+   it stands out from *the background it actually sits on*. "Present in the frame" is not the bar —
+   a blue thing on a blue sky renders perfectly and is invisible, and the user will notice before you do.
+3. It controls cleanly on **D-pad + A/B**; nothing needs a manual. Every action bound to a button was
+   actually fired once via `--keys` (a tap), not only reasoned about. Drive the `--hold` edge cases:
    hold-fire 300 f (pool must not exhaust), idle (title must not crash), `LEFT,RIGHT` (no NaN/escape),
    A on frame 1.
 4. Clean **game flow** — title/play/game-over with **instant restart**. Prove it with a 3-shot
