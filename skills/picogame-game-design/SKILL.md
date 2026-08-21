@@ -304,9 +304,16 @@ Templates in `templates/` (pull when the workflow says): `design-brief.md` — f
 4. **Choose engine blocks** → `engine-capabilities.md`: Sprite (+ `picogame_pool` for many), Tilemap
    for boards, StripDraw for full-frame effects, Canvas for rarely-changing panels, `set_view` camera,
    `picogame_ui` HUD. For a specific mechanic (AI, parallax, procedural, ghosts) → `techniques.md`.
-   For a scrolling **tile-based world**, paint the map in the **scene editor** (`editor/`) and load the
-   exported `scene.json` instead of hand-coding the Tilemap; ASCII-string levels (`techniques.md`)
-   suit small single-screen puzzles.
+   **Level geometry is DATA — never prose.** The moment a request describes tiles in words ("a ceiling
+   just below the HUD", "a wall three quarters of the way up"), stop translating it into coordinates in
+   your head: put the map in an **ASCII grid** and show it. `picogame_scene` levels take
+   `"legend": {".": 0, "#": 1}` + `"rows": ["....", "####"]` as a first-class alternative to the
+   editor's int grid (identical after baking) and `techniques.md §8` does the same for a plain Tilemap.
+   Then the geometry is visible to both of you: the user answers "that column, not that one" instead of
+   re-describing, and the diff of a level change is a picture. For a big scrolling world the user can
+   paint it in the **scene editor** (`editor/`) and hand you the exported `scene.json` — but the editor
+   exports the int-grid form and cannot re-open an edited scene, so don't promise a round trip: agree up
+   front who owns the file (see `techniques.md §8`).
 5. **Plan assets cheap** (§1.10): generated shapes first.
 6. **Structure the loop + state flow** (§1.6): set the state machine and the per-frame loop before
    layering rules.

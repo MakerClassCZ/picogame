@@ -324,9 +324,22 @@ pixels. `picogame_anim.FrameAnim` is the smoother dt-driven version.
 
 ## 8. Level authoring
 
-**ASCII-art level strings for puzzles.** Store Sokoban/Boulder-style levels as a Python list of strings
-(`#`=wall, `$`=box, `.`=goal, `@`=player…); a tiny loader walks the string into a `Tilemap` once at
-load. Human-readable, diffable, hand-editable — far better than a byte blob; bake to `.mpy` to ship.
+**ASCII-art level strings — the default for any map a human and an agent both touch.** Store the level
+as a list of strings (`#`=wall, `$`=box, `.`=goal, `@`=player…); a tiny loader walks it into a `Tilemap`
+once at load. Human-readable, diffable, hand-editable — far better than a byte blob; bake to `.mpy` to
+ship. It started as the Sokoban/Boulder idiom but the reason is general: **geometry you can SEE is
+geometry you can agree on.** A prose request ("put a ceiling below the HUD, a wall three quarters up")
+becomes a picture you paste back for confirmation, and "one tile too far left" is then obvious instead
+of argued. The declarative scene format accepts the same thing natively — a tilemap layer takes
+`"legend": {char: tile}` + `"rows": [str, …]` instead of `"grid": [[int…]…]`, and `tools/scene_build.py`
+bakes both to the identical `bytes` — so ASCII is not a lesser path, it is the *authoring* path.
+
+**Who owns the level file (agent vs the editor).** The web editor exports the int-`grid` form and can
+only re-open its own `.pgproj.json`, so there is **no round trip through an exported `scene.json`**
+today: if you edit an exported scene and the user then re-exports from the editor, your edits are gone
+(and vice versa). Settle it before either side starts: either the user paints the whole level in the
+editor and you only write game logic, or you own the level as ASCII rows and the user reviews it in the
+diff. Say which one you assumed. Full schema: `SCENE_FORMAT.md` (published at `/scene-format/`).
 
 **Difficulty is data + one ramp formula, not branching code.** Keep tuning numbers in module-level
 tuples indexed by level (lines-to-advance, fruit/scatter/frighten timers), and ramp continuous
