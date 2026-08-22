@@ -153,15 +153,22 @@ def bake_tilemap(layer):
                     if orient is None:
                         orient = bytearray(cols * nrows)
                     orient[ry * cols + cx] = v >> 8
-    else:                                     # rows of chars + a legend
+    else:                                     # rows of chars + a legend (the ASCII form)
+        # Same cell semantics as the grid above, so the two forms bake byte-identically: a
+        # legend value may carry orientation in bits 8-10, which becomes the parallel plane.
         legend = layer["legend"]
         rows = layer["rows"]
-        cols = len(rows[0])
+        cols = len(rows[0]) if rows else 0
         nrows = len(rows)
         grid = bytearray(cols * nrows)
         for ry, row in enumerate(rows):
             for cx in range(cols):
-                grid[ry * cols + cx] = legend.get(row[cx], 0) if cx < len(row) else 0
+                v = legend.get(row[cx], 0) if cx < len(row) else 0
+                grid[ry * cols + cx] = v & 0xFF
+                if v >> 8:
+                    if orient is None:
+                        orient = bytearray(cols * nrows)
+                    orient[ry * cols + cx] = v >> 8
     ox, oy = layer.get("pos", [0, 0])
     out = ("tilemap", layer["asset"], cols, nrows, ox, oy, bytes(grid))
     if orient is not None:
@@ -345,11 +352,22 @@ def validate(scene):
                     if len(row) != cols0:
                         errs.append("%s.rows[%d]: row length %d != %d (row 0) - grid not rectangular"
                                     % (p, ry, len(row), cols0))
-                if f is not None:
-                    for ch, v in (layer.get("legend") or {}).items():
-                        if v >= f:
-                            errs.append("%s.legend[%r]: tile index %d >= tileset frames (%d)"
-                                        % (p, ch, v, f))
+                legend = layer.get("legend") or {}
+                for ch, v in legend.items():
+                    t, o = v & 0xFF, v >> 8
+                    if o > 7:
+                        errs.append("%s.legend[%r]: bad orientation bits %d (value %d; bits 8-10 only)"
+                                    % (p, ch, o, v))
+                    if f is not None and t >= f:
+                        errs.append("%s.legend[%r]: tile index %d >= tileset frames (%d)"
+                                    % (p, ch, t, f))
+                # A char the legend doesn't define bakes as empty, which turns a typo into a
+                # silent hole in the level - the one failure mode of hand-edited ASCII maps.
+                # '.' and ' ' are the conventional empties, so they need no entry.
+                unknown = sorted({ch for row in rows for ch in row} - set(legend) - {".", " "})
+                if unknown:
+                    errs.append("%s.rows: character(s) %s are not in the legend (they would bake "
+                                "as empty)" % (p, ", ".join(repr(c) for c in unknown)))
 
     if "levels" in scene:
         for li, lv in enumerate(scene["levels"]):
