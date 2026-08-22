@@ -356,10 +356,18 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
    This applies to **every object you just added**, not only the player: find it in the shot and check
    it stands out from *the background it actually sits on*. "Present in the frame" is not the bar —
    a blue thing on a blue sky renders perfectly and is invisible, and the user will notice before you do.
-3. It controls cleanly on **D-pad + A/B**; nothing needs a manual. Every action bound to a button was
-   actually fired once via `--keys` (a tap), not only reasoned about. Drive the `--hold` edge cases:
-   hold-fire 300 f (pool must not exhaust), idle (title must not crash), `LEFT,RIGHT` (no NaN/escape),
-   A on frame 1.
+3. It controls cleanly on **D-pad + A/B**; nothing needs a manual. Keep a **control manifest** — one
+   row per button, what it does in each state, and what is deliberately unbound — and make it the
+   input test plan: **every row gets fired via `--keys` and a screenshot**, so input coverage is
+   systematic instead of "the ones I thought of". The unbound rows matter as much: they are where the
+   next feature goes, and stating them stops the "A and X do nothing, or was it X and Y?" fumbling.
+   ```
+   btn   title      play              over     | UP/DOWN  -  aim      -     (unbound: A, Y)
+   A     start      -                 restart  | LEFT/RGT move       move
+   B     -          jump              -        | X        -  shoot   -
+   ```
+   Then drive the `--hold` edge cases: hold-fire 300 f (pool must not exhaust), idle (title must not
+   crash), `LEFT,RIGHT` (no NaN/escape), A on frame 1.
 4. Clean **game flow** — title/play/game-over with **instant restart**. Prove it with a 3-shot
    sequence (`--shot` title → `--hold A` play → `--shot-at <death>` game-over) showing *distinct*
    states — execution evidence, not just code that compiles.
@@ -384,6 +392,18 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
   curious**, not **scoring**, and "instant restart / 1–3 min run" as a session shape that fits the
   genre, not a literal arcade timer. Don't warp a deckbuilder toward twitch pacing to satisfy the bar.)*
 - At least one **juice** touch lands and **difficulty feels fair** (telegraphing + a generosity mechanic).
+
+**Hand these over as five questions, not as "is it fun?"** — an open ask gets "it's fine", which tells
+you nothing and leaves you guessing. Each question targets a bar item above, so the answer is
+actionable:
+1. What did you try FIRST, without being told? *(legibility — §1.1)*
+2. Where did you die, and did it feel like your fault? *(fairness — §1.4)*
+3. What did you stop noticing after a while? *(dead or over-used feedback — §1.3)*
+4. Did you want another go, and why? *(the hook — §1.5)*
+5. One thing you'd change?
+
+Report what came back verbatim before acting on it, and change ONE thing per round — with five
+answers in hand it's tempting to fix everything at once and lose track of which change did what.
 
 **The fun-proxy** (the strongest machine-checkable stand-in until a human plays — verify ALL five
 and report them as the proxy, never as "fun confirmed"): (1) legible in ≤10 s from a screenshot,
