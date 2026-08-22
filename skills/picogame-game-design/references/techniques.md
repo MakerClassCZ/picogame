@@ -202,6 +202,26 @@ body half-size, and jump state; a generic version needs so many callbacks it end
 inline code (and a one-function `_collide` revival is exactly that shallow-module trap). Extract a shared
 resolver only when a *second* platformer repeats the pattern.
 
+**A stepped mover that stops on contact must keep its LAST FREE position — and that is where anything
+it spawns goes.** Cheap to write, easy to forget, and the bug it causes reads as a physics failure
+rather than a placement one: the impact effect, the decal, the placed block, the teleport exit, the
+dropped item ends up *inside* the tile that stopped the mover, so whatever appears there next is
+embedded in geometry and falls through the world. You don't need a ray for this — a projectile that
+visibly flies is already stepping, so the previous step IS the flush contact point:
+
+```python
+while alive:
+    last = (x, y)                 # known-free
+    x += vx; y += vy
+    if tf.at_px(tm, x, y, tiles.B_SOLID):
+        spawn_at(*last)           # NOT (x, y) - that cell is the wall
+        break
+```
+
+(A ray march through the tiles is only needed for an *instant* hit — a zero-flight-time laser or a
+line-of-sight test. Note `pg.raycast` is NOT that function: it is the first-person renderer's
+per-screen-column DDA, with fixed-point ray params, wall-colour tables and buffer outputs.)
+
 **Grid-locked movement needs no collision math.** Tile-to-tile movement makes "can I move?" a single
 `Tilemap` lookup — no continuous collision at all (Pac-Man/Sokoban/Train). Combine with turn buffering
 (§3).
