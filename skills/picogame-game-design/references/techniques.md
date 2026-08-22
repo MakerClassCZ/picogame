@@ -334,12 +334,13 @@ of argued. The declarative scene format accepts the same thing natively — a ti
 `"legend": {char: tile}` + `"rows": [str, …]` instead of `"grid": [[int…]…]`, and `tools/scene_build.py`
 bakes both to the identical `bytes` — so ASCII is not a lesser path, it is the *authoring* path.
 
-**Who owns the level file (agent vs the editor).** The web editor exports the int-`grid` form and can
-only re-open its own `.pgproj.json`, so there is **no round trip through an exported `scene.json`**
-today: if you edit an exported scene and the user then re-exports from the editor, your edits are gone
-(and vice versa). Settle it before either side starts: either the user paints the whole level in the
-editor and you only write game logic, or you own the level as ASCII rows and the user reviews it in the
-diff. Say which one you assumed. Full schema: `SCENE_FORMAT.md` (published at `/scene-format/`).
+**Who owns the level file (agent vs the editor).** The web editor round-trips an authoring
+`scene.json`: it can export the ASCII form and **open an exported scene back**, so a level can pass
+between you and the user — you do the bulk/systematic passes, they draw and polish. It is turn-taking,
+NOT merging: whoever edits second wins, so say which of you is holding the file. Two practical notes —
+the editor resolves art by filename from the folder it saves into, so keep the level's PNGs beside it;
+and a scene has no level name of its own (the file name becomes it). Full schema: `SCENE_FORMAT.md`
+(published at `/scene-format/`).
 
 **Difficulty is data + one ramp formula, not branching code.** Keep tuning numbers in module-level
 tuples indexed by level (lines-to-advance, fruit/scatter/frighten timers), and ramp continuous

@@ -311,9 +311,9 @@ Templates in `templates/` (pull when the workflow says): `design-brief.md` — f
    editor's int grid (identical after baking) and `techniques.md §8` does the same for a plain Tilemap.
    Then the geometry is visible to both of you: the user answers "that column, not that one" instead of
    re-describing, and the diff of a level change is a picture. For a big scrolling world the user can
-   paint it in the **scene editor** (`editor/`) and hand you the exported `scene.json` — but the editor
-   exports the int-grid form and cannot re-open an edited scene, so don't promise a round trip: agree up
-   front who owns the file (see `techniques.md §8`).
+   paint it in the **scene editor** (`editor/`) and hand you the exported `scene.json` — which the editor
+   can also re-open, so a level can go back and forth. It is turn-taking, not merging: say who is
+   holding the file (see `techniques.md §8`).
 5. **Plan assets cheap** (§1.10): generated shapes first.
 6. **Structure the loop + state flow** (§1.6): set the state machine and the per-frame loop before
    layering rules.
