@@ -4,7 +4,8 @@
 # Loading is one-time (not a hot path), so Python is the right place for it.
 #
 #   import picogame_scene as pgs, world1_scene, terminalio
-#   view = pgs.load(pg, world1_scene.SCENE, font=terminalio.FONT)
+#   view = pgs.load(pg, world1_scene.SCENE)              # hudlabels use terminalio.FONT
+#   view = pgs.load(pg, world1_scene.SCENE, font=my_extrafont)   # ... or your own
 #   player = view.named["player"];  enemies = view.group("enemies")
 #   if view.is_solid(tx, ty): ...                      # tile-property query
 #   view.scene.set_view(ox, 0); view.scene.refresh()
@@ -226,6 +227,13 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
         elif kind == "hudlabel":
             _, name, x, y, fg, bg = layer
             import picogame_ui as ui
+            if font is None:
+                # A hudlabel layer needs a font and CircuitPython always ships one, so default to
+                # it here (as picogame_debug/picogame_cutscene do) rather than handing None to
+                # SceneLabel - which failed deep in picogame_font on get_bounding_box, naming
+                # neither the font nor the scene. font= stays for a custom/ExtraFont.
+                import terminalio
+                font = terminalio.FONT
             hl = ui.SceneLabel(v.scene, pg, font, x, y, fg, bg)
             if name:
                 v.named[name] = hl
