@@ -337,7 +337,10 @@ bakes both to the identical `bytes` — so ASCII is not a lesser path, it is the
 **Who owns the level file (agent vs the editor).** The web editor round-trips an authoring
 `scene.json`: it can export the ASCII form and **open an exported scene back**, so a level can pass
 between you and the user — you do the bulk/systematic passes, they draw and polish. It is turn-taking,
-NOT merging: whoever edits second wins, so say which of you is holding the file. Two practical notes —
+NOT merging by itself — but if the level is in git, **git merges it**: in the ASCII form one map row
+is one line, so your ceiling (top rows) and their floor (bottom rows) merge with no conflict, and only
+edits to the SAME row collide (git then leaves both versions as two readable map rows). So: commit the
+level before a bulk pass, and say which of you is holding the file. Two practical notes —
 the editor resolves art by filename from the folder it saves into, so keep the level's PNGs beside it;
 and a scene has no level name of its own (the file name becomes it). Full schema: `SCENE_FORMAT.md`
 (published at `/scene-format/`).
