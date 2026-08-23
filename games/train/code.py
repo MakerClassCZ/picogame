@@ -139,7 +139,7 @@ def init_level(lev):
     for y in range(MAPH):
         for x in range(MAPW):
             t = L.LEVELS[base + x + y * MAPW]
-            tm.tile(x, y, t)
+            tm.set_tile(x, y, t)
             if LOCOMIN <= t <= LOCOMAX:
                 st.head_x, st.head_y = x, y
             elif t == GATE:
@@ -155,7 +155,8 @@ def init_level(lev):
 
 
 def step():
-    tile = tm.tile                                  # cache method + trail/width as locals (hot path)
+    get_tile = tm.get_tile                          # cache methods + trail/width as locals (hot path)
+    set_tile = tm.set_tile
     _D = Dir
     _mw = MAPW
     x, y, d = st.head_x, st.head_y, st.cur_dir
@@ -172,9 +173,9 @@ def step():
     if x < 0 or x >= _mw or y < 0 or y >= MAPH:
         b = WALL
     else:
-        b = tile(x, y)
+        b = get_tile(x, y)
     if not (b == EMPTY or (GATEMIN < b <= GATEMAX) or (ITEMMIN <= b <= ITEMMAX)):
-        tile(st.head_x, st.head_y, CRASH)
+        set_tile(st.head_x, st.head_y, CRASH)
         sfx(SFX_CRASH)
         st.state = CRASH_ST
         st.crash_t = CRASH_DUR
@@ -182,7 +183,7 @@ def step():
 
     # advance the locomotive, record the trail direction
     xold, yold = st.head_x, st.head_y
-    tile(x, y, LOCO[d])
+    set_tile(x, y, LOCO[d])
     _D[x + y * _mw] = d
     st.head_x, st.head_y = x, y
 
@@ -198,10 +199,10 @@ def step():
             wx -= 1
         else:
             wy -= 1
-        w = tile(wx, wy)
+        w = get_tile(wx, wy)
         while w >= WAGONMIN + TILE_ROW:             # strip animation phase -> base frame
             w -= TILE_ROW
-        tile(xold, yold, w + WOFF[dd])
+        set_tile(xold, yold, w + WOFF[dd])
         xold, yold = wx, wy
 
     if ITEMMIN <= b <= ITEMMAX:                     # collected an item -> grow + new wagon
@@ -209,15 +210,15 @@ def step():
         w = b + WAGONMIN
         while w >= WAGONMIN + TILE_ROW:
             w -= TILE_ROW
-        tile(xold, yold, w + WOFF[_D[xold + yold * _mw]])
+        set_tile(xold, yold, w + WOFF[_D[xold + yold * _mw]])
         st.items -= 1
         if st.items == 0:
-            tile(st.gate_x, st.gate_y, GATEMIN + 1)  # all collected -> open the gate
+            set_tile(st.gate_x, st.gate_y, GATEMIN + 1)  # all collected -> open the gate
         st.score += 10
         show_info()
         sfx(SFX_COIN)
     else:
-        tile(xold, yold, EMPTY)                     # nothing collected -> vacate the tail end
+        set_tile(xold, yold, EMPTY)                     # nothing collected -> vacate the tail end
         sfx(SFX_STEP)                               # train chug each move
 
     if st.head_x == st.gate_x and st.head_y == st.gate_y:   # reached the (open) gate
@@ -229,20 +230,21 @@ def step():
 def anim_level():
     # Cycle the animation of every item, the locomotive and the opening gate; the train
     # itself only STEPS once every PHASES ticks (~2/s) - that slower rate is the original's.
-    tile = tm.tile                                  # cache the method (240 cells x2 calls per tick)
+    get_tile = tm.get_tile                          # cache the methods (240 cells x2 calls per tick)
+    set_tile = tm.set_tile
     for y in range(MAPH):
         for x in range(MAPW):
-            b = tile(x, y)
+            b = get_tile(x, y)
             if ITEMMIN <= b <= ITEMMAX:             # items: 3-frame loop (tile rows 0-2)
                 while b >= ITEMMIN + TILE_ROW:
                     b -= TILE_ROW
-                tile(x, y, b + st.phase * TILE_ROW)
+                set_tile(x, y, b + st.phase * TILE_ROW)
             elif LOCOMIN <= b <= LOCOMAX:           # locomotive: 3 frames per direction
                 while b >= LOCOMIN + 4:
                     b -= 4
-                tile(x, y, b + st.phase * 4)
+                set_tile(x, y, b + st.phase * 4)
             elif GATEMIN < b < GATEMAX:             # gate swinging open
-                tile(x, y, b + 1)
+                set_tile(x, y, b + 1)
     st.phase += 1
     if st.phase >= PHASES:                          # every 3rd tick: take one train step
         st.phase = 0
@@ -365,7 +367,7 @@ def main():
                     st.crash_t -= dt
                     # step the explosion 160..169 across the crash duration
                     f = CRASH + int((CRASH_DUR - st.crash_t) / CRASH_DUR * (CRASHMAX - CRASH + 1))
-                    tm.tile(st.head_x, st.head_y, f if f < CRASHMAX else CRASHMAX)
+                    tm.set_tile(st.head_x, st.head_y, f if f < CRASHMAX else CRASHMAX)
                     if st.crash_t <= 0:
                         init_level(st.level)            # restart the scene
                 elif st.state == FINISH:

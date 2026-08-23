@@ -67,7 +67,7 @@ hero_x, hero_y = TILE, TILE
 for tile_y in range(MAPROWS):
     for tile_x in range(MAPCOLS):
         char = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
-        world.tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))
+        world.set_tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))
         if char == "P":
             hero_x, hero_y = tile_x * TILE, tile_y * TILE
 scene.add(world)

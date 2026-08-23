@@ -471,11 +471,14 @@ class Tilemap:
     def rows(self):
         return self.map_h
 
-    def tile(self, tx, ty, value=None, *, flip_x=False, flip_y=False, transpose=False):
+    def get_tile(self, tx, ty):
         if tx < 0 or tx >= self.map_w or ty < 0 or ty >= self.map_h:
             return 0
-        if value is None:
-            return self.grid[ty * self.map_w + tx]
+        return self.grid[ty * self.map_w + tx]
+
+    def set_tile(self, tx, ty, value, *, flip_x=False, flip_y=False, transpose=False):
+        if tx < 0 or tx >= self.map_w or ty < 0 or ty >= self.map_h:
+            return None
         off = ty * self.map_w + tx
         self.grid[off] = value
         o = (1 if flip_x else 0) | (2 if flip_y else 0) | (4 if transpose else 0)

@@ -96,10 +96,10 @@ def fill_pellets():
         for tx in range(COLS):
             ch = MAZE[ty][tx]
             if ch == ".":
-                maze.tile(tx, ty, PELLET)
+                maze.set_tile(tx, ty, PELLET)
                 n += 1
             elif ch == "o":
-                maze.tile(tx, ty, POWER)
+                maze.set_tile(tx, ty, POWER)
                 n += 1
     return n
 
@@ -109,9 +109,9 @@ for ty in range(ROWS):
     for tx in range(COLS):
         ch = MAZE[ty][tx]
         if ch == "#":
-            maze.tile(tx, ty, WALL)
+            maze.set_tile(tx, ty, WALL)
         elif ch not in (".", "o"):
-            maze.tile(tx, ty, EMPTY)
+            maze.set_tile(tx, ty, EMPTY)
         if ch == "P":
             pac_start = (tx, ty)
         elif ch == "G":
@@ -165,7 +165,7 @@ st = State()
 def tile_is_wall(tx, ty):
     if tx < 0 or tx >= COLS or ty < 0 or ty >= ROWS:
         return True
-    return maze.tile(tx, ty) == WALL
+    return maze.get_tile(tx, ty) == WALL
 
 
 def reset_positions():
@@ -258,14 +258,14 @@ def main():
             if d != (0, 0) and tile_is_wall(tx + d[0], ty + d[1]):
                 st.pac_dir = (0, 0)
             # eat
-            cell = maze.tile(tx, ty)
+            cell = maze.get_tile(tx, ty)
             if cell == PELLET:
-                maze.tile(tx, ty, EMPTY)
+                maze.set_tile(tx, ty, EMPTY)
                 st.score += 10
                 st.pellets_left -= 1
                 kit.blip()                 # chomp
             elif cell == POWER:
-                maze.tile(tx, ty, EMPTY)
+                maze.set_tile(tx, ty, EMPTY)
                 st.score += 50
                 st.fright = FRIGHT_FRAMES
                 st.pellets_left -= 1

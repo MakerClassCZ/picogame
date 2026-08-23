@@ -229,7 +229,7 @@ per-screen-column DDA, with fixed-point ray params, wall-colour tables and buffe
 **Destructible terrain via tile/canvas erosion — pixel readback does NOT port.** Other engines
 destroy the Invaders bunkers by reading framebuffer pixels under the shot; picogame's retained
 renderer has **no mid-frame readable framebuffer**, so you can't do that. *picogame substitute:*
-model destructible cover as a `Tilemap` of small chunks you clear on hit (`tm.tile(tx,ty,0)`), or a
+model destructible cover as a `Tilemap` of small chunks you clear on hit (`tm.set_tile(tx,ty,0)`), or a
 `Canvas` you draw into and re-blit. Reach for erosion, never for pixel readback.
 
 **Self-fired projectiles: spawn at the muzzle, arm after clearing the shooter.** A shell/bullet born at
@@ -334,7 +334,7 @@ on sparse maps (index 0 = transparent).
 
 **Animate by a shared phase counter / tile swap.** Choose frames with a free-running counter masked
 per entity (`(anim >> shift) & mask`) for zero-allocation animation of many sprites; or animate a
-waterfall/coin by pointing the map cell at the next tile (`tm.tile(tx,ty,next)`) rather than redrawing
+waterfall/coin by pointing the map cell at the next tile (`tm.set_tile(tx,ty,next)`) rather than redrawing
 pixels. `picogame_anim.FrameAnim` is the smoother dt-driven version.
 
 **Mosaic / pixelate transition.** Render small into a low-res Bitmap then blit with `sprite.scale = N`

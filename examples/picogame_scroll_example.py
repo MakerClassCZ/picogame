@@ -34,11 +34,11 @@ world.fill(0)                          # grass everywhere
 # a few features: a water lake, dirt paths, scattered patches
 for ty in range(8, 14):
     for tx in range(5, 12):
-        world.tile(tx, ty, 2)          # lake
+        world.set_tile(tx, ty, 2)          # lake
 for tx in range(MAP_W):
-    world.tile(tx, 15, 3)              # horizontal path
+    world.set_tile(tx, 15, 3)              # horizontal path
 for ty in range(MAP_H):
-    world.tile(20, ty, 1)              # vertical dirt road
+    world.set_tile(20, ty, 1)              # vertical dirt road
 
 
 player = pg.Sprite(shapes.circle(16, pg.rgb565(240, 220, 80)), WORLD_W // 2, WORLD_H // 2)

@@ -53,11 +53,11 @@ MAP_W, MAP_H = W // TILE, H // TILE   # 20 x 15 -> fills the screen
 bg = pg.Tilemap(tileset, MAP_W, MAP_H)
 bg.fill(1)
 for ty in range(MAP_H):
-    bg.tile(0, ty, 2)
-    bg.tile(MAP_W - 1, ty, 2)
+    bg.set_tile(0, ty, 2)
+    bg.set_tile(MAP_W - 1, ty, 2)
 for tx in range(MAP_W):
-    bg.tile(tx, 0, 2)
-    bg.tile(tx, MAP_H - 1, 2)
+    bg.set_tile(tx, 0, 2)
+    bg.set_tile(tx, MAP_H - 1, 2)
 
 hero = pg.Sprite(hero_bmp, 150, 110)
 scene.add(bg)      # bottom layer
@@ -76,7 +76,7 @@ while True:
                   max(0, min(H - HERO, hero.y + dy * SPEED)))
 
     if btns.just_pressed(btns.B):
-        bg.tile((hero.x + HERO // 2) // TILE, (hero.y + HERO // 2) // TILE, 3)
+        bg.set_tile((hero.x + HERO // 2) // TILE, (hero.y + HERO // 2) // TILE, 3)
 
     scene.refresh()
     clock.tick()

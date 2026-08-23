@@ -38,7 +38,7 @@ def build_wall():
     global bricks_left
     for tile_y in range(ROWS):
         for tile_x in range(COLS):
-            bricks.tile(tile_x, tile_y, 1 + (tile_y % 4))    # row -> colour 1..4
+            bricks.set_tile(tile_x, tile_y, 1 + (tile_y % 4))    # row -> colour 1..4
     bricks_left = COLS * ROWS
 
 
@@ -84,8 +84,8 @@ while True:
     center_x, center_y = ball.x + BALL // 2, ball.y + BALL // 2
     tile_x = center_x // BRICK_W
     tile_y = (center_y - BRICK_Y) // BRICK_H
-    if 0 <= tile_x < COLS and 0 <= tile_y < ROWS and bricks.tile(tile_x, tile_y):
-        bricks.tile(tile_x, tile_y, 0)               # clear the brick
+    if 0 <= tile_x < COLS and 0 <= tile_y < ROWS and bricks.get_tile(tile_x, tile_y):
+        bricks.set_tile(tile_x, tile_y, 0)               # clear the brick
         bricks_left -= 1
         velocity_y = -velocity_y
         if bricks_left == 0:                 # cleared the wall -> rebuild

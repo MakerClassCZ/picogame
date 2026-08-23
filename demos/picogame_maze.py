@@ -108,7 +108,7 @@ def reveal(cx, cy):
         for x in range(max(0, cx - 2), min(COLS, cx + 3)):
             if not seen[y * COLS + x]:
                 seen[y * COLS + x] = 1
-                tm.tile(x, y, maze[y * COLS + x])
+                tm.set_tile(x, y, maze[y * COLS + x])
 
 
 def new_level():
@@ -118,7 +118,7 @@ def new_level():
     st.px, st.py = 1, 1
     st.reveal_door = 0
     reveal(st.px, st.py)
-    tm.tile(st.px, st.py, PLAYER)
+    tm.set_tile(st.px, st.py, PLAYER)
 
 
 new_level()
@@ -143,7 +143,7 @@ def main():
             ny += 1 if ddy > 0 else -1
 
         if (nx != st.px or ny != st.py) and 0 <= nx < COLS and 0 <= ny < ROWS and maze[ny * COLS + nx] != WALL:
-            tm.tile(st.px, st.py, maze[st.py * COLS + st.px])   # restore the tile we leave (floor/door)
+            tm.set_tile(st.px, st.py, maze[st.py * COLS + st.px])   # restore the tile we leave (floor/door)
             st.px, st.py = nx, ny
             if st.px == st.dx and st.py == st.dy:     # reached the exit -> next level
                 st.level += 1
@@ -153,7 +153,7 @@ def main():
                 new_level()
             else:
                 reveal(st.px, st.py)
-                tm.tile(st.px, st.py, PLAYER)
+                tm.set_tile(st.px, st.py, PLAYER)
 
         # A = flash the hidden door location as a hint, then restore it
         if btn.just_pressed(btn.A):
@@ -162,9 +162,9 @@ def main():
         if st.reveal_door > 0:
             st.reveal_door -= 1
             if st.reveal_door == 0:
-                tm.tile(st.dx, st.dy, DOOR if seen[st.dy * COLS + st.dx] else HIDDEN)   # restore
+                tm.set_tile(st.dx, st.dy, DOOR if seen[st.dy * COLS + st.dx] else HIDDEN)   # restore
             else:
-                tm.tile(st.dx, st.dy, DOOR if (st.reveal_door // 4) % 2 else HIDDEN)   # blink
+                tm.set_tile(st.dx, st.dy, DOOR if (st.reveal_door // 4) % 2 else HIDDEN)   # blink
 
         kit.tick()
         scene.refresh()

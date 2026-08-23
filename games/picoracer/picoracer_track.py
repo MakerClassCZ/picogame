@@ -25,6 +25,6 @@ def build(pg, tileset):
         for x in range(COLS):
             v = CELLS[y * COLS + x]
             if v & 0x0f:
-                tm.tile(x, y, v & 0x0f, flip_x=bool(v & 0x10),
+                tm.set_tile(x, y, v & 0x0f, flip_x=bool(v & 0x10),
                         flip_y=bool(v & 0x20), transpose=bool(v & 0x40))
     return tm

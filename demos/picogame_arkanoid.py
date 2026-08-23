@@ -41,7 +41,7 @@ def fill_wall():
     """(Re)fill the brick wall; return the brick count."""
     for ty in range(ROWS):
         for tx in range(COLS):
-            bricks.tile(tx, ty, 1 + (ty % 4))
+            bricks.set_tile(tx, ty, 1 + (ty % 4))
     return COLS * ROWS
 
 
@@ -105,9 +105,9 @@ while True:
     tx = int((bx + BALL / 2) // BW)
     ty = int((by + BALL / 2 - BRICK_Y) // BH)
     if 0 <= tx < COLS and 0 <= ty < ROWS:
-        cell = bricks.tile(tx, ty)
+        cell = bricks.get_tile(tx, ty)
         if cell:
-            bricks.tile(tx, ty, 0)
+            bricks.set_tile(tx, ty, 0)
             bricks_left -= 1
             score += 10
             vy = -vy

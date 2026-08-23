@@ -98,7 +98,7 @@ for ty in range(MROWS):
     for tx in range(MCOLS):
         ch = OVER[ty][tx]
         v = {"#": TREE, "~": WATER, ":": PATH}.get(ch, GRASS)
-        world.tile(tx, ty, v)
+        world.set_tile(tx, ty, v)
         if ch == "N":
             npc_tile = (tx, ty)
         elif ch == "P":

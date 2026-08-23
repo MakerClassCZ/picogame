@@ -75,7 +75,7 @@ coin_spots = []
 for tile_y in range(MAPROWS):
     for tile_x in range(MAPCOLS):
         char = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
-        world.tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))
+        world.set_tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))
         if char == "P":
             hero_x, hero_y = tile_x * TILE, tile_y * TILE
         elif char == "*":
@@ -220,7 +220,7 @@ def solid_at(pixel_x, pixel_y):
     tile_x, tile_y = pixel_x // TILE, pixel_y // TILE
     if tile_x < 0 or tile_x >= MAPCOLS or tile_y < 0 or tile_y >= MAPROWS:
         return True
-    return world.tile(tile_x, tile_y) in SOLID
+    return world.get_tile(tile_x, tile_y) in SOLID
 
 
 def can_walk(pixel_x, pixel_y):

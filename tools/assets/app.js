@@ -269,7 +269,7 @@
         "FORMAT = " + fmtConst + "  # 0=RGB565, 1=PAL8",
         "TRANSPARENT = " + (transparent === null ? "None" : transparent),
         "PALETTE = " + paletteRepr, "DATA = " + pyBytes(dataBytes));
-      if (remap) lines.push("REMAP = [" + remap.map(r => "(" + r.join(", ") + ")").join(", ") + "]  # per old tile: (idx, flip_x, flip_y, transpose); tm.tile(x, y, *REMAP[old])");
+      if (remap) lines.push("REMAP = [" + remap.map(r => "(" + r.join(", ") + ")").join(", ") + "]  # per old tile: (idx, flip_x, flip_y, transpose); tm.set_tile(x, y, *REMAP[old])");
       lines.push("", "", "def bitmap(pg):",
         "    return pg.Bitmap(DATA, WIDTH, HEIGHT, format=FORMAT, palette=PALETTE,",
         "                     frames=FRAMES, stride=STRIDE, transparent=TRANSPARENT)", "");

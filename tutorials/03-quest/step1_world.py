@@ -74,7 +74,7 @@ for tile_y in range(MAPROWS):
     row = MAP[tile_y]
     for tile_x in range(MAPCOLS):
         char = row[tile_x] if tile_x < len(row) else "."   # rows are full width; "." is just a safety net
-        world.tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))   # unknown chars fall back to GRASS
+        world.set_tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))   # unknown chars fall back to GRASS
         if char == "P":
             hero_x, hero_y = tile_x * TILE, tile_y * TILE
 scene.add(world)

@@ -81,7 +81,7 @@ class View:
         b = self._prop_bytes(prop)
         if b is None or self._tm is None:
             return False
-        return bool(b[self._tm[0].tile(tx, ty)])
+        return bool(b[self._tm[0].get_tile(tx, ty)])
 
 
 def _build_bitmaps(pg, assets):
@@ -184,10 +184,10 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
                 if gv:
                     o = orient[i] if orient else 0
                     if o:
-                        tm.tile(i % cols, i // cols, gv,
+                        tm.set_tile(i % cols, i // cols, gv,
                                 flip_x=bool(o & 1), flip_y=bool(o & 2), transpose=bool(o & 4))
                     else:
-                        tm.tile(i % cols, i // cols, gv)
+                        tm.set_tile(i % cols, i // cols, gv)
             v.scene.add(tm)
             if v._tm is None:                 # first (background) tilemap = primary
                 v._tm = (tm, aid, cols, rows)

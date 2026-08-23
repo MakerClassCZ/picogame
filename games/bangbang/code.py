@@ -296,9 +296,9 @@ def build_terrain():
     tm.fill(0)
     for c in range(COLS):
         sr = surf[c]
-        tm.tile(c, sr, 2)                 # grass cap
+        tm.set_tile(c, sr, 2)                 # grass cap
         for r in range(sr + 1, ROWS):
-            tm.tile(c, r, 1)              # ground below
+            tm.set_tile(c, r, 1)              # ground below
     nudge_tanks()                         # reposition tanks to fairer nearby columns (terrain untouched)
 
 
@@ -307,7 +307,7 @@ def recompute_surf(cx):
     hi = min(COLS, cx // TILE + CRATER // TILE + 3)
     for c in range(lo, hi):
         r = surf[c]                       # erosion only LOWERS the surface -> scan down from the old one
-        while r < ROWS and tm.tile(c, r) == 0:
+        while r < ROWS and tm.get_tile(c, r) == 0:
             r += 1
         surf[c] = r if r < ROWS else ROWS - 1
 
@@ -420,7 +420,7 @@ def sim_shot(t, angle, power):
             return (x, y)
         if y >= 0:
             tx, ty = int(x) // TILE, int(y) // TILE
-            if 0 <= tx < COLS and 0 <= ty < ROWS and tm.tile(tx, ty) != 0:
+            if 0 <= tx < COLS and 0 <= ty < ROWS and tm.get_tile(tx, ty) != 0:
                 return (x, y)
     return (x, y)
 
@@ -433,8 +433,8 @@ def explode(cx, cy):
         for r in range(max(0, cy // TILE - rT), min(ROWS, cy // TILE + rT + 1)):
             ddx = c * TILE + TILE / 2 - cx
             ddy = r * TILE + TILE / 2 - cy
-            if ddx * ddx + ddy * ddy <= CRATER * CRATER and tm.tile(c, r) != 0:
-                tm.tile(c, r, 0)
+            if ddx * ddx + ddy * ddy <= CRATER * CRATER and tm.get_tile(c, r) != 0:
+                tm.set_tile(c, r, 0)
     recompute_surf(cx)
     parts.emit(cx, cy, 30, 4, 16, FIRE)                      # fast bright sparks (positional - native emit takes no kwargs)
     parts.emit(cx, cy, 14, 2, 26, pg.rgb565(180, 90, 30))   # slower embers
@@ -497,7 +497,7 @@ def step_fire():
             return
     if st.pfy >= 0:                                      # terrain?
         tx, ty = int(st.pfx) // TILE, int(st.pfy) // TILE
-        if 0 <= tx < COLS and 0 <= ty < ROWS and tm.tile(tx, ty) != 0:
+        if 0 <= tx < COLS and 0 <= ty < ROWS and tm.get_tile(tx, ty) != 0:
             explode(st.pfx, st.pfy)
             end_shot()
             return

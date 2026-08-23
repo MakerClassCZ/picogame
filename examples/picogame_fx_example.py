@@ -62,7 +62,7 @@ ORIENTS = [(False, False, False), (False, False, True),    # normal, transpose(9
 for ty in range(ROWS):
     for tx in range(COLS):
         fxx, fyy, trr = ORIENTS[(tx & 1) + (ty & 1) * 2]
-        bg.tile(tx, ty, 0, flip_x=fxx, flip_y=fyy, transpose=trr)
+        bg.set_tile(tx, ty, 0, flip_x=fxx, flip_y=fyy, transpose=trr)
 scene.add(bg)
 
 # --- animated WATER band: a PAL8 bar whose palette indices 1..6 CYCLE (flowing) ---

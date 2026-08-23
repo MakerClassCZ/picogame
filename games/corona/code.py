@@ -70,7 +70,7 @@ def fill_ground():                # (re)paint the mottled tan floor from value-n
     for cy in range(GROWS):
         for cx in range(GCOLS):
             v = pg.value2d(cx * 0.22, cy * 0.22, seed=7)
-            _ground.tile(cx, cy, 1 + min(NTAN - 1, int(v * NTAN)))
+            _ground.set_tile(cx, cy, 1 + min(NTAN - 1, int(v * NTAN)))
 
 
 fill_ground()

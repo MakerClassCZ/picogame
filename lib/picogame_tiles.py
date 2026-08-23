@@ -59,10 +59,10 @@ class TileFlags:
 
     def at(self, tilemap, tx, ty, bit):
         """Flag `bit` of the tile at cell (tx, ty) of a Tilemap."""
-        return self.get(tilemap.tile(tx, ty), bit)
+        return self.get(tilemap.get_tile(tx, ty), bit)
 
     def at_px(self, tilemap, px, py, bit):
         """Flag `bit` of the tile under MAP-LOCAL pixel (px, py) - the common collision probe.
         If the map isn't at screen (0, 0), subtract its origin from px/py yourself."""
         t = self.tile_px
-        return self.get(tilemap.tile(px // t, py // t), bit)
+        return self.get(tilemap.get_tile(px // t, py // t), bit)

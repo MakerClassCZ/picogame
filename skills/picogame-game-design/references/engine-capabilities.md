@@ -270,10 +270,10 @@ scene.add(pg.StripDraw(road, 0, 0, 320, 240))          # in a SCROLLING scene, a
 **Tilemap as a board you read/write** (eat-grids, destructible terrain, puzzle wells)
 ```python
 tm = pg.Tilemap(tileset, MAP_W, MAP_H)
-if tm.tile(tx, ty) == PELLET:            # read (out-of-range reads 0)
-    tm.tile(tx, ty, 0)                   # write empty -> single-cell dirty-rect repaint
-solid = tm.tile(tx, ty) == WALL          # tile-grid collision = a plain lookup
-tm.tile(tx, ty, ROCK, flip_x=True, transpose=True)   # per-cell orientation: all 8 from one tile
+if tm.get_tile(tx, ty) == PELLET:            # read (out-of-range reads 0)
+    tm.set_tile(tx, ty, 0)                   # write empty -> single-cell dirty-rect repaint
+solid = tm.get_tile(tx, ty) == WALL          # tile-grid collision = a plain lookup
+tm.set_tile(tx, ty, ROCK, flip_x=True, transpose=True)   # per-cell orientation: all 8 from one tile
 tm.fill(0)                               # clear the whole map
 ```
 Per-cell `flip_x`/`flip_y`/`transpose` (a lazily-allocated plane — 0 RAM unless used) get all 8

@@ -94,26 +94,26 @@ def build_level():
     coins = 0
     for ty in range(ROWS):
         for tx in range(COLS):
-            level.tile(tx, ty, 0)
+            level.set_tile(tx, ty, 0)
     # ground (2 tall) with a few pits
     pits = {18, 19, 34, 35, 52}
     for tx in range(COLS):
         if tx in pits:
             continue                 # leave a gap (pit) here
-        level.tile(tx, ROWS - 1, 1)
-        level.tile(tx, ROWS - 2, 1)
+        level.set_tile(tx, ROWS - 1, 1)
+        level.set_tile(tx, ROWS - 2, 1)
     # floating platforms
     for (px, py, ln) in ((10, 9, 4), (24, 8, 3), (40, 7, 5), (58, 9, 4), (64, 6, 4)):
         for k in range(ln):
-            level.tile(px + k, py, 1)
+            level.set_tile(px + k, py, 1)
     # coins above ground/platforms
     for (cx, cy, ln) in ((11, 7, 4), (25, 6, 3), (41, 5, 5), (28, 12, 3), (60, 7, 4)):
         for k in range(ln):
-            level.tile(cx + k, cy, 2)
+            level.set_tile(cx + k, cy, 2)
             coins += 1
     # goal flag near the end
-    level.tile(COLS - 4, ROWS - 3, 3)
-    level.tile(COLS - 4, ROWS - 4, 3)
+    level.set_tile(COLS - 4, ROWS - 3, 3)
+    level.set_tile(COLS - 4, ROWS - 4, 3)
     # enemy spawn columns (on the ground)
     for tx in (14, 30, 44, 48, 63):
         enemy_spawns.append(tx)
@@ -243,7 +243,7 @@ def main():
         # coins: check the tile at the player's chest
         chest_tx, chest_ty = int(st.px) // TILE, (int(st.py) - 8) // TILE
         if 0 <= chest_tx < COLS and 0 <= chest_ty < ROWS and tf.at(level, chest_tx, chest_ty, tiles.B_COIN):
-            level.tile(chest_tx, chest_ty, 0)
+            level.set_tile(chest_tx, chest_ty, 0)
             st.coins += 1
             st.score += 100
             kit.coin()

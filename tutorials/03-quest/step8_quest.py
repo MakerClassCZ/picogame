@@ -106,7 +106,7 @@ coin_spots, enemy_spots, door_tiles = [], [], []
 for tile_y in range(MAPROWS):
     for tile_x in range(MAPCOLS):
         char = MAP[tile_y][tile_x] if tile_x < len(MAP[tile_y]) else "."
-        world.tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))
+        world.set_tile(tile_x, tile_y, CHAR2TILE.get(char, GRASS))
         if char == "P":
             START = (tile_x * TILE, tile_y * TILE)
         elif char == "N":
@@ -282,7 +282,7 @@ def solid_at(pixel_x, pixel_y):
     tile_x, tile_y = pixel_x // TILE, pixel_y // TILE
     if tile_x < 0 or tile_x >= MAPCOLS or tile_y < 0 or tile_y >= MAPROWS:
         return True
-    return world.tile(tile_x, tile_y) in SOLID
+    return world.get_tile(tile_x, tile_y) in SOLID
 
 
 def can_walk(pixel_x, pixel_y):
@@ -314,7 +314,7 @@ def dialog_lines(st):
 
 def open_door():
     for (tile_x, tile_y) in door_tiles:
-        world.tile(tile_x, tile_y, PATH)              # door -> path (no longer SOLID)
+        world.set_tile(tile_x, tile_y, PATH)              # door -> path (no longer SOLID)
     scene.invalidate()
 
 
@@ -422,7 +422,7 @@ def main():                          # loop in a function -> its names are fast 
             # the tile under the hero's centre
             center_tile_x = (hero.x + TILE // 2) // TILE
             center_tile_y = (hero.y + TILE // 2) // TILE
-            if world.tile(center_tile_x, center_tile_y) == GOAL:
+            if world.get_tile(center_tile_x, center_tile_y) == GOAL:
                 st.mode = WON
                 st.overlay_shown = False
 

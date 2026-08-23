@@ -224,7 +224,7 @@ def lock_piece():
     for ry in range(ROWS):                              # commit the locked grid (drops ghost/piece overlay)
         row = grid[ry]
         for rx in range(COLS):
-            well.tile(rx, ry, row[rx])
+            well.set_tile(rx, ry, row[rx])
     sfx(SND_LOCK)
     full = [r for r in range(ROWS) if all(grid[r])]
     if full:
@@ -275,7 +275,7 @@ def render_board():
                 v = 9                                   # ghost outline on empty cells only
             else:
                 v = row[x]
-            well.tile(x, y, v)
+            well.set_tile(x, y, v)
 
 
 spawn()
@@ -304,7 +304,7 @@ def main():
             white = (flash[1] // 3) % 2 == 1
             for r in flash[0]:
                 for c in range(COLS):
-                    well.tile(c, r, 8 if white else grid[r][c])
+                    well.set_tile(c, r, 8 if white else grid[r][c])
             if flash[1] <= 0:
                 resolve_flash()
                 changed = True

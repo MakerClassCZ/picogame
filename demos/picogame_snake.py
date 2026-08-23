@@ -48,8 +48,8 @@ hud.reserve(20)
 def place_food():
     while True:
         food_x, food_y = rng.randint(0, COLS - 1), rng.randint(0, ROWS - 1)
-        if grid.tile(food_x, food_y) == 0:
-            grid.tile(food_x, food_y, FOOD)
+        if grid.get_tile(food_x, food_y) == 0:
+            grid.set_tile(food_x, food_y, FOOD)
             return
 
 
@@ -75,7 +75,7 @@ def new_game():
     st = State(_body)
     hx, hy = COLS // 2, ROWS // 2
     st.body.append((hx, hy))
-    grid.tile(hx, hy, HEAD)
+    grid.set_tile(hx, hy, HEAD)
     place_food()
 
 
@@ -107,13 +107,13 @@ def main():
             st.direction = st.want
             hx, hy = st.body[-1]
             nx, ny = hx + st.direction[0], hy + st.direction[1]
-            cell = grid.tile(nx, ny) if 0 <= nx < COLS and 0 <= ny < ROWS else BODY
+            cell = grid.get_tile(nx, ny) if 0 <= nx < COLS and 0 <= ny < ROWS else BODY
             if cell == BODY or cell == HEAD:       # out-of-bounds already maps to BODY above
                 kit.explosion()                # crash
                 new_game()                     # -> restart
             else:
-                grid.tile(hx, hy, BODY)        # old head becomes body
-                grid.tile(nx, ny, HEAD)        # new head
+                grid.set_tile(hx, hy, BODY)        # old head becomes body
+                grid.set_tile(nx, ny, HEAD)        # new head
                 st.body.append((nx, ny))
                 if cell == FOOD:
                     st.score += 10
@@ -124,7 +124,7 @@ def main():
                     st.grow -= 1
                 elif len(st.body) > 1:
                     ox, oy = st.body.popleft() # drop the tail cell
-                    grid.tile(ox, oy, 0)
+                    grid.set_tile(ox, oy, 0)
 
         body_len = len(st.body)
         if st.score != _shown_score or body_len != _shown_len:
