@@ -12,6 +12,8 @@ PAL8 = 1
 API_LEVEL = 1                # feature-gate level, mirrors the firmware module constant
 STRIP_H = 8                  # render-strip height default, mirrors the DMA-board firmware value
 RGB444_SUPPORTED = False     # capability flag (mirrors firmware); the desktop sim renders RGB565
+FAST_DISPLAY_SUPPORTED = True   # the sim's Display wrapper mirrors the fast backend's API
+FRAMEBUFFER_SUPPORTED = False  # mirrors firmware: constant always present
 W = _host.W
 H = _host.H
 

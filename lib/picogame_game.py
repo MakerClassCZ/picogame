@@ -96,7 +96,7 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
     buf_b = bytearray(w * strip_h * 2)
     # Use the fast DMA Display where the firmware provides it; otherwise (a port without
     # the backend, e.g. ESP32) fall back to the plain busdisplay -> Scene's portable renderer.
-    if fast and hasattr(pg, "Display"):
+    if fast and getattr(pg, "FAST_DISPLAY_SUPPORTED", hasattr(pg, "Display")):
         backend = pg.Display(backend, rgb444=rgb444)
     scene = pg.Scene(backend, buf_a, buf_b, background=background,
                      top=top, bottom=bottom, left=left, right=right)

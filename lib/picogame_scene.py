@@ -152,7 +152,7 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
         w = backend.width
         v.bufA = bytearray(w * strip_h * 2)
         v.bufB = bytearray(w * strip_h * 2)
-        if hasattr(pg, "Display"):
+        if getattr(pg, "FAST_DISPLAY_SUPPORTED", hasattr(pg, "Display")):
             backend = pg.Display(backend)
         v.scene = pg.Scene(backend, v.bufA, v.bufB, background=scene["bg"])
 
