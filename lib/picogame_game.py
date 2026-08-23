@@ -173,7 +173,7 @@ def open_framebuffer(width, height, color_depth=None):
         disp = _build(width, height, color_depth)
     except MemoryError:
         if prev is None or prev == (width, height):
-            raise
+            raise MemoryError(_scanout_hint(width, height, color_depth))
         try:                                    # put the previous mode back, then report
             disp = _build(prev[0], prev[1], 16 if prev[0] * prev[1] <= 320 * 240 else 8)
         except MemoryError:
@@ -181,9 +181,23 @@ def open_framebuffer(width, height, color_depth=None):
                 "no memory for %dx%d, and %dx%d could not be restored - power-cycle the board"
                 % (width, height, prev[0], prev[1]))
         _publish(disp)
-        raise MemoryError("no memory for %dx%d (kept %dx%d)" % (width, height, prev[0], prev[1]))
+        raise MemoryError("%s (kept %dx%d)"
+                          % (_scanout_hint(width, height, color_depth), prev[0], prev[1]))
     _publish(disp)
     return disp
+
+
+def _scanout_hint(width, height, depth):
+    """Explain a failed mode switch in terms of the resource that actually ran out.
+
+    A bare MemoryError sends people to gc.mem_free(), which on a PSRAM board (Fruit Jam) cheerfully
+    reports megabytes free and even hands out a 599 kB bytearray - while the scanout buffer needs
+    CONTIGUOUS SRAM that the GC heap has already taken. Measured 2026-08-23: 640x480x8 = 307200 B
+    fails from code.py with ~8 MB of heap 'free'. The heap number is not the constraint; when it is
+    claimed is."""
+    return ("no memory for %dx%d: the scanout buffer needs %d B of CONTIGUOUS SRAM, which gc.mem_free() "
+            "does not measure (the heap may live in PSRAM). Claim the mode in boot.py, before the "
+            "heap grows into SRAM." % (width, height, width * height * (depth // 8)))
 
 
 def _publish(disp):
