@@ -102,11 +102,22 @@ def _bus():
     when the board names them) - the key exists for bare boards / non-standard wiring
     only. Explicit pins that ARE the board's own bus (e.g. Fruit Jam SDA/SCL) route to
     the shared board.I2C() singleton - audio and friends already live on it, and a
-    private busio.I2C on the same pins would fail with 'I2C peripheral in use'."""
+    private busio.I2C on the same pins would fail with 'I2C peripheral in use'.
+
+    A single token names a board BUS instead of pins: PICOGAME_I2C="I2C0" ->
+    board.I2C0() (or the object itself when it isn't callable). This is the form for
+    ports whose busio can't be built from pins (zephyr-cp: I2C comes from the device
+    tree, the buses surface as board.I2C0/I2C1 factories)."""
     import board
     spec = os.getenv("PICOGAME_I2C")
     if spec:
-        sda_name, scl_name = (p.strip() for p in str(spec).replace(",", " ").split())
+        parts = [p.strip() for p in str(spec).replace(",", " ").split() if p.strip()]
+        if len(parts) == 1:
+            bus = getattr(board, parts[0], None)
+            if bus is None:
+                raise ValueError("PICOGAME_I2C bus %r not found on this board" % parts[0])
+            return bus() if callable(bus) else bus
+        sda_name, scl_name = parts
         sda = _pi._resolve_pin(sda_name)
         scl = _pi._resolve_pin(scl_name)
         if sda is None or scl is None:
