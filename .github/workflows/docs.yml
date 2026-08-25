@@ -1,0 +1,46 @@
+# Sanity checks for a docs PR. Deliberately narrow: it runs on the docs tree alone, with no
+# dependency on the site (a separate repo) or the firmware bindings, so a contributor gets an
+# answer in seconds. The full pre-publish gate (API-name lint, EN/CZ heading structure) runs at
+# deploy time against the live tooling.
+name: docs
+
+on:
+  pull_request:
+    paths: ["docs/**"]
+  push:
+    paths: ["docs/**"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every page has a title and a description
+        run: |
+          fail=0
+          for f in docs/*.md docs/cs/*.md docs/cs/*/*.md; do
+            [ -e "$f" ] || continue
+            [ "$(basename "$f")" = "README.md" ] && continue
+            head -1 "$f" | grep -q '^# ' || { echo "$f: first line must be a '# Title'"; fail=1; }
+            sed -n '2,6p' "$f" | grep -q '[A-Za-z]' || { echo "$f: needs an opening paragraph (it becomes the page description)"; fail=1; }
+          done
+          exit $fail
+      - name: Images and audio referenced from a page exist
+        run: |
+          fail=0
+          grep -rhoE '\]\(\.\.?/?(img|audio)/[^)]+\)' docs --include="*.md" | tr -d '])' | sed 's/^(//' | sort -u |
+          while read -r rel; do
+            f="docs/$(echo "$rel" | sed 's|^\.\./||; s|^\./||')"
+            [ -e "$f" ] || { echo "missing asset: $rel"; fail=1; }
+          done
+          exit $fail
+      - name: Cross-doc links point at a file that exists
+        run: |
+          fail=0
+          for f in $(find docs -name "*.md"); do
+            grep -oE '\]\([A-Z_]+\.md[^)]*\)' "$f" | sed 's/](\([^)#]*\).*/\1/' | sort -u |
+            while read -r t; do
+              [ -e "docs/$t" ] || { echo "$f: links to docs/$t which does not exist"; fail=1; }
+            done
+          done
+          exit $fail

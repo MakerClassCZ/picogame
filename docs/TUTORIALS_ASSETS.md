@@ -1,0 +1,107 @@
+# Art & assets
+
+picogame keeps **art separate from code**: you can prototype with shapes generated in code, then swap in
+pixel art without changing the game logic. This page shows how to bring your own art in,
+where to get it free, and how the tutorials do it.
+
+Each tutorial ends with a **`bonus_art.py`**: the finished game re-skinned with free
+[CC0](https://creativecommons.org/publicdomain/zero/1.0/) pixel art. Compare it with `step8` or
+`step9`; the gameplay stays the same while the bitmap construction changes.
+
+| Tutorial | bonus uses | from (CC0) |
+|----------|-----------|------------|
+| 01-bounce | brick wall = a CC0 brick texture **recoloured** into the 4 row colours (ball/paddle stay generated) | Kenney **Tiny Dungeon** |
+| 02-starship | ship (pre-rotated 16 frames) + laser bullet | Kenney **Pixel Shmup** |
+| 03-quest | tileset (floor/lava/barrel/brick/door/chest) + hero + slime + coin | Kenney **Tiny Dungeon** |
+
+Run one:
+```bash
+python3 sim/run.py tutorials/03-quest/bonus_art.py --shot /tmp/out.png
+```
+
+## The pipeline: any PNG → a picogame sprite
+
+`tools/png2picogame.py` turns a PNG into a Python module exposing `bitmap(pg)`:
+```bash
+python3 tools/png2picogame.py hero.png -o hero_art.py --frames 8
+```
+then in a game:
+```python
+import hero_art
+hero = pg.Sprite(hero_art.bitmap(pg), x, y)        # drop-in replacement for any shp.*()
+```
+Options:
+- `--frames N` — the PNG is a **horizontal strip** of N equal-width frames (left→right).
+- `--tile WxH` — the PNG is a **grid** of W×H tiles; repacks them into a horizontal atlas
+  (use for grid sheets; output frame count = number of tiles).
+- format is auto (PAL8 if ≤256 colours, else RGB565); transparency comes from the PNG's
+  **alpha** (alpha ≥128 = opaque); colours are emitted in ST7789 wire order.
+
+### Check it before you ship
+Before you flash anything, drop the new sprite into a throwaway test file and run it in the desktop
+simulator with a screenshot — that's the fastest way to confirm the palette, scale, and transparency
+came out right:
+```bash
+python3 sim/run.py <your_test>.py --frames 1 --shot /tmp/art.png
+```
+If it looks wrong or is too big, here's why: soft/anti-aliased edges quantise badly (you'll see fringe
+or speckle around the sprite — redraw with hard alpha), and a source with >256 colours silently falls
+back to RGB565, which doubles the RAM the bitmap costs (cut the palette to keep it PAL8).
+
+## Layout rules
+- **Horizontal strip**, equal-width frames. (Grids: use `--tile WxH`, or in Aseprite export
+  `Sheet Type: Horizontal`, Trim OFF.)
+- **Transparency = the alpha channel** (one on/off key, no blending). Hard pixel edges; avoid
+  soft/anti-aliased alpha — it quantises badly.
+- **Tilesets:** the engine draws tile value `v` as frame `v`, so make **frame 0 empty/
+  transparent** and put your tiles at 1, 2, 3… (that's how `bonus_art` maps map values to
+  tile graphics).
+- **Rotation:** for a constant stepped spin, you can bake rotations into frames; use `sprite.angle` for continuous or occasional runtime rotation. The Starship ship is the
+  Kenney sprite rotated into 16 frames offline (see how `tools/`-side scripts build the strip),
+  then `ship.frame = angle`.
+
+## Using your own Aseprite art
+`File → Export Sprite Sheet → Sheet Type: Horizontal`, **Trim OFF**, Padding 0 → that's
+exactly the strip `png2picogame` wants. Design in **Indexed** mode with a small palette (or
+RGBA with a transparent background). Animation **Frame Tags** can drive frame ranges.
+
+## Where to get more (free)
+- **[kenney.nl](https://kenney.nl)** — everything CC0, no attribution. (We used Pixel Shmup and Tiny Dungeon.)
+- **[Pixellab.ai](https://www.pixellab.ai/)** — generate pixel-art sprites and tilesets from a text
+  prompt, handy for quick placeholders or a custom look. Check its export terms before you ship.
+- Recolouring CC0 art is allowed: the Bounce bricks use one grey Tiny Dungeon tile multiplied into four
+  colours to match the game's palette.
+- **[itch.io](https://itch.io)** (CC0 filter) and **[OpenGameArt](https://opengameart.org)** (filter CC0). Avoid CC-BY-SA / GPL art.
+
+## Ship assets as .mpy (faster load, less RAM)
+A baked-asset module is just Python, so you can precompile it to `.mpy` bytecode exactly like the
+helper libs — the device skips parsing the source, so it loads faster and uses less RAM (the same
+win `tools/build_mpy.sh` gives the libs). How:
+```bash
+mpy-cross your_assets.py -o your_assets.mpy
+```
+then copy the `.mpy` to `CIRCUITPY/lib/`. The mpy-cross build **must match the board's CircuitPython
+version** (see `tools/build_mpy.sh` for the version it uses). Gotcha: a stale `.mpy` **shadows the
+`.py`** at import, so re-generate it after any edit — otherwise the device keeps loading the old art.
+
+## One file with all your assets
+For a game with several shared assets, keep related baked bitmaps and palettes in a **single module** such as `assets.py`
+that the game imports once, rather than scattering them across many tiny files — fewer imports, one
+place to manage, and one `.mpy` to ship.
+- `tools/pack_assets.py` does exactly this in one command: point it at a PNG glob (or a folder) and it
+  packs them all into a single module with **one shared palette** reused by every bitmap (the RAM win),
+  each exposed as a ready-to-use named `Bitmap`. Add `--mpy` to also ship the bytecode.
+  ```bash
+  python3 tools/pack_assets.py art/*.png -o assets.py --mpy   # then: import assets; pg.Sprite(assets.ship)
+  ```
+  (If the combined colours overflow 255 it falls back to per-asset palettes, and any image with >255 of
+  its own colours is emitted as RGB565 — same auto behaviour as `png2picogame`.)
+- `tools/png2picogame.py` converts a single PNG into a bitmap module — use it when you want just one
+  image (it also has `--frames`, `--tile`, `--rle`, dithering, dedup).
+- For a whole tile/scene-based level, `tools/scene_build.py` bakes the assets **and** the layout into
+  one `SCENE` file that `picogame_scene.load()` reads — one file for the entire level.
+
+## Licensing / credits
+All bundled art is **CC0** (public domain, no attribution required). The source PNGs we used
+live in `assets/kenney/` with `assets/kenney/CREDITS.txt`. Even for CC0 it's good manners to
+keep a credits note when you publish a game.
