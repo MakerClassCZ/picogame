@@ -1,8 +1,7 @@
-# picogame documentation sources
+# picogame documentation
 
-This is the prose behind <https://picogame.makerclass.cz>. It lives here, in the public repo, so
-that **anyone can send a pull request** — a typo, a clearer sentence, a missing warning, a
-translation. The site is generated from these files; there is no other copy to keep in sync.
+The pages behind <https://picogame.makerclass.cz>. Edit one, open a pull request — typos, clearer
+wording, a missing warning, a translation are all welcome.
 
 ## What is where
 
@@ -14,8 +13,8 @@ translation. The site is generated from these files; there is no other copy to k
 | `pages/cs/**.md` | their Czech counterparts |
 | `img/`, `audio/` | published assets; reference them as `img/name.png` (from `cs/`, `../img/name.png`) |
 
-Pages that embed live components — the playground, the scene editor, the tutorials walkthroughs —
-are `.mdx` and stay with the site code, not here. They are page *architecture* rather than prose.
+A few pages embed live components (the playground, the scene editor, the tutorial walkthroughs);
+those live with the site code and are not here.
 
 ## Sending a change
 
@@ -35,8 +34,7 @@ Edit the `.md` and open a PR. Useful to know:
 - **Don't paste API signatures from memory.** If a change touches an API name, check it against
   `lib/picogame_*.py` in this repo — a name that doesn't exist there fails the pre-publish lint.
 
-## What you cannot preview
+## Previewing
 
-The site itself (Astro) is not in this repo, so you cannot render your change locally — GitHub's
-markdown preview is what you get. For wording and typo fixes that is enough; for anything
-structural, say what you intended in the PR and it gets checked at build time.
+There is no local preview — GitHub's markdown rendering is what you get. That is enough for wording
+and typos; if a change is structural, say what you intended in the PR.
