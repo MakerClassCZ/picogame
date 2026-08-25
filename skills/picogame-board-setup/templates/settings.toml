@@ -1,0 +1,34 @@
+# picogame settings.toml - board config with NO reflash. Uncomment + edit only what your board needs.
+# Values are INTEGERS or STRINGS only (no floats, no true/false -> use 1/0). Full reference:
+# references/settings.md. Discover pins with wiring_probe.py, display params with display_test.py.
+
+# ---------------- buttons: one pin per button ----------------
+# Names: UP DOWN LEFT RIGHT A B X Y L1 L2 R1 R2 START SELECT (map only what you have).
+# PICOGAME_BUTTONS = "UP=GP2 DOWN=GP3 LEFT=GP4 RIGHT=GP5 A=GP12 B=GP13 START=GP10 SELECT=GP11"
+# PICOGAME_PULL = "up"          # "up" = button to GND, pressed reads LOW (default); "down" = to 3V3
+
+# ---------------- buttons: scanned ROW x COLUMN matrix (instead of the above) ----------------
+# PICOGAME_MATRIX_ROWS = "GP0 GP1 GP2 GP3"
+# PICOGAME_MATRIX_COLS = "GP4 GP5 GP6 GP7"
+# PICOGAME_MATRIX_MAP  = "UP=1,2 DOWN=2,2 LEFT=2,1 RIGHT=2,3 A=3,5 B=3,4 START=0,0"   # NAME=row,col
+# PICOGAME_MATRIX_ANODES = "cols"   # "cols" (default) or "rows" - flip if diode direction is reversed
+
+# ---------------- USB HID gamepad (USB-host builds, e.g. Fruit Jam) ----------------
+# PICOGAME_USB = 0              # disable auto-attach (default on)
+# PICOGAME_USBPAD = "A=5:0x40 B=5:0x20"   # remap buttons (NAME=byteIndex:bitmask); partial = merge
+
+# ---------------- display (SPI/busdisplay boards; a DVI/framebuffer board ignores these) ----------------
+# PICOGAME_INVERT = 1          # 1/0 - flip if colours are photo-negative
+# PICOGAME_MADCTL = 0x60       # orientation + colour order: 0x60 stock | 0x68 BGR | 0xA0 180 | 0xA8 both
+# PICOGAME_BRIGHTNESS = 80     # backlight percent 0-100
+
+# ---------------- audio: PWM (PicoPad / a buzzer on a PWM pin) ----------------
+# PICOGAME_AUDIO = "GP15"      # the PWM audio pin; unset -> board.AUDIO/SPEAKER/BUZZER
+
+# ---------------- audio: I2S DAC (Fruit Jam; needs adafruit_tlv320 + adafruit_bus_device in /lib) ----------------
+# PICOGAME_AUDIO_OUT = "headphone"   # "headphone" (default) | "speaker" | "both"
+# PICOGAME_HP_VOLUME  = -10    # headphone dB: toward 0 = louder (0 = line level, too loud); default -10
+# PICOGAME_DAC_VOLUME = -3     # main fader dB; keep <= 0
+# PICOGAME_SPK_VOLUME = -10    # speaker dB
+# PICOGAME_DEBUG = 1           # general: print '[picogame] ...' for a real subsystem failure (audio,
+#                               USB pad, ...) to serial. Remove once working.
