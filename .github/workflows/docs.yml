@@ -38,9 +38,10 @@ jobs:
         run: |
           fail=0
           for f in $(find docs -name "*.md"); do
-            grep -oE '\]\([A-Z_]+\.md[^)]*\)' "$f" | sed 's/](\([^)#]*\).*/\1/' | sort -u |
+            # a doc link is relative to the file that carries it, so resolve it from there
+            grep -oE '\]\((\.\./)*[a-z0-9/-]+\.md[^)]*\)' "$f" | sed 's/](\([^)#]*\).*/\1/' | sort -u |
             while read -r t; do
-              [ -e "docs/$t" ] || { echo "$f: links to docs/$t which does not exist"; fail=1; }
+              [ -e "$(dirname "$f")/$t" ] || { echo "$f: links to $t which does not exist"; fail=1; }
             done
           done
           exit $fail

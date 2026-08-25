@@ -2,7 +2,7 @@
 
 picogame can run on a board you wire yourself, as long as it has an **SPI display, a few buttons -
 and a firmware build with the picogame module** (prebuilt for the boards on
-[Supported hardware](SUPPORTED_HARDWARE.md), or your own build). This page takes a bare
+[Supported hardware](supported-hardware.md), or your own build). This page takes a bare
 **Raspberry Pi Pico** (or Pico W / Pico 2) plus a display and gets a game running on it.
 
 ## Wire it
@@ -43,7 +43,7 @@ their own), so the job here is to *build the display once and publish it*. **Pic
 1. **Your board already has `board.DISPLAY`** (PicoPad, PicoSystem, µGame, Thumby, VIDI X). Nothing to
    do: copy your game as `code.py` plus the `lib/` it imports. Done.
 2. **A picogame *custom-board* firmware**: the **Pico / Pico W / Pico 2 / Pico 2 W**
-   [downloads](SUPPORTED_HARDWARE.md) expose a `board.DISPLAY` slot. A small **`boot.py`** builds the
+   [downloads](supported-hardware.md) expose a `board.DISPLAY` slot. A small **`boot.py`** builds the
    display from `settings.toml`, and your game remains **unchanged as `code.py`**. This also works
    for existing games and `stage`-based games. **After copying `boot.py`, press RESET once** (or
    unplug/replug USB): `boot.py` runs only at power-on — a save/soft-reload runs `code.py` but not
@@ -134,7 +134,7 @@ the USB probe tool).
 DVI/framebuffer output, 12-bit RGB444 colour, and the fast (DMA) display backend are **compile-time
 firmware options** (`CIRCUITPY_PICOGAME_FRAMEBUFFER`, `CIRCUITPY_PICOGAME_RGB444`,
 `CIRCUITPY_PICOGAME_FAST_DISPLAY`), **not** `settings.toml` keys — don't look for a runtime key. See
-[Firmware](FIRMWARE.md) to rebuild with them.
+[Firmware](firmware.md) to rebuild with them.
 :::
 
 ## If the picture is wrong
@@ -167,4 +167,4 @@ dark, so a wiring or `settings.toml` mistake shows at a glance.
 ## Then deploy as usual
 
 Once the display and buttons respond, everything else — shipping `.mpy`, the RAM budget, flashing — is
-the same as on the other supported boards: see [Run on hardware](HARDWARE.md).
+the same as on the other supported boards: see [Run on hardware](hardware.md).

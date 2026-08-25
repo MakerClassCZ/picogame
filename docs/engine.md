@@ -7,7 +7,7 @@ with dirty-region rendering, tilemaps, particles, drawing surfaces, and an optio
 asynchronous DMA display backend.
 
 - **Reference target:** the PicoPad firmware and SPI path are tested on hardware. Other targets
-  have individual status notes in [Supported hardware](SUPPORTED_HARDWARE.md).
+  have individual status notes in [Supported hardware](supported-hardware.md).
 - **Performance:** on an SPI display, `Scene` transfers up to six changed regions separately.
   Localized motion can therefore cost less than a full repaint; scattered changes and camera
   movement can still approach a full-screen update.
@@ -32,8 +32,8 @@ This is the **deep guide to the native `picogame` C module**: exact behaviour, c
 costs of the engine types. It assumes you know what you're looking for.
 
 - New here? [Your first game](/start/first-game/), then [How picogame works](/concepts/how-it-works/).
-- "Which layer/surface do I use?" → [Drawing paths](/concepts/drawing-paths/); task index in [FEATURES.md](FEATURES.md).
-- Bare signatures of everything → [REFERENCE.md](REFERENCE.md).
+- "Which layer/surface do I use?" → [Drawing paths](/concepts/drawing-paths/); task index in [FEATURES.md](features.md).
+- Bare signatures of everything → [REFERENCE.md](reference.md).
 - The pure-Python `picogame_*` helpers (input, timing, audio, UI, pools, save…) have their own
   guides under *Helpers* — this page covers the C module only. (Helpers keep the `picogame_*`
   file prefix, **not** a `picogame/` package: that name is the C module and can't be shadowed.)
@@ -227,7 +227,7 @@ surface with your own RAM instead of letting the Canvas allocate one.
   size it to what you need (e.g. a 320×16 status bar = ~10 KB).
 - **RAM warning:** a full-screen `Canvas(320, 240)` is **150 KB**, too big for the
   RP2040 (~190 KB heap, ~130 KB contiguous). Keep Canvases small, or use a `Tilemap` for large scrolling
-  fields. See [the hardware notes](HARDWARE.md). For a *full-frame animated* surface, consider
+  fields. See [the hardware notes](hardware.md). For a *full-frame animated* surface, consider
   `StripDraw` below; it does not retain a pixel surface.
 
 ### `StripDraw(callback, x=0, y=0, width=0, height=0, *, always_dirty=True)`
@@ -327,14 +327,14 @@ Size-saving options (PAL8):
 
 ## Engine costs & constraints
 
-> For deployment, read [Run on hardware](HARDWARE.md) (`.mpy`, firmware, and device testing)
-> and [Fit it in RAM](MEMORY.md) (costs and measurement).
+> For deployment, read [Run on hardware](hardware.md) (`.mpy`, firmware, and device testing)
+> and [Fit it in RAM](memory.md) (costs and measurement).
 
 - **Plan retained surfaces against the measured heap.** A full-screen `Canvas(320,240)` is
   150 KB and exceeds the largest contiguous block in the current RP2040 PicoPad build. Keep
   Canvases small, use a `Tilemap` for big fields and a
   `StripDraw` for animated full-frame content. Costs and the decision matrix:
-  [Drawing paths](/concepts/drawing-paths/) + [MEMORY.md](MEMORY.md).
+  [Drawing paths](/concepts/drawing-paths/) + [MEMORY.md](memory.md).
 - **Dirty-region rendering reduces SPI traffic for localized motion.** A full-screen repaint
   still pays both composition and transfer costs; which dominates depends on the scene,
   firmware, and SPI clock.
@@ -347,7 +347,7 @@ Size-saving options (PAL8):
   for per-entity state.
 - **PAL8 uses half the pixel storage of RGB565** (1 B/px vs 2). For larger assets, also
   consider frozen data, ROMFS, or streaming; see
-  [Where assets live](MEMORY.md).
+  [Where assets live](memory.md).
 
 ---
 
@@ -379,8 +379,8 @@ How a `refresh()` or `render()` reaches the output:
 ## Building the firmware
 
 The engine is a native module inside a CircuitPython fork; building it is its own guide -
-see **[The firmware build](FIRMWARE.md)** (toolchain, board configs, flags). Prebuilt
-firmware for supported boards: [Supported hardware](SUPPORTED_HARDWARE.md).
+see **[The firmware build](firmware.md)** (toolchain, board configs, flags). Prebuilt
+firmware for supported boards: [Supported hardware](supported-hardware.md).
 
 ---
 
@@ -409,4 +409,4 @@ tools/      asset converters (png2picogame, ...)
 ```
 
 Deploying a game to the device (helpers, `.mpy`, assets) is covered by
-[Run on hardware](HARDWARE.md).
+[Run on hardware](hardware.md).

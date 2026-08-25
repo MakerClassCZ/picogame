@@ -10,20 +10,20 @@ The PicoPad has a prebuilt firmware with `board.DISPLAY` and a button profile. Y
 to build firmware for normal deployment.
 
 1. **Flash the firmware once.** Hold **BOOTSEL** while plugging in USB (or double-tap **RESET**) → an
-   `RPI-RP2` drive appears → drag [`picopad.uf2`](SUPPORTED_HARDWARE.md) onto it → it reboots as a
+   `RPI-RP2` drive appears → drag [`picopad.uf2`](supported-hardware.md) onto it → it reboots as a
    `CIRCUITPY` drive. You only do this once, and it's reversible: your files on `CIRCUITPY` survive a same-layout reflash (a firmware that moves the flash layout - e.g. adds or resizes the ROMFS asset region - reformats the drive; back up first).
 2. **Copy your game.** Drag your `code.py` onto the `CIRCUITPY` drive, plus the `lib/` helper modules it
    imports (the `picogame_*` files) and any assets. It's the same game code you ran in the sim.
 3. **Start the game.** Save `code.py` or reset the board. No additional display or button setup is needed.
 
 On another board (a bare Pico, PicoSystem, …) the wiring and button map differ. See
-[Supported hardware](SUPPORTED_HARDWARE.md). Everything else on this page is the same.
+[Supported hardware](supported-hardware.md). Everything else on this page is the same.
 
 > The rest of this page covers RAM limits, `.mpy`, splitting large programs, and porting to a
 > board without prebuilt firmware. You can skip it for a first PicoPad deployment.
 
 > Clock / SPI / display-speed limits (how the core clock drives the display SPI, the ST7789
-> ceiling, overclocking the RP2350, how to test) live in **[Clocks, SPI &amp; display limits](HARDWARE_LIMITS.md)**.
+> ceiling, overclocking the RP2350, how to test) live in **[Clocks, SPI &amp; display limits](hardware-limits.md)**.
 
 ---
 
@@ -64,7 +64,7 @@ still fails (no contiguous run). If a monolith dies on a big Canvas even though 
 plenty free", that's this. The fix is a pre-allocated **arena** (`lib/picogame_arena.py`
 + the firmware `Canvas(..., buffer=)` arg): grab one big buffer up front and slice it.
 The general writeup (with the largest-contiguous-block probe and a networking example)
-is **[Fit it in RAM](MEMORY.md)**.
+is **[Fit it in RAM](memory.md)**.
 
 ---
 
@@ -160,11 +160,11 @@ usually mean the **flashed firmware is older than the code that uses X**. E.g. a
 build had `Sprite.scale` as read-only → `can't set attribute 'scale'`.
 
 > **On a PicoPad you don't build firmware**: just reflash the latest prebuilt
-> [`picopad.uf2`](SUPPORTED_HARDWARE.md) and the feature is there. The build steps below are only for
+> [`picopad.uf2`](supported-hardware.md) and the feature is there. The build steps below are only for
 > porting to another board or working on the engine itself.
 
-- Reflash (PicoPad): drop the latest [`picopad.uf2`](SUPPORTED_HARDWARE.md) over BOOTSEL; your files survive it as long as the firmware keeps the same flash layout (see the backup note above).
-- Build (porting / engine dev): see [the engine guide](PICOGAME.md) §"Building the firmware"
+- Reflash (PicoPad): drop the latest [`picopad.uf2`](supported-hardware.md) over BOOTSEL; your files survive it as long as the firmware keeps the same flash layout (see the backup note above).
+- Build (porting / engine dev): see [the engine guide](engine.md) §"Building the firmware"
   (ARM GCC ≥ 14 toolchain + venv; `make BOARD=pajenicko_picopad -j$(nproc)`).
   Output: `circuitpython/ports/raspberrypi/build-pajenicko_picopad/firmware.uf2`.
 - Verify a symbol is present without flashing:
@@ -191,12 +191,12 @@ per-frame allocation — see **[Performance](/performance/)**. The notes here ar
   (pseudo-3D road, gradient sky, procedural background) use `pg.StripDraw(callback, …)`
   instead of a Canvas. It draws into each render strip and avoids the **150 KB pixel buffer**
   of a full-screen Canvas. It repaints every frame, so use it for animated content rather than
-  static art. See [the engine guide](PICOGAME.md) → `StripDraw` and
+  static art. See [the engine guide](engine.md) → `StripDraw` and
   `examples/picogame_stripdraw_example.py`. The `StripDraw` object, callback, and game state still
   use RAM, but there is no full-screen surface to fragment the heap.
 - Dirty-region rendering reduces work in a mostly static scene; full-screen scrolling still
   repaints the whole view. Measure the frame rate with your artwork, firmware, and SPI clock.
 
-See also: [engine API](PICOGAME.md), [scene format](SCENE_FORMAT.md),
+See also: [engine API](engine.md), [scene format](scene-format.md),
 `tutorials/` (step-by-step), `examples/`
 (genre examples include `microrace`, which uses an 83 KB Canvas in its measured configuration).

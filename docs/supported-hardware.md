@@ -3,7 +3,7 @@
 picogame is a native module inside a CircuitPython fork, so it runs on boards with **a picogame
 firmware build** - which needs an SPI display, a few buttons, and (optionally) a PWM speaker. Boards
 below have builds; other CircuitPython boards with an SPI display can be ported (see
-[Build your own board](CUSTOM_BOARD.md)). The reference device everything is tuned and measured
+[Build your own board](custom-board.md)). The reference device everything is tuned and measured
 against is the PicoPad.
 
 ## Devices
@@ -135,10 +135,10 @@ No board from the list? A picogame console is cheap to build yourself. The minim
 
 That's enough to play everything on this site. The full pin map, the three ways to get
 `board.DISPLAY`, the `settings.toml` button config, and orientation/colour troubleshooting are in
-**[Build your own board](CUSTOM_BOARD.md)**.
+**[Build your own board](custom-board.md)**.
 
 ![Breadboard wiring — a Raspberry Pi Pico, a 320×240 ST7789/ILI9341 SPI display, six buttons and a piezo buzzer](img/breadboard.png)
 
 Wire the display's `vcc / gnd / cs / res / dc / mosi / sck / bl`, the six buttons and the piezo as
 shown. The exact GPIO pins and the matching `settings.toml` button map are on
-[Build your own board](CUSTOM_BOARD.md); a build video is on the way.
+[Build your own board](custom-board.md); a build video is on the way.

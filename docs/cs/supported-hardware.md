@@ -3,7 +3,7 @@
 picogame je nativní modul uvnitř forku CircuitPythonu, takže běží na deskách, pro které existuje
 **picogame firmware** — ten potřebuje SPI displej, pár tlačítek a (volitelně) PWM reproduktor.
 Pro desky níže existují hotové buildy; jiné desky CircuitPythonu s SPI displejem lze přidat (viz
-[Postav si vlastní desku](CUSTOM_BOARD.md)). Referenční zařízení, na kterém se všechno ladí a
+[Postav si vlastní desku](../custom-board.md)). Referenční zařízení, na kterém se všechno ladí a
 měří, je PicoPad.
 
 ## Zařízení
@@ -134,10 +134,10 @@ podporované cíle; jiné SPI displeje podporované v `displayio` je potřeba ov
 
 To stačí na všechno na tomhle webu. Kompletní pinovou mapu, tři způsoby, jak získat `board.DISPLAY`,
 konfiguraci tlačítek v `settings.toml` a ladění orientace/barev najdeš v **[Postav si vlastní
-desku](CUSTOM_BOARD.md)**.
+desku](../custom-board.md)**.
 
 ![Zapojení na nepájivém poli — Raspberry Pi Pico, displej 320×240 ST7789/ILI9341, šest tlačítek a piezo bzučák](../img/breadboard.png)
 
 Zapoj `vcc / gnd / cs / res / dc / mosi / sck / bl` displeje, šest tlačítek a piezo podle schématu.
 Konkrétní GPIO piny a odpovídající mapu tlačítek v `settings.toml` najdeš na stránce
-[Postav si vlastní desku](CUSTOM_BOARD.md); video s postavením chystáme.
+[Postav si vlastní desku](../custom-board.md); video s postavením chystáme.

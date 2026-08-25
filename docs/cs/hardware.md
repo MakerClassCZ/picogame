@@ -10,7 +10,7 @@ PicoPad používá hotový firmware s `board.DISPLAY` a vestavěným profilem tl
 proto nemusíš sestavovat vlastní firmware.
 
 1. **Nainstaluj firmware.** Při připojení USB drž **BOOTSEL**, případně dvakrát stiskni **RESET**. Na disk
-   `RPI-RP2` zkopíruj [`picopad.uf2`](SUPPORTED_HARDWARE.md); po restartu se objeví disk `CIRCUITPY`.
+   `RPI-RP2` zkopíruj [`picopad.uf2`](../supported-hardware.md); po restartu se objeví disk `CIRCUITPY`.
    Před změnou na firmware s jiným rozložením flash data zazálohuj, protože taková změna může disk přeformátovat.
 2. **Zkopíruj hru.** Na disk `CIRCUITPY` přenes `code.py`, používané moduly `picogame_*` do `lib/`
    a případné grafické nebo zvukové soubory. Jde o stejný herní kód jako v simulátoru.
@@ -18,13 +18,13 @@ proto nemusíš sestavovat vlastní firmware.
    tlačítek.
 
 Na jiné desce (holý Pico, PicoSystem, …) se liší zapojení a mapa tlačítek. Viz
-[Podporovaný hardware](SUPPORTED_HARDWARE.md). Všechno ostatní na této stránce je stejné.
+[Podporovaný hardware](../supported-hardware.md). Všechno ostatní na této stránce je stejné.
 
 > **Další části využiješ u větší hry nebo vlastního portu:** řeší omezenou RAM, soubory `.mpy`,
 > dělení scén a build firmwaru. Pro první nasazení na PicoPad nejsou nutné.
 
 > Limity taktování, SPI a rychlosti displeje — včetně vazby taktu jádra na SPI, limitu ST7789
-> a měření vyšších taktů RP2350 — najdeš v **[Hodiny, SPI a limity displeje](HARDWARE_LIMITS.md)**.
+> a měření vyšších taktů RP2350 — najdeš v **[Hodiny, SPI a limity displeje](../hardware-limits.md)**.
 
 ---
 
@@ -66,7 +66,7 @@ selže (žádný souvislý úsek). Pokud monolit umírá na velkém Canvasu, i k
 místa", je to právě tohle. Řešením je předalokovaná **arena** (`lib/picogame_arena.py`
 + firmwarový argument `Canvas(..., buffer=)`): vyhraď jeden velký buffer předem a rozděluj ho na části.
 Obecný popis (se sondou na největší souvislý blok a síťovým příkladem)
-je v **[Vejít se do paměti](MEMORY.md)**.
+je v **[Vejít se do paměti](../memory.md)**.
 
 ---
 
@@ -159,11 +159,11 @@ obvykle znamenají, že **nainstalovaný firmware je starší než kód, který 
 starý build měl `Sprite.scale` jen pro čtení → `can't set attribute 'scale'`.
 
 > **Pro běžné použití PicoPadu firmware nesestavuj:** nainstaluj nejnovější hotový
-> [`picopad.uf2`](SUPPORTED_HARDWARE.md) a funkce tam je. Postup buildu níže je určený jen pro port na jinou
+> [`picopad.uf2`](../supported-hardware.md) a funkce tam je. Postup buildu níže je určený jen pro port na jinou
 > desku nebo práci na samotném enginu.
 
-- Přeflashování PicoPadu: přes BOOTSEL zkopíruj nejnovější [`picopad.uf2`](SUPPORTED_HARDWARE.md). Soubory zůstanou zachované pouze při stejném rozložení flash, proto před změnou buildu data zálohuj.
-- Vlastní build pro nový port nebo vývoj enginu: viz [Build firmwaru](FIRMWARE.md).
+- Přeflashování PicoPadu: přes BOOTSEL zkopíruj nejnovější [`picopad.uf2`](../supported-hardware.md). Soubory zůstanou zachované pouze při stejném rozložení flash, proto před změnou buildu data zálohuj.
+- Vlastní build pro nový port nebo vývoj enginu: viz [Build firmwaru](../firmware.md).
   (toolchain ARM GCC ≥ 14 + venv; `make BOARD=pajenicko_picopad -j$(nproc)`).
   Výstup: `circuitpython/ports/raspberrypi/build-pajenicko_picopad/firmware.uf2`.
 - Ověření, že je symbol přítomen, bez flashování:
@@ -190,12 +190,12 @@ na **[Výkon](/cs/performance/)**. Poznámky zde jsou strana enginu/hardwaru.
   (pseudo-3D silnice, gradientní nebe, procedurální pozadí) použij `pg.StripDraw(callback, …)`
   místo `Canvas`. Kreslí přímo do jednotlivých stripů a obejde se tak bez
   **150KB pixelového bufferu** celoobrazovkového `Canvas`. Překresluje se každý snímek, proto
-  se hodí pro animovaný obsah, ne pro statickou grafiku. Viz [průvodce enginem](PICOGAME.md) →
+  se hodí pro animovaný obsah, ne pro statickou grafiku. Viz [průvodce enginem](../engine.md) →
   `StripDraw` a `examples/picogame_stripdraw_example.py`. Objekt `StripDraw`, callback a herní stav
   stále používají RAM, ale nevzniká celoobrazovková plocha, která by tříštila haldu.
 - Dirty regiony snižují práci u převážně statické scény; posun celé obrazovky stále překreslí
   celý výřez. Snímkovou frekvenci změř s vlastní grafikou, firmwarem a taktem SPI.
 
-Viz také: [API enginu](PICOGAME.md), [formát scény](SCENE_FORMAT.md),
+Viz také: [API enginu](../engine.md), [formát scény](../scene-format.md),
 `tutorials/` (krok za krokem), `examples/`
 (mezi žánrovými příklady je `microrace`, který v měřené konfiguraci používá 83KB `Canvas`).

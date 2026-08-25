@@ -3,7 +3,7 @@
 Jednostránkový tahák všeho, co engine nabízí: nativní C modul `picogame`
 a pomocné knihovny `picogame_*` v čistém Pythonu ve složce `lib/`. Signatury ukazují názvy parametrů
 a výchozí hodnoty; `*` označuje argumenty zadávané pouze jménem. Barvy jsou celá čísla RGB565
-ve wire order; vytvářej je pomocí `rgb565()`. Podrobnosti najdeš v [průvodci enginem](PICOGAME.md).
+ve wire order; vytvářej je pomocí `rgb565()`. Podrobnosti najdeš v [průvodci enginem](../engine.md).
 
 **Viz také:** [Vejít se do paměti](/cs/memory/) · [Kreslicí cesty](/cs/concepts/drawing-paths/) · [Výkon](/cs/performance/) · [Spuštění na zařízení](/cs/hardware/) · [Přicházíš z jiného enginu](/cs/concepts/coming-from/).
 

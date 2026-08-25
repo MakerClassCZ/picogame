@@ -4,8 +4,8 @@ Jak spolu souvisí takt jádra, takt periferií a SPI displeje na deskách RP2, 
 limity a jak je měřit. Údaje vycházejí z měření na
 PicoPadu (RP2040) a na PicoPadu s čipem vyměněným za RP2350 (Pico 2).
 
-Rozpočet RAM a nasazení popisuje **[HARDWARE.md](HARDWARE.md)**. Rychlý a přenositelný
-backend vysvětluje **[průvodce enginem](PICOGAME.md#pod-kapotou)**.
+Rozpočet RAM a nasazení popisuje **[HARDWARE.md](../hardware.md)**. Rychlý a přenositelný
+backend vysvětluje **[průvodce enginem](../engine.md#pod-kapotou)**.
 
 Hledáš, co engine *ve hře* umí a neumí — RAM, snímková frekvence, funkce? Viz
 **[Přicházíš z jiného enginu](/cs/concepts/coming-from/)** a **[Vejít se do paměti](/cs/memory/)**. Tahle

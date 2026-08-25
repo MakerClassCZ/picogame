@@ -4,8 +4,8 @@ How the core clock, the peripheral clock and the display SPI relate on RP2 board
 limits are, and how to measure them. The results on this page come from a PicoPad (RP2040) and
 a PicoPad with its chip replaced by an RP2350 (Pico 2).
 
-For the RAM budget and deployment, see **[HARDWARE.md](HARDWARE.md)**. For the fast and portable
-rendering paths, see the **[engine guide](PICOGAME.md#under-the-hood)**.
+For the RAM budget and deployment, see **[HARDWARE.md](hardware.md)**. For the fast and portable
+rendering paths, see the **[engine guide](engine.md#under-the-hood)**.
 
 Looking for what the engine can and can't do in a *game* — RAM, frame rate, features? See
 **[Coming from another engine](/concepts/coming-from/)** and **[Fit it in RAM](/memory/)**. This page is

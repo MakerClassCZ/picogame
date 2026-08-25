@@ -3,7 +3,7 @@
 A one-page cheat sheet of the engine's everyday API: the native `picogame` C module
 and the pure-Python `picogame_*` helper libraries in `lib/`. Signatures show parameter
 names and defaults; `*` marks keyword-only arguments. Colours are wire-order RGB565 ints
-(build them with `rgb565`). For longer explanations see the [engine guide](PICOGAME.md).
+(build them with `rgb565`). For longer explanations see the [engine guide](engine.md).
 
 **See also:** [Fit it in RAM](/memory/) · [Drawing paths](/concepts/drawing-paths/) · [Performance](/performance/) · [Run on hardware](/hardware/) · [Coming from another engine](/concepts/coming-from/).
 

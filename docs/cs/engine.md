@@ -6,7 +6,7 @@ desky. Oproti `_stage` nabízí sprity různých velikostí, `Scene` s dirty reg
 částice, kreslicí plochy a volitelný backend s asynchronním DMA.
 
 - **Referenční cíl:** firmware PicoPadu a SPI backend jsou testované na zařízení. Stav dalších
-  cílů uvádí stránka [Podporovaný hardware](SUPPORTED_HARDWARE.md).
+  cílů uvádí stránka [Podporovaný hardware](../supported-hardware.md).
 - **Výkon:** na SPI displeji přenáší `Scene` samostatně až šest dirty regionů. Pohyb
   soustředěný na malé ploše proto může být levnější než celý snímek; změny rozeseté po obrazovce
   a pohyb kamery se mohou blížit překreslení celé obrazovky.
@@ -31,8 +31,8 @@ Tohle je **hloubkový průvodce nativním C modulem `picogame`**: přesné chov�
 a náklady typů enginu. Předpokládá, že víš, co hledáš.
 
 - Jsi tu poprvé? [Tvoje první hra](/cs/start/first-game/), pak [Jak picogame funguje](/cs/concepts/how-it-works/).
-- „Kterou vrstvu/plochu použít?" → [Kreslicí cesty](/cs/concepts/drawing-paths/); rejstřík podle úkolů ve [FEATURES.md](FEATURES.md).
-- Holé signatury všeho → [REFERENCE.md](REFERENCE.md).
+- „Kterou vrstvu/plochu použít?" → [Kreslicí cesty](/cs/concepts/drawing-paths/); rejstřík podle úkolů ve [FEATURES.md](../features.md).
+- Holé signatury všeho → [REFERENCE.md](../reference.md).
 - Čistě-Python helpery `picogame_*` (vstup, časování, audio, UI, pooly, ukládání…) mají vlastní
   průvodce v sekci *Helpery* — tahle stránka pokrývá jen C modul. (Helpery si drží prefix
   souborů `picogame_*`, **nikoli** balíček `picogame/`: to jméno patří C modulu a nelze ho zastínit.)
@@ -227,7 +227,7 @@ podložíš plochu vlastní RAM, místo aby si ji Canvas alokoval sám.
   ji nadimenzuj na to, co potřebuješ (např. stavový pruh 320×16 = ~10 KB).
 - **Upozornění na RAM:** `Canvas(320, 240)` přes celou obrazovku má **150 KB**, příliš velké pro
   RP2040 (~190 KB heap, ~130 KB souvislých). Udržuj Canvasy malé, nebo použij `Tilemap` pro velká posouvaná
-  pole. Viz [poznámky k hardwaru](HARDWARE.md). Pro *animovanou plochu přes celý snímek* zvaž `StripDraw`
+  pole. Viz [poznámky k hardwaru](../hardware.md). Pro *animovanou plochu přes celý snímek* zvaž `StripDraw`
   níže; neuchovává vlastní pixelovou plochu.
 
 ### `StripDraw(callback, x=0, y=0, width=0, height=0, *, always_dirty=True)`
@@ -327,14 +327,14 @@ Volby šetřící velikost (PAL8):
 
 ## Náklady a omezení enginu
 
-> Pro nasazení si přečti [Spuštění na hardwaru](HARDWARE.md) (`.mpy`, firmware a testování
-> na zařízení) a [Vejít se do paměti](MEMORY.md) (náklady a měření).
+> Pro nasazení si přečti [Spuštění na hardwaru](../hardware.md) (`.mpy`, firmware a testování
+> na zařízení) a [Vejít se do paměti](../memory.md) (náklady a měření).
 
 - **Uchovávané plochy plánuj podle změřené haldy.** Celoobrazovkový `Canvas(320,240)` má
   150 KB a přesahuje největší souvislý blok současného buildu pro RP2040 PicoPad.
   Drž plochy `Canvas` malé, pro velká pole použij `Tilemap` a pro
   animovaný celoobrazovkový obsah `StripDraw`. Náklady a rozhodovací matice:
-  [Kreslicí cesty](/cs/concepts/drawing-paths/) + [MEMORY.md](MEMORY.md).
+  [Kreslicí cesty](/cs/concepts/drawing-paths/) + [MEMORY.md](../memory.md).
 - **Dirty regiony snižují provoz na SPI při soustředěném pohybu.** Překreslení celé obrazovky
   stále platí cenu za skládání i přenos; dominantní část závisí na scéně, firmwaru a taktu SPI.
 - **Až šest dirty regionů:** překrývající se změny se nejprve spojí. Pokud jich zbývá více
@@ -346,7 +346,7 @@ Volby šetřící velikost (PAL8):
   použij `sprite.data`.
 - **PAL8 používá polovinu prostoru RGB565** (1 B/px proti 2). U větší grafiky zvaž také
   zmrazená data, ROMFS nebo postupné čtení; viz
-  [Kde je uložená grafika](MEMORY.md).
+  [Kde je uložená grafika](../memory.md).
 
 ---
 
@@ -376,8 +376,8 @@ Jak se `refresh()` nebo `render()` dostane na výstup:
 ## Build firmwaru
 
 Engine je nativní modul uvnitř forku CircuitPythonu; jeho build popisuje samostatný
-průvodce **[Build firmwaru](FIRMWARE.md)** (nástroje, konfigurace desek a volby). Hotový
-firmware pro podporované desky: [Podporovaný hardware](SUPPORTED_HARDWARE.md).
+průvodce **[Build firmwaru](../firmware.md)** (nástroje, konfigurace desek a volby). Hotový
+firmware pro podporované desky: [Podporovaný hardware](../supported-hardware.md).
 
 ---
 
@@ -406,4 +406,4 @@ tools/      převodníky grafiky a dat (png2picogame, ...)
 ```
 
 Nasazení hry na zařízení (pomocné moduly, `.mpy` a grafika) pokrývá
-[Spuštění na hardwaru](HARDWARE.md).
+[Spuštění na hardwaru](../hardware.md).

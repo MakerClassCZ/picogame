@@ -7,8 +7,8 @@ wording, a missing warning, a translation are all welcome.
 
 | Path | What it is |
 |---|---|
-| `*.md` | one page each, English (`REFERENCE.md` → `/reference/`, `HARDWARE.md` → `/hardware/`, …) |
-| `cs/<slug>.md` | the Czech translation of that page (`cs/reference.md`). Missing ones fall back to English |
+| `*.md` | one page each, English — **the file name is the route** (`reference.md` → `/reference/`) |
+| `cs/*.md` | the Czech translation, same file name (`cs/reference.md`). Missing ones fall back to English |
 | `pages/**.md` | pages written directly for the site (concepts, helpers, quickstart); they already carry Starlight frontmatter |
 | `pages/cs/**.md` | their Czech counterparts |
 | `img/`, `audio/` | published assets; reference them as `img/name.png` (from `cs/`, `../img/name.png`) |
@@ -28,7 +28,7 @@ Edit the `.md` and open a PR. Useful to know:
   cross-language links stay valid.
 - **The first `# H1` becomes the page title** and the first paragraph becomes its description, so
   leave both in place.
-- **Links between docs** use the plain file name (`[the reference](REFERENCE.md)`); the build
+- **Links between docs** use the plain file name (`[the reference](reference.md)`); the build
   rewrites them to site routes, with the `/cs` prefix for Czech. Links to code elsewhere in the
   repo are relative and resolve on GitHub too (`../tutorials/01-bounce/`).
 - **Don't paste API signatures from memory.** If a change touches an API name, check it against

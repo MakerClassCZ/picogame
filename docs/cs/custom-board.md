@@ -2,7 +2,7 @@
 
 picogame může běžet i na desce, kterou si zapojíš sám. Potřebuje **SPI displej, několik
 tlačítek a firmware s modulem picogame**. Hotové buildy najdeš na stránce
-[Podporovaný hardware](SUPPORTED_HARDWARE.md), případně si můžeš sestavit vlastní. Tento návod
+[Podporovaný hardware](../supported-hardware.md), případně si můžeš sestavit vlastní. Tento návod
 používá holé **Raspberry Pi Pico** (nebo Pico W / Pico 2) a samostatný displej.
 
 ## Zapoj to
@@ -44,7 +44,7 @@ jediný: displej jednou postavit a zveřejnit. **Vyber si jednu cestu:**
 1. **Deska už `board.DISPLAY` má** (PicoPad, PicoSystem, µGame, Thumby, VIDI X). Zkopíruj
    hru jako `code.py` a moduly, které importuje, do `lib/`.
 2. **Firmware picogame pro *vlastní desky***: build pro **Pico / Pico W / Pico 2 / Pico 2 W**
-   ([ke stažení](SUPPORTED_HARDWARE.md)) mají místo pro `board.DISPLAY`. Krátký **`boot.py`** vytvoří
+   ([ke stažení](../supported-hardware.md)) mají místo pro `board.DISPLAY`. Krátký **`boot.py`** vytvoří
    displej podle `settings.toml` a hra zůstane **beze změny jako `code.py`**. Postup funguje i pro
    existující hry a hry postavené na `stage`. **Po nakopírování `boot.py` jednou stiskni RESET**
    (nebo odpoj a připoj USB): `boot.py` běží jen při zapnutí — uložení souboru spustí `code.py`,
@@ -139,7 +139,7 @@ reportu zjistíš USB sondou).
 Výstup DVI/framebuffer, 12bitové barvy RGB444 a rychlý (DMA) backend displeje jsou **volby firmwaru
 při kompilaci** (`CIRCUITPY_PICOGAME_FRAMEBUFFER`, `CIRCUITPY_PICOGAME_RGB444`,
 `CIRCUITPY_PICOGAME_FAST_DISPLAY`), **ne** klíče `settings.toml` — nehledej runtime klíč. Pro build
-s nimi viz [Firmware](FIRMWARE.md).
+s nimi viz [Firmware](../firmware.md).
 :::
 
 ## Když je obraz špatně
@@ -170,4 +170,4 @@ v zapojení nebo `settings.toml` poznáš na první pohled.
 ## Pak nasaď jako obvykle
 
 Jakmile displej i tlačítka reagují, všechno ostatní — nasazení `.mpy`, rozpočet RAM, flashování — je
-stejné jako u kterékoli desky: viz [Spuštění na hardwaru](HARDWARE.md).
+stejné jako u kterékoli desky: viz [Spuštění na hardwaru](../hardware.md).
