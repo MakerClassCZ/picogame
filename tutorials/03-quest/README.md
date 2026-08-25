@@ -50,7 +50,10 @@ is a **fixed** layer — it does NOT scroll, so the counter stays pinned to the 
 Stand next to the NPC and press **A** to enter a `dialog` state: the world keeps drawing
 underneath while `picogame_ui.TextBox` overlays a message; movement is frozen until you
 press a button. **You see:** a "PRESS A" prompt near the NPC, then a dialog box. **Try it:**
-change the dialog `LINES`.
+change the dialog `LINES`. This step also tidies the code as it grows: the scattered game
+variables move into one `st = State()` object, and the per-frame loop moves into a `main()`
+function — inside a function its names resolve as fast locals, a measured win on device. It's the
+`State` + `main()` shape every bigger game grows into (see [Game patterns](https://picogame.makerclass.cz/concepts/patterns/)).
 
 ### step 7 — `step7_combat.py` · enemies + bump combat
 Slimes chase the hero (slower than you, respecting walls). Touching one costs **HP** and
@@ -71,3 +74,12 @@ and the door. **You see:** talk → collect → unlock → reach the shrine → 
 **editor** lets you paint this map, place the hero/NPC/coins, and flag tiles
 (solid/coin/goal) visually, and `picogame_scene` loads it. Everything `step8` does by hand
 becomes data. See `../README.md` and `examples/picogame_platformer_scene.py`.
+
+---
+
+> **Start your own game from here.** You've built three games by hand — here's the reusable shape
+> to start every new one from: the **State + `main()` pattern**
+> ([Game patterns](https://picogame.makerclass.cz/concepts/patterns/)) and a ready-to-run **game skeleton**
+> ([Snippets](https://picogame.makerclass.cz/snippets/), or open it in the
+> [Playground](https://picogame.makerclass.cz/playground/?ex=game-skeleton)). Drop your own art, tiles and rules into that
+> frame and you're off.

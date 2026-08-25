@@ -59,12 +59,16 @@ beep and a lower boom. **You see:** explosions and an engine trail. **Try it:** 
 explosion `count`/`life` or the beep frequencies.
 
 ### step 8 — `step8_states.py` · the state machine (capstone)
-A finished game isn't one endless loop — it has **states**. We track `state`: TITLE waits
-for a press, PLAY runs the game, GAMEOVER shows the final score and returns to the title.
-`new_game()` resets everything; one centred `SceneLabel` shows the message for the non-play
-states; death ends the run instead of silently restarting. This is what turns a mechanic
-into a game. **You see:** title → play → game over → title. **Try it:** add a high score
-that survives across games (see `picogame_save` for NVM persistence).
+A finished game isn't one endless loop — it has **states**, and it's worth tidying the code as
+it grows. All the run's mutable values move into one `class State` (`st`), re-initialised in place
+by `reset()`; `st.mode` runs TITLE → PLAY → GAMEOVER; `new_game()` calls `st.reset()` to restart.
+The loop itself moves into a `main()` function — inside a function its names are fast locals, a
+small measured win on device. One centred `SceneLabel` shows the message for the non-play states;
+death ends the run instead of silently restarting. This is what turns a mechanic into a game — and
+it's the `State` + `main()` shape every bigger game grows into (see
+[Game patterns](https://picogame.makerclass.cz/concepts/patterns/)). **You see:** title → play → game over → title.
+**Try it:** add a high score that survives across games (keep it as a module global, not in
+`State`, and see `picogame_save` for NVM persistence).
 
 ---
 
