@@ -58,6 +58,8 @@ Mřížka indexů do bitmapy tilesetu, kde každý snímek představuje jeden ti
 - `fill(value)` — nastaví každý tile (vymaže orientaci).
 - `move(x, y)` — umístí mapu.
 - Vlastnosti jen pro čtení: `x`, `y`, `cols`, `rows`.
+**Nekompatibilní změna:** nahradily `tile(tx, ty[, value])` (firmware po 23. 8. 2026); starý kód
+spadne na `AttributeError`. Dost nový musí být firmware.
 
 ### `Particles(capacity, *, size=1, gravity=0.0, fade=False)`
 Sdružená částicová vrstva (malé pohyblivé tečky) vykreslená jako jedna vrstva Scene.

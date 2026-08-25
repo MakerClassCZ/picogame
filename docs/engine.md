@@ -207,6 +207,9 @@ A grid of tile indices into `tileset` (a `Bitmap` whose frames are the tiles).
 - Out-of-range `get_tile()` reads as `0` and `set_tile()` ignores the write (no exception).
 - Read-only properties: `x`, `y`, `cols`, `rows`.
 
+**Breaking change:** these two replaced `tile(tx, ty[, value])` (firmware after 2026-08-23) — old
+code raises `AttributeError`. The **firmware** is what must be new enough.
+
 ### `Canvas(width, height, *, transparent=None, buffer=None)`
 A RAM drawing surface composited as a Scene layer — the general home for shapes.
 Add it to a `Scene`; draw into it; only redrawn areas repaint. Colors are wire-order.

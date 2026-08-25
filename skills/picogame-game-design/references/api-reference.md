@@ -63,6 +63,9 @@ A grid of tile indices into a tileset Bitmap (each frame = one tile); a Scene la
 - `fill(value)` — set every tile (clears orientation).
 - `move(x, y)` — position the map.
 - Read-only props: `x`, `y`, `cols`, `rows`.
+- **Renamed (firmware after 2026-08-23):** `tile(tx, ty[, value])` was split into these two and is
+  gone from the C module. Porting older code: rewrite the calls; if it still raises, the firmware
+  is too old (the helpers already call `set_tile`).
 
 ### `Particles(capacity, *, size=1, gravity=0.0, fade=False)`
 A pooled particle layer (small moving dots) drawn as one Scene layer. **Limits:** `capacity` 1..4096, `size` 1..8 px.

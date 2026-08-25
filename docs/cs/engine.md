@@ -207,6 +207,9 @@ Mřížka indexů tilů do `tileset`, tedy bitmapy, jejíž snímky představuj�
 - Čtení `get_tile()` mimo rozsah vrací `0` a `set_tile()` zápis ignoruje (bez výjimky).
 - Vlastnosti jen pro čtení: `x`, `y`, `cols`, `rows`.
 
+**Nekompatibilní změna:** tyhle dvě nahradily `tile(tx, ty[, value])` (firmware po 23. 8. 2026) —
+starý kód spadne na `AttributeError`. Dost nový musí být **firmware**.
+
 ### `Canvas(width, height, *, transparent=None, buffer=None)`
 RAM kreslicí plocha skládaná jako vrstva Scene — obecný domov pro tvary.
 Přidej ji do `Scene` a kresli do ní; znovu se odešlou jen dirty regiony. Barvy mají wire order.

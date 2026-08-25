@@ -58,6 +58,8 @@ A grid of tile indices into a tileset Bitmap (each frame = one tile); a Scene la
 - `fill(value)` — set every tile (clears orientation).
 - `move(x, y)` — position the map.
 - Read-only props: `x`, `y`, `cols`, `rows`.
+**Breaking change:** replaced `tile(tx, ty[, value])` (firmware after 2026-08-23); old code raises
+`AttributeError`. The firmware is what must be new enough.
 
 ### `Particles(capacity, *, size=1, gravity=0.0, fade=False)`
 A pooled particle layer (small moving dots) drawn as one Scene layer.
