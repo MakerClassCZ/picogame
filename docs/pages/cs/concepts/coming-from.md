@@ -18,7 +18,7 @@ najdeš v [referenci API](/cs/reference/).
 | Pohyblivý objekt | `sprite.Sprite` | `TileGrid` | `spr()` | `pg.Sprite(bitmap, x, y)` (kotevní bod, překlopení, snímek, **scale**, **angle**) |
 | Scénu/svět | `Group`/ručně | `Group` | obrazovka | `pg.Scene(...)` — retained režim, dirty regions |
 | Vykreslit to | `screen.blit()` | přidat do `Group` | `spr()`/`map()` | jednou `scene.add(obj)`; pak `scene.refresh()` na každý snímek |
-| Dlážděnou úroveň | vlastní | `TileGrid`+`Bitmap` | `map()` | `pg.Tilemap(tiles, cols, rows)` — `tile(x, y, value)` |
+| Dlážděnou úroveň | vlastní | `TileGrid`+`Bitmap` | `map()` | `pg.Tilemap(tiles, cols, rows)` — `set_tile(x, y, value)` |
 | Posouvající se kameru | ruční offset | `Group.x/y` | `camera()` | `scene.set_view(ox, oy)` (svět větší než obrazovka) |
 | Hlavní smyčku | `while`, `flip()` | `while`, `refresh()` | `_update()`/`_draw()` | `while: buttons.poll(); …; scene.refresh(); clock.tick()` |
 | Vstup | `pygame.event` | `keypad`/piny | `btn()` | `picogame_input.Buttons` → `is_pressed()` / `just_pressed()` (`poll()` vrátí bitovou masku) |

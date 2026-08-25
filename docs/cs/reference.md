@@ -54,7 +54,7 @@ Retained scéna s vykreslováním podle dirty regions. Na SPI backendu jsou `buf
 
 ### `Tilemap(tileset, cols, rows)`
 Mřížka indexů do bitmapy tilesetu, kde každý snímek představuje jeden tile; vrstva `Scene`.
-- `tile(tx, ty, value=None, *, flip_x=False, flip_y=False, transpose=False) -> int` — přečte nebo nastaví tile. Pojmenované argumenty `flip_x`/`flip_y`/`transpose` nabízejí všech osm orientací buňky; použij je s deduplikovaným tilesetem z `png2picogame.py --dedup`. Čtení mimo rozsah vrátí 0 a zápis se ignoruje. Pole orientace se alokuje až při prvním použití.
+- `get_tile(tx, ty) -> int` — přečte tile. · `set_tile(tx, ty, value, *, flip_x=False, flip_y=False, transpose=False)` — zapíše ho. Pojmenované argumenty `flip_x`/`flip_y`/`transpose` nabízejí všech osm orientací buňky; použij je s deduplikovaným tilesetem z `png2picogame.py --dedup`. Čtení mimo rozsah vrátí 0 a zápis se ignoruje. Pole orientace se alokuje až při prvním použití.
 - `fill(value)` — nastaví každý tile (vymaže orientaci).
 - `move(x, y)` — umístí mapu.
 - Vlastnosti jen pro čtení: `x`, `y`, `cols`, `rows`.

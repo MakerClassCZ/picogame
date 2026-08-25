@@ -200,10 +200,11 @@ Scéna v retained mode s vykreslováním pomocí dirty regionů. `display` je
 
 ### `Tilemap(tileset, cols, rows)`
 Mřížka indexů tilů do `tileset`, tedy bitmapy, jejíž snímky představují jednotlivé tily.
-- `tile(tx, ty) -> int` / `tile(tx, ty, value, *, flip_x=False, flip_y=False, transpose=False)` — přečte nebo nastaví tile. Zápis ho označí jako změněný; příznaky orientace lze zadat jen jménem.
+- `get_tile(tx, ty) -> int` — přečte tile.
+- `set_tile(tx, ty, value, *, flip_x=False, flip_y=False, transpose=False)` — zapíše ho (a označí jako změněný); příznaky orientace lze zadat jen jménem.
 - `move(x, y)` — posune celou mapu; určí pixelovou pozici tilu 0,0.
 - `fill(value)` — nastaví všechny tily.
-- Čtení `tile()` mimo rozsah vrací `0` a zápisy ignoruje (bez výjimky).
+- Čtení `get_tile()` mimo rozsah vrací `0` a `set_tile()` zápis ignoruje (bez výjimky).
 - Vlastnosti jen pro čtení: `x`, `y`, `cols`, `rows`.
 
 ### `Canvas(width, height, *, transparent=None, buffer=None)`

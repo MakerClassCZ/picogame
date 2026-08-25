@@ -54,7 +54,7 @@ Retained-mode scene with dirty-rectangle rendering; `buffer_a/b` are strip buffe
 
 ### `Tilemap(tileset, cols, rows)`
 A grid of tile indices into a tileset Bitmap (each frame = one tile); a Scene layer.
-- `tile(tx, ty, value=None, *, flip_x=False, flip_y=False, transpose=False) -> int` — get tile, or set it (with optional keyword-only per-cell orientation: `flip_x`/`flip_y`/`transpose` give all 8 orientations of a tile; pair with a deduplicated tileset, see `png2picogame.py --dedup`). Out-of-range ignored. The orientation plane is allocated lazily (RAM only if a map uses it).
+- `get_tile(tx, ty) -> int` — read a tile. · `set_tile(tx, ty, value, *, flip_x=False, flip_y=False, transpose=False)` — write one (with optional keyword-only per-cell orientation: `flip_x`/`flip_y`/`transpose` give all 8 orientations of a tile; pair with a deduplicated tileset, see `png2picogame.py --dedup`). Out-of-range ignored. The orientation plane is allocated lazily (RAM only if a map uses it).
 - `fill(value)` — set every tile (clears orientation).
 - `move(x, y)` — position the map.
 - Read-only props: `x`, `y`, `cols`, `rows`.

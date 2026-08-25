@@ -18,7 +18,7 @@ See [How picogame works](/concepts/how-it-works/) for the underlying model and t
 | A movable object | `sprite.Sprite` | `TileGrid` | `spr()` | `pg.Sprite(bitmap, x, y)` (anchor, flip, frame, **scale**, **angle**) |
 | The scene/world | `Group`/manual | `Group` | the screen | `pg.Scene(...)` — retained, dirty-rect |
 | Draw it | `screen.blit()` | add to `Group` | `spr()`/`map()` | `scene.add(obj)` once; then `scene.refresh()` per frame |
-| A tiled level | your own | `TileGrid`+`Bitmap` | `map()` | `pg.Tilemap(tiles, cols, rows)` — `tile(x, y, value)` |
+| A tiled level | your own | `TileGrid`+`Bitmap` | `map()` | `pg.Tilemap(tiles, cols, rows)` — `set_tile(x, y, value)` |
 | A scrolling camera | manual offset | `Group.x/y` | `camera()` | `scene.set_view(ox, oy)` (world bigger than screen) |
 | The main loop | `while`, `flip()` | `while`, `refresh()` | `_update()`/`_draw()` | `while: buttons.poll(); …; scene.refresh(); clock.tick()` |
 | Input | `pygame.event` | `keypad`/pins | `btn()` | `picogame_input.Buttons` → `is_pressed()` / `just_pressed()` (`poll()` for the bitmask) |

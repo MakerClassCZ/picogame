@@ -200,10 +200,11 @@ Retained-mode scene with dirty-rectangle rendering. `display` is a `picogame.Dis
 
 ### `Tilemap(tileset, cols, rows)`
 A grid of tile indices into `tileset` (a `Bitmap` whose frames are the tiles).
-- `tile(tx, ty) -> int` / `tile(tx, ty, value, *, flip_x=False, flip_y=False, transpose=False)` — get / set a tile (set marks dirty); the orientation flags are keyword-only.
+- `get_tile(tx, ty) -> int` — read a tile.
+- `set_tile(tx, ty, value, *, flip_x=False, flip_y=False, transpose=False)` — write one (marks dirty); the orientation flags are keyword-only.
 - `move(x, y)` — move the whole map (pixel position of tile 0,0).
 - `fill(value)` — set every tile.
-- Out-of-range `tile()` reads as `0` and ignores writes (no exception).
+- Out-of-range `get_tile()` reads as `0` and `set_tile()` ignores the write (no exception).
 - Read-only properties: `x`, `y`, `cols`, `rows`.
 
 ### `Canvas(width, height, *, transparent=None, buffer=None)`
