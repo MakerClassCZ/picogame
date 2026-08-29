@@ -1271,7 +1271,20 @@ async function saveText(name, text) {
 
 if ($("btnFolder")) $("btnFolder").onclick = pickFolder;
 restoreFolder();
-if ($("btnSave")) $("btnSave").onclick = async function () { const s = E.serialize(project); s.art = artURLs; const w = await saveText("project.pgproj.json", JSON.stringify(s)); toast("Saved " + (w === "downloaded" ? "project.pgproj.json" : w + "project.pgproj.json"), "ok"); };
+// Save has two entry points - the header button and the last item of the Export
+// menu, which lists the editor project alongside the exports so every file the
+// editor can produce is findable in one place.
+async function saveProject() {
+  const s = E.serialize(project);
+  s.art = artURLs;
+  const w = await saveText("project.pgproj.json", JSON.stringify(s));
+  toast("Saved " + (w === "downloaded" ? "project.pgproj.json" : w + "project.pgproj.json"), "ok");
+}
+if ($("btnSave")) $("btnSave").onclick = saveProject;
+if ($("btnSaveMenu")) $("btnSaveMenu").onclick = function () {
+  const d = $("exportD"); if (d) d.open = false;
+  saveProject();
+};
 if ($("btnLoad")) $("btnLoad").onclick = function () { $("projfile").click(); };
 function loadSave(obj) {
   loadProject(E.deserialize(obj));
@@ -1610,20 +1623,31 @@ if ($("btnExportBaked")) $("btnExportBaked").onclick = async function () {
 };
 if ($("btnExport")) $("btnExport").onclick = async function () {
   const d = $("exportD"); if (d) d.open = false;
-  const ascii = !!($("optAscii") && $("optAscii").checked);
+  // ASCII unless asked otherwise: it bakes identically, reads as a picture and diffs
+  // cleanly, and a layer with more distinct tiles than the legend alphabet falls back
+  // to the number grid on its own. The opt-out is for a consumer that wants numbers.
+  const ascii = !($("optGrid") && $("optGrid").checked);
   const scene = E.exportScene(project, null, ascii);
   const name = (L().name || "scene").replace(/\W+/g, "_") + ".scene.json";
-  const fell = ascii && (scene.layers || []).some(function (l) { return l.kind === "tilemap" && l.grid; });
+  const fell = ascii
+    ? (scene.layers || []).filter(function (l) { return l.kind === "tilemap" && l.grid; }).length : 0;
   const where = await saveText(name, JSON.stringify(scene, null, 1));
   toast("Exported " + (where === "downloaded" ? name : where + name) +
-        (fell ? " - a layer had too many distinct tiles for an ASCII legend, kept as a grid" : "") +
+        (fell ? " - " + fell + " layer(s) had more distinct tiles than the ASCII legend holds, " +
+                "kept as a number grid" : "") +
         " - bake with scene_build.py", fell ? "info" : "ok");
 };
 if ($("btnExportProj")) $("btnExportProj").onclick = async function () {
   const d = $("exportD"); if (d) d.open = false;
-  const ascii = !!($("optAscii") && $("optAscii").checked);
-  const where = await saveText("game.project.json", JSON.stringify(E.exportProject(project, ascii), null, 1));
-  toast("Exported " + (where === "downloaded" ? "project.json" : where + "game.project.json"), "ok");
+  const ascii = !($("optGrid") && $("optGrid").checked);
+  const proj = E.exportProject(project, ascii);
+  const fell = ascii ? (proj.levels || []).reduce(function (n, lv) {
+    return n + (lv.layers || []).filter(function (l) { return l.kind === "tilemap" && l.grid; }).length;
+  }, 0) : 0;
+  const where = await saveText("game.project.json", JSON.stringify(proj, null, 1));
+  toast("Exported " + (where === "downloaded" ? "game.project.json" : where + "game.project.json") +
+        (fell ? " - " + fell + " layer(s) had more distinct tiles than the ASCII legend holds, " +
+                "kept as a number grid" : ""), fell ? "info" : "ok");
 };
 
 // Try in playground: hand THIS level to the browser playground and run it live. The playground bakes

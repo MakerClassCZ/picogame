@@ -31,6 +31,7 @@
 .pg-editor .dd > summary { list-style: none; cursor: pointer; background: #34406a; color: #eef; border-radius: 4px; padding: 5px 9px; }
 .pg-editor .dd > summary::-webkit-details-marker { display: none; }
 .pg-editor .dd[open] > summary { background: var(--accent); }
+.pg-editor .ddsep { border: 0; border-top: 1px solid #4a5680; margin: 4px 0; }
 .pg-editor .ddmenu { position: absolute; right: 0; top: 110%; z-index: 45; width: 240px;
   background: #2a3146; border: 1px solid #44569a; border-radius: 6px; padding: 8px; box-shadow: 0 6px 20px #0008; }
 
