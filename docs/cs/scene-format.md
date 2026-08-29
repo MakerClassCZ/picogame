@@ -83,7 +83,8 @@ Poznámky k polím:
   adresovatelných přes `tag`), `particles`, `hudlabel` (nezávislý na kameře).
   Jakákoli vrstva může nastavit `"fixed": true`.
 - **grid tilemapy dvěma zaměnitelnými způsoby** — `"grid"`: obdélníkové 2-D pole indexů
-  dlaždic (to exportuje editor; délky řádků musí odpovídat deklarovaným `cols`/`rows`). Nebo
+  dlaždic, **jeden vnitřní seznam na ŘÁDEK** (`grid[y][x]`, takže `len(grid)` je `rows` a
+  `len(grid[0])` je `cols`; délky řádků musí odpovídat deklarovaným `cols`/`rows`). Nebo
   `"legend"` + `"rows"`: mapa `{znak: index dlaždice}` a jeden string na řádek — tatáž mapa jako
   ASCII obrázek. Baker bere obojí a vyrobí identický výstup, takže volíš podle toho, kdo to
   edituje: `grid` pro editor, `rows` pro cokoli, co člověk čte v diffu nebo agent upravuje ručně

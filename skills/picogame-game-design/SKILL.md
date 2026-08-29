@@ -146,6 +146,12 @@ probability, no behind-the-scenes difficulty they can't read.
 - **Near-miss** tension and **peak-end**: a run is remembered by its peak and its end — end on a high
   (a flourish on death, the score front-and-center).
 - The hook is a **short, self-restarting loop** with escalating stakes — make restarting effortless.
+- **A pass/fail game has no score axis — give it one on purpose.** Level-based designs (puzzle
+  rooms, escape, "reach the exit") are binary: you cleared it or you didn't, so there is nothing to
+  beat and no reason for a second attempt at a level already solved. Add ONE continuous measure over
+  the top — optional collectibles placed off the safe route, a clear time, or a move/shot count —
+  so a solved level still has a better run in it. Keep it optional: it must not gate progress, or
+  the puzzle becomes a chore.
 
 ### 1.6 Game-state flow (most of a game's shape)
 Wrap the loop in a small **state machine** — decide the states up front; it's most of the game's

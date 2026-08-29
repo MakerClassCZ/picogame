@@ -82,7 +82,8 @@ Field notes:
   the native `sprite.angle`), `group` (many instances of one bitmap, addressable by `tag`),
   `particles`, `hudlabel` (camera-independent). Any layer may set `"fixed": true`.
 - **the tilemap grid, two interchangeable ways** — `"grid"`: a rectangular 2-D array of tile
-  indices (what the editor exports; row lengths and the declared `cols`/`rows` must agree).
+  indices, **one inner list per ROW** (`grid[y][x]`, so `len(grid)` is `rows` and `len(grid[0])` is
+  `cols`; row lengths and the declared `cols`/`rows` must agree).
   Or `"legend"` + `"rows"`: a `{char: tile index}` map plus one string per row — the same map as
   an ASCII picture. The baker accepts either and produces identical output, so pick by who edits
   it: `grid` for the editor, `rows` for anything a human reads in a diff or an agent edits by hand

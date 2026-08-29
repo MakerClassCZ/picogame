@@ -321,6 +321,16 @@ one-way tile is passable from below**, which reads as a bug even though the coll
 one-way game, either extend the resolver first or tell the player which tiles stay one-way —
 never silently reuse the platform tile for a solid.
 
+**IF YOU DO EXTEND IT, WRITE ONE RESOLVER, NOT A SECOND BRANCH.** The tempting patch is to bolt a
+ceiling case onto the falling code, and it rots fast: the falling half stays hard-coded for `+y`
+(its arithmetic assumes "land on the tile's top"), while the ceiling half stops probing tiles at
+all and clamps against a remembered `ceiling_y` — so shafts, moving into a wall from below, and
+closed rooms each want a third case. Resolve **one axis at a time, in the direction of travel**:
+probe the cell the mover would enter this frame, and on a hit snap flush against it and zero that
+velocity. The direction falls out of the sign, so there is nothing to duplicate, and one-way
+collapses into a single condition on the probe (`solid or (one_way and vy > 0)`) instead of a
+parallel code path.
+
 **MVP:** tunable jump with asymmetric rise/fall gravity + variable height · coyote
 time + jump buffer · AABB tile collision with checkpoints.
 **NICE TO HAVE:** apex hang (half-gravity near peak) · corner correction ·
