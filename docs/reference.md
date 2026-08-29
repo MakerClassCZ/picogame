@@ -252,6 +252,12 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - `load(pg, scene, display=None, strip_h=None, font=None, bank=None) -> View` — build a scene from a baked SCENE dict.
 - `load_bank(pg, bank)` — build a shared asset bank once (reuse across levels).
 - `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`.
+- `load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True) -> View` — bake a level's scene JSON on the device and load it, skipping `scene_build.py`. For ITERATING on a level; ship the pre-baked module. Colour-tileset levels only.
+
+### `picogame_scenebake` — on-device scene baker
+- `bake(scene) -> SCENE` — turn an editor scene JSON (already parsed) into the runtime SCENE dict, byte-identical to `tools/scene_build.py`. PNG-backed assets raise `NotImplementedError` (median-cut quantization stays on the desktop).
+- Prefer `picogame_scene.load_json()`: it holds the JSON text and the parse tree as locals, which is what keeps the ~17 kB peak transient. Bake EARLY, while the heap is still contiguous.
+- Costs ~3.6 kB while imported; `load_json(..., release=True)` drops it after the last level.
 
 ### `picogame_mode7` — Mode-7 perspective floor
 - `Camera(fov=0.66)` · `.draw(canvas, texture, x, y, angle, horizon, height, y_off=0)` — drive the C `Canvas.mode7` floor from a friendly camera pose (position in world/tile units, heading in radians, `height` = how high the camera sits). `texture` dims must be powers of two, one world unit = one tile. Draw into a 0-RAM `StripDraw` view. See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).

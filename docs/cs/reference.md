@@ -252,6 +252,12 @@ Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný 
 - `load(pg, scene, display=None, strip_h=None, font=None, bank=None) -> View` — vytvoří scénu z připraveného slovníku `SCENE`; na SPI backendu má `View` dva strip buffery, na framebufferu jsou `view.bufA` a `view.bufB` rovny `None`.
 - `load_bank(pg, bank)` — postaví sdílenou asset banku jednou (znovupoužitelnou napříč levely).
 - `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`.
+- `load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True) -> View` — zapeče scene JSON levelu přímo na desce a načte ho, bez kroku přes `scene_build.py`. Na ITERACI levelu; hotovou hru posílej se zapečeným modulem. Jen barevné tilesety.
+
+### `picogame_scenebake` — baker scén na desce
+- `bake(scene) -> SCENE` — z (už naparsovaného) scene JSONu editoru udělá runtime SCENE dict, byte-identicky s `tools/scene_build.py`. Assety z PNG vyhodí `NotImplementedError` (median-cut kvantizace zůstává na desktopu).
+- Radši `picogame_scene.load_json()`: drží text JSONu i parse strom jako lokály, což je přesně to, co dělá tu ~17 kB špičku přechodnou. Bakuj BRZO, dokud je heap souvislý.
+- Zabírá ~3,6 kB, dokud je importovaný; `load_json(..., release=True)` ho po posledním levelu zahodí.
 
 ### `picogame_mode7` — Mode-7 perspektivní podlaha
 - `Camera(fov=0.66)` · `.draw(canvas, texture, x, y, angle, horizon, height, y_off=0)` — řídí C podlahu `Canvas.mode7` z přívětivé pozice kamery (pozice ve světových/dlaždicových jednotkách, směr v radiánech, `height` = výška kamery). Rozměry `texture` musí být mocniny dvou, jedna světová jednotka = jedna dlaždice. Kresli do 0-RAM `StripDraw` view. Viz [/cs/helpers/pseudo-3d/](/cs/helpers/pseudo-3d/).

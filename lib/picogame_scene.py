@@ -253,3 +253,29 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
         v.audio.music(v.sounds[music])
     v.camera = scene.get("camera")
     return v
+
+
+def load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True):
+    """Bake a level's scene JSON and load it, in one call - the edit-and-rerun path.
+
+    Skips the tools/scene_build.py step so a level can be iterated on as plain JSON. The reason
+    this is a function and not three lines at module scope is MEASURED: the JSON text and the
+    parse tree are several times the size of the finished SCENE, and as locals they die the moment
+    this returns. Written out inline they stay reachable for the life of the program.
+
+    Call it EARLY, before the big allocations - the peak here is transient, but the GC does not
+    move objects, so a late spike leaves holes where the strip buffers want to go.
+
+    `release=True` drops the baker module afterwards (~3.6 kB). Pass False when loading several
+    levels in a row, then release it yourself after the last one.
+
+    Colour-tileset levels only (see picogame_scenebake); PNG-backed art must be pre-baked.
+    """
+    import json
+    import picogame_scenebake
+    with open(path) as f:
+        scene = picogame_scenebake.bake(json.load(f))
+    if release:
+        import sys
+        del sys.modules["picogame_scenebake"]
+    return load(pg, scene, display=display, strip_h=strip_h, font=font, bank=bank)
