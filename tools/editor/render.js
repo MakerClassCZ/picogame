@@ -9,8 +9,31 @@
   "use strict";
   const E = (typeof require !== "undefined") ? require("./core.js") : root.PGEditor;
 
+  // The four the helper libs already act on. A game can read ANY name via view.tile_has(tx, ty, name),
+  // so these are a starting set, not a closed list -- see flagsOf().
   const FLAGS = ["solid", "coin", "goal", "hazard"];
   const FLAG_COLOR = { solid: "#ff4d4d", coin: "#ffd23f", goal: "#45e08a", hazard: "#ff5fff" };
+
+  // Custom flags need no schema: asset.props IS the storage, so the set of names a tileset uses is
+  // simply the names that appear in it. That means a flag hand-written into a .json (or added by the
+  // game's own tooling) shows up in the editor UI the moment the project loads.
+  function flagsOf(asset) {
+    const out = FLAGS.slice(), p = asset && asset.props;
+    if (p) {
+      for (const k in p) {
+        for (const n in p[k]) { if (out.indexOf(n) < 0) out.push(n); }
+      }
+    }
+    return out;
+  }
+
+  // Stable colour for a custom flag, hashed from the name so its badge looks the same every session.
+  function flagColor(name) {
+    if (FLAG_COLOR[name]) return FLAG_COLOR[name];
+    let h = 0;
+    for (let i = 0; i < name.length; i++) { h = (h * 31 + name.charCodeAt(i)) & 0xffff; }
+    return "hsl(" + (h % 360) + ", 85%, 62%)";
+  }
   const SEL_COLOR = "#ffd23f";
 
   function rgbCss(c) { return "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")"; }
@@ -70,7 +93,7 @@
       } else { ctx.fillStyle = "#0af"; ctx.fillRect(dx, dy, tw, th); }
       if (showFlags) {
         const pr = tileProp(a, v);
-        if (pr) { let i = 0; FLAGS.forEach(function (p) { if (pr[p]) { ctx.fillStyle = FLAG_COLOR[p]; ctx.fillRect(dx + 1 + i * 4, dy + 1, 3, 3); i++; } }); }
+        if (pr) { let i = 0; for (const p in pr) { if (pr[p]) { ctx.fillStyle = flagColor(p); ctx.fillRect(dx + 1 + i * 4, dy + 1, 3, 3); i++; } } }
       }
     }
     ctx.globalAlpha = 1;
@@ -211,7 +234,7 @@
     return { worldW: worldW, worldH: worldH };
   }
 
-  const api = { draw: draw, FLAGS: FLAGS, FLAG_COLOR: FLAG_COLOR };
+  const api = { draw: draw, FLAGS: FLAGS, FLAG_COLOR: FLAG_COLOR, flagsOf: flagsOf, flagColor: flagColor };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.PGRender = api;
 })(typeof window !== "undefined" ? window : globalThis);

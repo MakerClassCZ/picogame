@@ -196,6 +196,12 @@ main()                                          # module bottom: kick it off (st
   **clean**. Every field documented in `__init__`; no name collisions with sprites/loop vars. Never a
   bare `S={}` dict (string keys are typo-prone + slower). Keep engine objects (Sprites/Tilemap/Canvas/
   pools/`clock`/`btn`/audio) and cross-run/persistent values (NVM best score) as module globals, not in `State`.
+- **Name things in words — the game code gets read by a human next.** Whoever picks this up did not
+  watch you write it, and one- to three-letter names (`tf`, `n`, `on`, `dx` outside a tight math
+  block) force them to re-derive what each holds; observed in the wild, the first thing a new owner
+  does is rename them all. Spend the characters: `tile_flags`, `alive`, `speed`. **Exceptions, all
+  narrow:** the established module aliases (`import picogame_fx as fx`), loop counters (`i`, `x`, `y`),
+  and a local `dx`/`dy` next to the arithmetic that defines them.
 - **Put the per-frame loop in a FUNCTION, not at module scope** (the skeleton above) — a measured
   perf lever, not style (−33 % logic on device: globals-dict lookups become array-indexed locals;
   hoisted locals faster still), and a safe mechanical wrap as long as state lives in the `State`
@@ -260,7 +266,7 @@ enough to recognize the helper:
 | Mechanic | What it is | Use |
 |---|---|---|
 | **Input → movement** | read buttons, move the player | `picogame_input.Buttons` (`is_pressed`/`just_pressed`; `.clear()` on state changes); move via `spr.x +=`/`spr.fx +=` (sub-pixel). Auto-adds a **USB gamepad and a USB keyboard** on USB-host boards (Fruit Jam) with no code change |
-| **Collision / hit** | "did these two touch?" — the heart of most rules | `a.overlaps(b)` (box; `b` = sprite/point/rect) / `a.near(b, r)` (circular), or raw `pg.collide(...)`; on a grid, probe `picogame_tiles` flags (solid/hazard) |
+| **Collision / hit** | "did these two touch?" — the heart of most rules | `a.overlaps(b)` (box; `b` = sprite/point/rect) / `a.near(b, r)` (circular), or raw `pg.collide(...)`; on a grid, **which tile-property call depends on where the map came from**: a scene loaded by `picogame_scene` → `view.is_solid(tx,ty)` / `view.tile_has(tx,ty,"name")` (any name the editor painted); a hand-built `pg.Tilemap` → `picogame_tiles` bit flags |
 | **Spawning many things** | bullets, enemies, coins, pipes | a fixed **`picogame_pool.Pool`** — never create/destroy sprites per frame (RAM) |
 | **Rules: score / lives / win-lose** | the game's economy + end condition | plain Python ints; drive the state machine (§1.6); show via `picogame_ui` HUD |
 | **Animation** | walk/idle/explode cycles | step `sprite.frame`, or `picogame_anim` for time-based; bake rotations as frames |

@@ -26,7 +26,7 @@ const minimap = $("minimap");
 const mmCtx = minimap ? minimap.getContext("2d") : null;
 
 // ---------------------------------------------------------------- state
-const FLAGS = R.FLAGS, FLAG_COLOR = R.FLAG_COLOR;
+const FLAGS = R.FLAGS, FLAG_COLOR = R.FLAG_COLOR, flagsOf = R.flagsOf, flagColor = R.flagColor;
 const TOOLS = ["select", "paint", "place", "hud", "zone", "point", "pan"];
 const TOOL_META = {
   select: { key: "1", icon: "⤡", label: "Select", tip: "Select / move objects (V or 1). Click stacked items again to cycle; Shift-click = multi-select." },
@@ -117,6 +117,17 @@ function drawThumb(cv, a, id, frame) {
   else { c.fillStyle = "#0af"; c.fillRect(2, 2, cv.width - 4, cv.height - 4); }
 }
 
+// A FileReader that errors has NOTHING to do with the file's contents -- the browser could not
+// read the bytes at all. In practice that means the file moved/was rewritten between the picker
+// and the read, or it lives on a mount the browser will not follow (network drives, SSHFS, some
+// virtual filesystems). Say so: a silent no-op here reads as "the editor is broken".
+function unreadable(f, fr) {
+  return "Could not read " + f.name + " — the browser could not open the file" +
+    ((fr && fr.error && fr.error.name) ? " (" + fr.error.name + ")" : "") +
+    ". If it sits on a network or virtual drive (SSHFS, a mounted share), copy it to a local " +
+    "folder first; otherwise it may have been moved or rewritten since you picked it.";
+}
+
 // ================================================================ ASSET IMPORT
 // PNG import uses inline panel fields for frame size (NOT prompt()). We stash the loaded
 // image + dataURL, then the panel shows w/h inputs + a Confirm button.
@@ -132,8 +143,10 @@ $("file").onchange = function (ev) {
       pendingImport.fh = img.height;
       renderPanel();
     };
+    img.onerror = function () { pendingImport = null; toast(f.name + " is not a PNG the browser can decode", "err"); };
     img.src = dataURL;
   };
+  fr.onerror = function () { pendingImport = null; toast(unreadable(f, fr), "err"); };
   fr.readAsDataURL(f); ev.target.value = "";
 };
 function confirmImport() {
@@ -573,24 +586,59 @@ function colorEditor(box, a) {
     a.colors[String(next)] = [200, 200, 200]; sel.tileFrame = next; renderPanel();
   }));
 }
+// Flags a tileset has used this session. Custom names live in asset.props (flagsOf reads them
+// back), but a name you have not ticked onto a tile yet exists nowhere -- park it here so it
+// stays on screen between clicks instead of vanishing the moment you untick it.
+const pendingFlags = {};
+
 function flagEditor(box, a, value) {
   if (value === 0) { box.appendChild(hint("Tile 0 is the eraser — no flags.")); return; }
+  const id = a.src || a.type || "asset";
+  const names = flagsOf(a).slice();
+  (pendingFlags[id] || []).forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); });
+
   const fb = mk("div", "flagbox");
   fb.appendChild(mk("div", "hint", "tile " + value + ":"));
-  FLAGS.forEach(function (p) {
+  names.forEach(function (p) {
     const lab = mk("label"); const cb = mk("input"); cb.type = "checkbox";
     cb.checked = !!(a.props && a.props[String(value)] && a.props[String(value)][p]);
-    cb.onchange = function () { snapshot(); E.setTileProp(a, value, p, cb.checked); };
+    cb.onchange = function () { snapshot(); E.setTileProp(a, value, p, cb.checked); frame(); };
     const sw = mk("span", "flag " + p, "■");
+    if (FLAGS.indexOf(p) < 0) sw.style.color = flagColor(p);   // custom: hashed colour, no CSS class
     add(lab, cb, sw, document.createTextNode(p)); fb.appendChild(lab);
   });
   box.appendChild(fb);
+
+  // Add your own. A flag is just a NAME the game asks for -- nothing here needs to know what it
+  // means, so the editor does not have to ship a list of every property a game might invent.
+  const ar = mk("div", "row");
+  const inp = mk("input"); inp.type = "text"; inp.placeholder = "new flag (e.g. glass)";
+  inp.style.flex = "1"; inp.maxLength = 24;
+  const btn = mk("button", "mini opt", "+ Flag");
+  function addFlag() {
+    const n = (inp.value || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (!n) { toast("A flag name needs letters, digits or _", "err"); return; }
+    if (names.indexOf(n) >= 0) { toast("This tileset already has a “" + n + "” flag", "err"); return; }
+    pendingFlags[id] = (pendingFlags[id] || []).concat([n]);
+    snapshot(); E.setTileProp(a, value, n, true);
+    inp.value = ""; renderPanel(); frame();
+    toast("Added “" + n + "” to tile " + value + " — read it with view.tile_has(tx, ty, \"" + n + "\")", "ok");
+  }
+  btn.onclick = addFlag;
+  inp.onkeydown = function (ev) { if (ev.key === "Enter") { ev.preventDefault(); addFlag(); } };
+  add(ar, inp, btn); box.appendChild(ar);
+
   const det = mk("details", "help"); det.appendChild(mk("summary", null, "What do flags do?"));
-  det.appendChild(hint("Flags give a tile <b>meaning</b> the game reads — they don't change how it looks:<br>" +
-    "<span class='flag solid'>■</span> <b>solid</b> blocks movement (<code>view.is_solid</code>)<br>" +
+  det.appendChild(hint("A flag gives a tile <b>meaning</b> the game reads — it never changes how the " +
+    "tile looks. Every flag, built-in or your own, is read the same way: " +
+    "<code>view.tile_has(tx, ty, \"name\")</code>.<br>" +
+    "<span class='flag solid'>■</span> <b>solid</b> blocks movement — also <code>view.is_solid(tx, ty)</code><br>" +
     "<span class='flag coin'>■</span> <b>coin</b> collectible<br>" +
     "<span class='flag goal'>■</span> <b>goal</b> level exit / win<br>" +
-    "<span class='flag hazard'>■</span> <b>hazard</b> hurts the player"));
+    "<span class='flag hazard'>■</span> <b>hazard</b> hurts the player<br>" +
+    "These four are only a starting set — the helper libs act on them, but your game decides what " +
+    "any flag does. Add your own for anything the four don't cover (a <code>glass</code> tile that " +
+    "blocks the player but lets a shot through, <code>ice</code>, <code>ladder</code>…)."));
   box.appendChild(det);
 }
 
@@ -1567,7 +1615,7 @@ if ($("projfile")) $("projfile").onchange = function (ev) {
             "versions) and load it again.", "err");
       return;
     }
-    try { obj = JSON.parse(fr.result); } catch (e) { toast("Could not read project file", "err"); return; }
+    try { obj = JSON.parse(fr.result); } catch (e) { toast(f.name + " is not valid JSON (" + e.message + ")", "err"); return; }
     rememberFile(f.name, f);          // so a later Save can tell if something else rewrote it
     // An EXPORTED scene/project (layers[], the bake input) is not the editor's project shape,
     // so it goes through the importer rather than deserialize() - which would keep only the
@@ -1579,8 +1627,10 @@ if ($("projfile")) $("projfile").onchange = function (ev) {
       });
       return;
     }
-    try { loadSave(obj); toast("Loaded " + f.name, "ok"); } catch (e) { toast("Could not read project file", "err"); }
+    try { loadSave(obj); toast("Loaded " + f.name, "ok"); }
+    catch (e) { toast(f.name + " is JSON, but not a project this editor understands (" + e.message + ")", "err"); console.error(e); }
   };
+  fr.onerror = function () { toast(unreadable(f, fr), "err"); };
   fr.readAsText(f);
 };
 // The loadable demos. Each is a .pgproj.json in this folder (served same-origin). The

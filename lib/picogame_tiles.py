@@ -9,8 +9,14 @@
 #   tf.set(3, tiles.B_COIN)                          # flag tile 3 at runtime
 #
 # Bake the {tile: flags} table from your scene/map JSON (the editor can paint flags per tile).
+#
+# NOT for a scene loaded by picogame_scene - that View already answers the same questions by NAME:
+#   view.is_solid(tx, ty)  /  view.tile_has(tx, ty, "glass")     <- any flag the editor painted
+# Use TileFlags for a HAND-BUILT pg.Tilemap, where nothing else holds the properties.
 
-# Named BIT indices (0..7) + their MASKs. Eight user-defined flags.
+# Named BIT indices (0..7) + their MASKs. EIGHT BITS TOTAL - there is no separate "custom" range;
+# every one of these is yours to redefine, B_CUSTOM is just the one left unnamed. Need a ninth
+# property? Reach for a scene's named props instead of widening this.
 B_SOLID, B_HAZARD, B_LADDER, B_PLATFORM, B_WATER, B_COIN, B_EXIT, B_CUSTOM = range(8)
 SOLID = 1 << B_SOLID
 HAZARD = 1 << B_HAZARD

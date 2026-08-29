@@ -13,6 +13,10 @@ Loader převede připravený slovník `SCENE` na `pg.Scene` a sadu pojmenovanýc
 
 `load_bank(pg, bank)` vytvoří sdílené bitmapy, zvuky a animace. Výsledek předej jako `load(..., bank=...)` při načtení každé úrovně, aby se společné prostředky nevytvářely znovu.
 
+**Vlastnosti dlaždic přicházejí se scénou.** Po načtení scény nesahej po `picogame_tiles` — `View` na dotazy k jednotlivým dlaždicím odpovídá sám: `view.is_solid(tx, ty)` a `view.tile_has(tx, ty, "název")` pro libovolný další příznak. Název je ten, který jsi namaloval v editoru, takže nejsi omezený na čtyři výchozí: přidej v editoru příznak `glass` a hra ho přečte jako `view.tile_has(tx, ty, "glass")`. Sáhnout tu po bitovém poli znamená znovu odvozovat data, která loader už má.
+
+**`view.camera` jsou data, ne chování.** Loader ti podá `(mode, target, axis, x, y, w, h)` a hra to aplikuje — nic hráče samo nesleduje. `axis` je `"x"`, `"y"` nebo `"xy"`; respektuj ho při volání `scene.set_view()`, jinak level navržený na svislé rolování tiše rolovat nebude.
+
 Vrácený `View` zpřístupňuje obsah scény:
 
 - `view.scene` - vytvořený `pg.Scene`. V každém snímku zavolej `view.scene.refresh()`; pohled posuneš přes `view.scene.set_view(ox, oy)`.
