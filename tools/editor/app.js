@@ -35,7 +35,7 @@ const TOOL_META = {
   hud:    { key: "4", icon: "⊞", label: "HUD",    tip: "Add a camera-fixed text label (4), e.g. a score." },
   zone:   { key: "5", icon: "▭", label: "Zone",   tip: "Drag a trigger rectangle (5), then tag it." },
   point:  { key: "6", icon: "✕", label: "Point",  tip: "Drop a named point (6), e.g. a spawn." },
-  pan:    { key: "H", icon: "✋", label: "Pan",    tip: "Pan the view (H or hold Space). Scroll wheel scrolls; Ctrl+wheel zooms." },
+  pan:    { key: "H", icon: "✋", label: "Pan",    tip: "Pan the view (H or hold Space). Wheel scrolls, Shift+wheel scrolls sideways, Ctrl+wheel zooms." },
 };
 
 let project = E.newProject();
@@ -649,7 +649,7 @@ function panelPlace() {
 // ---- PAN ----
 function panelPan() {
   add(panel, h3("Navigate"));
-  panel.appendChild(hint("Drag to pan the view. Or hold <b>Space</b> in any tool, or middle-mouse-drag. Scroll wheel scrolls, Ctrl+wheel zooms to cursor."));
+  panel.appendChild(hint("Drag to pan the view. Or hold <b>Space</b> in any tool, or middle-mouse-drag. Wheel scrolls, <b>Shift+wheel</b> scrolls sideways, Ctrl+wheel zooms to cursor."));
   navButtons(panel);
 }
 
@@ -992,12 +992,26 @@ window.addEventListener("touchmove", onMove, { passive: false });
 window.addEventListener("touchend", onUp);
 canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
-// wheel: scroll pans, ctrl/cmd+wheel zooms to cursor
+// wheel: scroll pans, shift+wheel pans horizontally, ctrl/cmd+wheel zooms to cursor.
+// Deltas are normalized to CSS px first -- Firefox reports whole LINES for a real wheel
+// mouse (deltaY ~3), so without this one notch would pan 3 px instead of ~100.
+function wheelPx(ev) {
+  const k = ev.deltaMode === 1 ? 16            // DOM_DELTA_LINE  -> ~one text line
+    : ev.deltaMode === 2 ? vp.h                // DOM_DELTA_PAGE  -> one viewport
+      : 1;                                     // DOM_DELTA_PIXEL
+  return { x: ev.deltaX * k, y: ev.deltaY * k };
+}
+
 canvas.addEventListener("wheel", function (ev) {
   ev.preventDefault();
   const s = evScreen(ev);
-  if (ev.ctrlKey || ev.metaKey) { vp.zoomAt(s.sx, s.sy, ev.deltaY < 0 ? 1.12 : 0.89); }
-  else { vp.camX += ev.deltaX / vp.zoom; vp.camY += ev.deltaY / vp.zoom; }
+  const d = wheelPx(ev);
+  if (ev.ctrlKey || ev.metaKey) { vp.zoomAt(s.sx, s.sy, d.y < 0 ? 1.12 : 0.89); return; }
+  // Shift folds the vertical delta onto X. Summing (not swapping) is deliberate: some
+  // browsers already report shift+wheel as deltaX, and then d.y is 0 -- either way one
+  // notch scrolls horizontally exactly once, never twice.
+  if (ev.shiftKey) { vp.camX += (d.x + d.y) / vp.zoom; return; }
+  vp.camX += d.x / vp.zoom; vp.camY += d.y / vp.zoom;
 }, { passive: false });
 
 // ---------------------------------------------------------------- minimap interaction

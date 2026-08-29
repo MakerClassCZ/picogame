@@ -70,7 +70,7 @@ be smaller than the world or offset within it (parallax). **World size** is the 
 | Point | 6 | Drop a named point (e.g. `spawn`). |
 | Pan | H / Space | Pan the view (or hold Space in any tool; middle-drag also pans). |
 
-**Navigation:** wheel scrolls, **Ctrl/⌘+wheel** zooms to the cursor, `+`/`−` zoom, `F`
+**Navigation:** wheel scrolls, **Shift+wheel** scrolls horizontally, **Ctrl/⌘+wheel** zooms to the cursor, `+`/`−` zoom, `F`
 fits. Arrows nudge the selection (Shift = ×10), or pan the camera when nothing is selected.
 
 **Editing:** `Ctrl+Z`/`Ctrl+Y` undo/redo (everywhere), `Ctrl+C`/`V`/`D` copy/paste/
