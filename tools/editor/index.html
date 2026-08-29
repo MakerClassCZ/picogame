@@ -34,6 +34,7 @@
       </div>
     </details>
     <button id="btnNew" class="mini opt">New</button>
+    <button id="btnFolder" class="mini opt" title="Choose a folder to save into (Chrome/Edge) instead of downloading">&#128193; Folder…</button>
     <button id="btnSave" class="mini opt">Save</button>
     <button id="btnLoad" class="mini opt">Load</button>
     <button id="btnTryPlay" class="mini" title="Open this level running in the playground">&#9654; Try in playground</button>
@@ -43,6 +44,9 @@
         <button id="btnExportBaked">baked &lt;name&gt;_scene.py (this level, ready for the device)</button>
         <button id="btnExport">scene.json (this level)</button>
         <button id="btnExportProj">project.json (bank + levels)</button>
+        <label class="hint"><input type="checkbox" id="optAscii"> ASCII map (<code>legend</code> +
+          <code>rows</code> instead of the number grid) — bakes identically, but the level reads as a
+          picture, so a change shows up in a diff and a person or an agent can edit it by hand.</label>
         <div class="hint">Keep the PNGs next to it, then run <code>tools/scene_build.py</code>.</div>
       </div>
     </details>
@@ -121,6 +125,7 @@
   </div>
 </div>
 
+  <script src="config.js"></script>
   <script src="core.js"></script>
   <script src="viewport.js"></script>
   <script src="history.js"></script>

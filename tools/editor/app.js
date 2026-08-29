@@ -1150,7 +1150,12 @@ function updateStatus() {
 // ================================================================ TOP BAR / FILES
 function loadProject(p) {
   project = p; images = {}; artURLs = {}; history.clear();
-  sel = { asset: null, tileFrame: 1, tool: "select", tm: 0, entity: null, hud: null, zone: null, point: null, particle: null, tile: null };
+  // Reset the selection through clearSel() rather than rebuilding `sel` by hand: the hand-built
+  // literal omitted `multi`, so the first renderPanel() after ANY load (demo, Load, import) threw
+  // in panelSelect on sel.multi.length - after the project was already installed, which is why it
+  // looked like a half-drawn panel instead of an error.
+  sel = { asset: null, tileFrame: 1, tool: "select", tm: 0 };
+  clearSel();
   document.querySelectorAll(".tool").forEach(function (b) { b.classList.toggle("on", b.dataset.tool === "select"); });
   setTimeout(doFit, 0);
   scheduleAutosave();
@@ -1168,7 +1173,105 @@ if ($("btnAddLevel")) $("btnAddLevel").onclick = function () {
 if ($("btnNew")) $("btnNew").onclick = function () { if (confirm("New project? Unsaved work is lost.")) { loadProject(E.newProject()); renderPanel(); refreshChrome(); } };
 
 function download(name, text) { const b = new Blob([text], { type: "application/json" }); const a = mk("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
-if ($("btnSave")) $("btnSave").onclick = function () { const s = E.serialize(project); s.art = artURLs; download("project.pgproj.json", JSON.stringify(s)); toast("Saved project.pgproj.json", "ok"); };
+
+// ---------------------------------------------------------------- save in place (a folder)
+// Pick a project folder once (File System Access) and every export WRITES THERE instead of
+// landing in ~/Downloads: the file the editor saves is then the same file the game imports and
+// a coding agent edits, so the two can hand a level back and forth. The handle is kept in
+// IndexedDB because the editor reloads on Run; the browser still re-asks for permission per
+// session. Firefox/Safari have no FSA API - there `saveText` just downloads, as before.
+let dirHandle = null;
+const FS_OK = typeof window.showDirectoryPicker === "function";
+
+function idb(fn) {                      // one tiny store, no library
+  return new Promise(function (res, rej) {
+    const r = indexedDB.open("pgeditor", 1);
+    r.onupgradeneeded = function () { r.result.createObjectStore("kv"); };
+    r.onerror = function () { rej(r.error); };
+    r.onsuccess = function () {
+      const tx = r.result.transaction("kv", "readwrite");
+      const q = fn(tx.objectStore("kv"));
+      q.onsuccess = function () { res(q.result); };
+      q.onerror = function () { rej(q.error); };
+    };
+  });
+}
+
+async function pickFolder() {
+  if (!FS_OK) { toast("This browser can't save to a folder (Chrome/Edge only) - exports download instead.", "info"); return; }
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: "readwrite", id: "pgeditor" });
+    await idb(function (st) { return st.put(dirHandle, "dir"); });
+    refreshFolderChrome();
+    toast("Saving into " + dirHandle.name + "/ - exports write there, no download", "ok");
+  } catch (e) { if (e.name !== "AbortError") toast("Folder: " + e.message, "err"); }
+}
+
+async function restoreFolder() {        // silent: only reuse a handle we may still write to
+  if (!FS_OK) return;
+  try {
+    const h = await idb(function (st) { return st.get("dir"); });
+    if (h && (await h.queryPermission({ mode: "readwrite" })) === "granted") { dirHandle = h; refreshFolderChrome(); }
+  } catch (e) { /* no handle yet, or the folder is gone */ }
+}
+
+function refreshFolderChrome() {
+  const b = $("btnFolder"); if (!b) return;
+  b.textContent = dirHandle ? "📁 " + dirHandle.name : "📁 Folder…";
+  b.title = dirHandle ? "Exports write into " + dirHandle.name + "/ - click to choose another folder"
+                      : "Choose a folder to save into (Chrome/Edge) instead of downloading";
+}
+
+// What each file looked like when we last read or wrote it, so a save can tell whether someone
+// else (a coding agent, a git merge, another tab) has touched it since. Without this the editor
+// silently overwrites their work: it holds the whole document in memory and rewrites it whole.
+const fileStamps = new Map();
+function stampOf(file) { return file.lastModified + ":" + file.size; }
+function rememberFile(name, file) { fileStamps.set(name, stampOf(file)); }
+
+// null if `name` is unchanged since we last saw it (or we never did); otherwise the current File.
+async function changedSinceWeSawIt(name) {
+  const known = fileStamps.get(name);
+  if (!known || !dirHandle) return null;
+  try {
+    const f = await (await dirHandle.getFileHandle(name)).getFile();
+    return stampOf(f) === known ? null : f;
+  } catch (e) { return null; }             // gone from the folder - a plain write recreates it
+}
+
+// Write `text` into the chosen folder, else fall back to a download. Returns where it went,
+// so callers can say it in the toast (the user must know which of the two happened).
+async function saveText(name, text) {
+  if (!dirHandle) { download(name, text); return "downloaded"; }
+  try {
+    if ((await dirHandle.queryPermission({ mode: "readwrite" })) !== "granted" &&
+        (await dirHandle.requestPermission({ mode: "readwrite" })) !== "granted") {
+      download(name, text); return "downloaded";
+    }
+    // Someone else wrote this file while we had it open. Overwriting is a real choice (it may be
+    // your own earlier export), so ask - and if the answer is no, still write, under a side name,
+    // because the one unacceptable outcome is losing whichever version the user actually wanted.
+    const theirs = await changedSinceWeSawIt(name);
+    if (theirs) {
+      const when = new Date(theirs.lastModified).toLocaleTimeString();
+      if (!confirm(name + " changed on disk at " + when + " - something else wrote it since you " +
+                   "opened it.\n\nOK = overwrite it with the editor's version.\nCancel = keep their " +
+                   "file and save yours next to it.")) {
+        name = name.replace(/(\.[^.]*)?$/, ".mine$&");
+      }
+    }
+    const fh = await dirHandle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(text);
+    await w.close();
+    rememberFile(name, await fh.getFile());
+    return dirHandle.name + "/";
+  } catch (e) { download(name, text); toast("Folder write failed (" + e.message + ") - downloaded instead", "err"); return "downloaded"; }
+}
+
+if ($("btnFolder")) $("btnFolder").onclick = pickFolder;
+restoreFolder();
+if ($("btnSave")) $("btnSave").onclick = async function () { const s = E.serialize(project); s.art = artURLs; const w = await saveText("project.pgproj.json", JSON.stringify(s)); toast("Saved " + (w === "downloaded" ? "project.pgproj.json" : w + "project.pgproj.json"), "ok"); };
 if ($("btnLoad")) $("btnLoad").onclick = function () { $("projfile").click(); };
 function loadSave(obj) {
   loadProject(E.deserialize(obj));
@@ -1349,6 +1452,44 @@ function repackStrip(img, plan) {
   return c.toDataURL("image/png");
 }
 
+// Open an EXPORTED scene/project (what scene_build.py eats, what an agent or a text editor may
+// have touched) as an editable project. The export references art by filename, so the pixels come
+// from the files picked alongside it or - much nicer - straight out of the chosen folder, where
+// they sit next to the scene anyway. A missing PNG is reported, not fatal: the geometry, tile
+// flags, zones and camera are all still editable, which is usually why you opened it.
+async function importExportedFiles(obj, sceneFile, files) {
+  rememberFile(sceneFile.name, sceneFile);
+  const stem = sceneFile.name.replace(/\.(scene\.)?json$/i, "").replace(/\W+/g, "_") || "level1";
+  const proj = E.importExported(obj, stem);
+  const picked = {};
+  (files || []).forEach(function (f) { if (/\.png$/i.test(f.name)) picked[f.name.toLowerCase()] = f; });
+
+  const art = {}, missing = [];
+  for (const id in proj.assets) {
+    const a = proj.assets[id];
+    if (!E.isImg(a) || !a.src) continue;
+    const base = a.src.replace(/^.*[\/\\]/, "");
+    let dataURL = null;
+    if (picked[base.toLowerCase()]) dataURL = await readFile(picked[base.toLowerCase()], "dataurl");
+    else if (dirHandle) {
+      try {
+        const fh = await dirHandle.getFileHandle(base);
+        dataURL = await readFile(await fh.getFile(), "dataurl");
+      } catch (e) { /* not in the folder */ }
+    }
+    if (dataURL) art[id] = dataURL; else missing.push(base);
+  }
+
+  loadProject(proj);                              // resets images/artURLs - fill AFTER
+  for (const id in art) { artURLs[id] = art[id]; images[id] = await loadImageFromDataURL(art[id]); }
+  renderPanel(); refreshChrome();
+  const n = proj.levels.length;
+  toast("Imported " + sceneFile.name + " (" + n + (n === 1 ? " level" : " levels") + ")", "ok");
+  if (missing.length)
+    toast("No pixels for: " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " +" + (missing.length - 4) : "") +
+          " - pick those PNGs too, or keep them in the chosen folder", "info");
+}
+
 async function importTiledFiles(files) {
   const byName = {};
   files.forEach(function (f) { byName[f.name.toLowerCase()] = f; });
@@ -1403,7 +1544,30 @@ if ($("projfile")) $("projfile").onchange = function (ev) {
   }
   const f = files[0];
   const fr = new FileReader();
-  fr.onload = function () { try { loadSave(JSON.parse(fr.result)); toast("Loaded " + f.name, "ok"); } catch (e) { toast("Could not read project file", "err"); } };
+  fr.onload = function () {
+    let obj;
+    const marks = E.findConflictMarkers(fr.result);
+    if (marks.length) {
+      toast(f.name + " still has git conflict markers (line " + marks[0] +
+            (marks.length > 1 ? " and " + (marks.length - 1) + " more" : "") +
+            ") - two edits of the same rows. Resolve them (in an ASCII map you can see both " +
+            "versions) and load it again.", "err");
+      return;
+    }
+    try { obj = JSON.parse(fr.result); } catch (e) { toast("Could not read project file", "err"); return; }
+    rememberFile(f.name, f);          // so a later Save can tell if something else rewrote it
+    // An EXPORTED scene/project (layers[], the bake input) is not the editor's project shape,
+    // so it goes through the importer rather than deserialize() - which would keep only the
+    // assets and hand back an empty level.
+    const fmt = obj && obj.format;
+    if (fmt === "picogame-scene" || fmt === "picogame-project") {
+      importExportedFiles(obj, f, files).catch(function (e) {
+        toast("Import: " + e.message, "err"); console.error(e);
+      });
+      return;
+    }
+    try { loadSave(obj); toast("Loaded " + f.name, "ok"); } catch (e) { toast("Could not read project file", "err"); }
+  };
   fr.readAsText(f);
 };
 // The loadable demos. Each is a .pgproj.json in this folder (served same-origin). The
@@ -1427,7 +1591,7 @@ if ($("btnDemoOpen")) $("btnDemoOpen").onclick = function () { loadDemo("openwor
 // Baked export: the SAME module scene_build.py writes (SCENE = {...}), produced in the browser -
 // PNG assets get baked to PAL8 on the spot (inlinePngAssets), so no Python step is needed:
 // drop <name>_scene.py next to your code and picogame_scene.load(pg, module.SCENE).
-if ($("btnExportBaked")) $("btnExportBaked").onclick = function () {
+if ($("btnExportBaked")) $("btnExportBaked").onclick = async function () {
   var d = $("exportD"); if (d) d.open = false;
   var scene;
   try { scene = E.exportScene(project); } catch (e) { toast("Could not export this level", "err"); return; }
@@ -1439,12 +1603,28 @@ if ($("btnExportBaked")) $("btnExportBaked").onclick = function () {
     if (res.missing.length) { toast("No image data for: " + res.missing.join(", ") + " - re-import those PNGs first", "err"); return; }
     var text = E.sceneModule(scene);
     var stem = (L().name || "scene").replace(/\W+/g, "_");
-    download(stem + "_scene.py", text);
-    toast("Exported " + stem + "_scene.py (" + (text.length / 1024).toFixed(1) + " KB) - picogame_scene.load(pg, " + stem + "_scene.SCENE)", "ok");
+    var where = await saveText(stem + "_scene.py", text);
+    toast("Exported " + (where === "downloaded" ? "" : where) + stem + "_scene.py (" +
+          (text.length / 1024).toFixed(1) + " KB) - picogame_scene.load(pg, " + stem + "_scene.SCENE)", "ok");
   } catch (e) { toast("Bake failed: " + (e.message || e), "err"); console.error(e); }
 };
-if ($("btnExport")) $("btnExport").onclick = function () { download((L().name || "scene").replace(/\W+/g, "_") + ".scene.json", JSON.stringify(E.exportScene(project), null, 1)); const d = $("exportD"); if (d) d.open = false; toast("Exported scene.json — bake with scene_build.py", "ok"); };
-if ($("btnExportProj")) $("btnExportProj").onclick = function () { download("game.project.json", JSON.stringify(E.exportProject(project), null, 1)); const d = $("exportD"); if (d) d.open = false; toast("Exported project.json", "ok"); };
+if ($("btnExport")) $("btnExport").onclick = async function () {
+  const d = $("exportD"); if (d) d.open = false;
+  const ascii = !!($("optAscii") && $("optAscii").checked);
+  const scene = E.exportScene(project, null, ascii);
+  const name = (L().name || "scene").replace(/\W+/g, "_") + ".scene.json";
+  const fell = ascii && (scene.layers || []).some(function (l) { return l.kind === "tilemap" && l.grid; });
+  const where = await saveText(name, JSON.stringify(scene, null, 1));
+  toast("Exported " + (where === "downloaded" ? name : where + name) +
+        (fell ? " - a layer had too many distinct tiles for an ASCII legend, kept as a grid" : "") +
+        " - bake with scene_build.py", fell ? "info" : "ok");
+};
+if ($("btnExportProj")) $("btnExportProj").onclick = async function () {
+  const d = $("exportD"); if (d) d.open = false;
+  const ascii = !!($("optAscii") && $("optAscii").checked);
+  const where = await saveText("game.project.json", JSON.stringify(E.exportProject(project, ascii), null, 1));
+  toast("Exported " + (where === "downloaded" ? "project.json" : where + "game.project.json"), "ok");
+};
 
 // Try in playground: hand THIS level to the browser playground and run it live. The playground bakes
 // colour assets in-browser (no PIL/files), so colour tilesets + rect sprites run natively. PNG-backed
@@ -1519,7 +1699,7 @@ function substitutePngAssets(scene, pngIds) {
 function handoffScene(scene) {
   try { localStorage.setItem("pg_editor_level", JSON.stringify(scene)); }
   catch (e) { toast("Level too large to hand off", "err"); return; }
-  var url = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "https://picogame.makerclass.cz/playground/";
+  var url = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";  // set in config.js
   window.open(url + (url.indexOf("?") < 0 ? "?" : "&") + "from=editor", "_blank");
   toast("Opening this level in the playground…", "ok");
 }

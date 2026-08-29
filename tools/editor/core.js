@@ -179,18 +179,63 @@
     return out;
   }
 
-  function tilemapLayer(tm) {
-    const L = { kind: "tilemap", asset: tm.asset, pos: tm.pos.slice(),
-      grid: tm.grid.map(function (r) { return r.slice(); }) };
+  // Legend alphabet for the ASCII map form. '.' is reserved for tile 0 (empty); the rest are
+  // assigned in ASCENDING CELL-VALUE order, which keeps a legend STABLE across exports — the
+  // whole point of the form is that a level's diff stays a picture, and frequency-ordered chars
+  // would reshuffle it whenever a map changes slightly. JSON-hostile chars (" \) are excluded.
+  const LEGEND_CHARS = "#o=+*xXOA BCDEFGHIJKLMNPQRSTUVWYZabcdefghijklmnpqrstuvwyz0123456789" +
+    "!$%&()<>?@[]^_{|}~;:,'`/".replace(/ /g, "");
+
+  // A tilemap layer in one of the two forms scene_build.py accepts: the int `grid` (compact,
+  // what a machine reads) or `legend` + `rows` (the same map as an ASCII picture — reviewable
+  // in a diff, editable by hand or by an agent). Falls back to the grid when a map needs more
+  // distinct values than the alphabet has characters.
+  function tilemapLayer(tm, ascii) {
+    const L = { kind: "tilemap", asset: tm.asset, pos: tm.pos.slice() };
+    const rows = ascii ? asciiRows(tm.grid) : null;
+    if (rows) {
+      L.legend = rows.legend;
+      L.rows = rows.rows;
+    } else {
+      L.grid = tm.grid.map(function (r) { return r.slice(); });
+    }
     if (tm.fg) L.fg = true;
     return L;
   }
 
+  // The int grid of a tilemap layer in EITHER authoring form — the one place that knows both,
+  // so every consumer (the baker below, importers, tests) reads a grid and nothing else has to
+  // branch. Mirrors bake_tilemap() in tools/scene_build.py.
+  function layerGrid(L) {
+    if (L.grid) return L.grid;
+    const legend = L.legend || {};
+    return (L.rows || []).map(function (row) {
+      return row.split("").map(function (ch) { return legend[ch] || 0; });
+    });
+  }
+
+  // grid -> {legend: {char: value}, rows: [str]}, or null if it doesn't fit the alphabet.
+  // A cell value may carry orientation in bits 8-10; the legend value carries it too, so an
+  // oriented tile is just its own legend entry.
+  function asciiRows(grid) {
+    const seen = [];
+    grid.forEach(function (r) {
+      r.forEach(function (v) { if (v !== 0 && seen.indexOf(v) < 0) seen.push(v); });
+    });
+    if (seen.length > LEGEND_CHARS.length) return null;
+    seen.sort(function (a, b) { return a - b; });
+    const legend = { ".": 0 }, charOf = { 0: "." };
+    seen.forEach(function (v, i) { legend[LEGEND_CHARS[i]] = v; charOf[v] = LEGEND_CHARS[i]; });
+    return { legend: legend, rows: grid.map(function (r) {
+      return r.map(function (v) { return charOf[v]; }).join("");
+    }) };
+  }
+
   // ordered layers (bg tilemaps -> sprites/groups/particles -> fg tilemaps -> hud)
   // + camera/zones/points/music for one level.
-  function buildLevel(level) {
+  function buildLevel(level, ascii) {
     const bg = [], mid = [], fg = [], hud = [];
-    (level.tilemaps || []).forEach(function (tm) { (tm.fg ? fg : bg).push(tilemapLayer(tm)); });
+    (level.tilemaps || []).forEach(function (tm) { (tm.fg ? fg : bg).push(tilemapLayer(tm, ascii)); });
     const byTag = {};
     (level.entities || []).forEach(function (en) {
       if (en.tag) {
@@ -235,9 +280,109 @@
     return out;
   }
 
-  function exportScene(project, idx) {
+  // A file merged by git can arrive with conflict markers in it, which stop it being JSON. Report
+  // that as what it is - the level is fine, two edits of the same rows just need picking - instead
+  // of the generic "could not read" the parse error would produce. Returns [line numbers] (1-based).
+  function findConflictMarkers(text) {
+    const out = [];
+    text.split("\n").forEach(function (line, i) {
+      if (/^(<{7}|={7}|>{7}|\|{7})( |$)/.test(line)) out.push(i + 1);
+    });
+    return out;
+  }
+
+  // ---------------------------------------------------------------- importers (exported -> editor)
+  // The inverse of exportAssets/buildLevel: turn an EXPORTED scene or project (the bake input,
+  // `layers[]`) back into an editable project. Without this the editor can only ever open a level
+  // it saved itself, so a level someone else touched - a person with a text editor, an agent doing
+  // a bulk pass - leaves the editor for good. Pixels are NOT in the export (assets carry a `src`
+  // filename), so the caller supplies them afterwards; everything else round-trips.
+  function importAssets(assets) {
+    const out = {};
+    for (const id in assets || {}) {
+      const e = assets[id], a = { type: e.type };
+      const dims = e.tile || e.frame || e.size || [16, 16];
+      a.fw = dims[0]; a.fh = dims[1];
+      if (e.type === "sprite" || e.type === "tileset" || e.type === "bitmap") {
+        a.src = e.src; a.frames = e.frames || 1;
+        if (e.transparent != null) a.transparent = e.transparent;
+      } else if (e.type === "rect") {
+        a.color = e.color;
+      } else if (e.type === "tileset_color") {
+        a.colors = e.colors || {};
+      }
+      if (e.props) a.props = e.props;
+      if (e.animations) a.animations = e.animations;
+      out[id] = a;
+    }
+    return out;
+  }
+
+  // One exported level ({layers, camera, zones, points, music}) -> an editor level.
+  function importLevel(src, name) {
+    const lv = newLevel(name || "level");
+    // The export carries no world extent (only the device screen), so drop newLevel's default
+    // one-screen worldSize and let deserialize() derive it from the content - the same path old
+    // projects take. Keeping the default would shrink a scrolling level's world to one screen,
+    // and with it the camera bounds.
+    delete lv.worldSize;
+    if (src.background) lv.background = src.background.slice();
+    (src.layers || []).forEach(function (L) {
+      if (L.kind === "tilemap") {
+        const grid = layerGrid(L).map(function (r) { return r.slice(); });
+        lv.tilemaps.push({ asset: L.asset, cols: grid[0] ? grid[0].length : 0, rows: grid.length,
+          grid: grid, pos: (L.pos || [0, 0]).slice(), fg: !!L.fg });
+      } else if (L.kind === "sprite") {
+        const en = { asset: L.asset, name: L.name || null, x: (L.pos || [0, 0])[0],
+          y: (L.pos || [0, 0])[1], anchor: (L.anchor || [0, 0]).slice(), frame: L.frame || 0 };
+        if (L.anim) en.anim = L.anim;
+        if (L.data) en.data = L.data;
+        if (L.angle) en.angle = L.angle;
+        lv.entities.push(en);
+      } else if (L.kind === "group") {
+        // a group is the export's FOLDING of same-tag entities; unfold it back to entities
+        (L.instances || []).forEach(function (xy) {
+          const en = { asset: L.asset, tag: L.tag, x: xy[0], y: xy[1],
+            anchor: (L.anchor || [0, 0]).slice(), frame: 0 };
+          if (L.anim) en.anim = L.anim;
+          lv.entities.push(en);
+        });
+      } else if (L.kind === "particles") {
+        lv.particles.push({ name: L.name || "fx", capacity: L.capacity || 64,
+          size: L.size || 2, gravity: L.gravity || 0, fade: !!L.fade });
+      } else if (L.kind === "hudlabel") {
+        lv.hud.push({ name: L.name, x: (L.pos || [0, 0])[0], y: (L.pos || [0, 0])[1],
+          fg: L.fg || [255, 255, 255], bg: L.bg || [0, 0, 0] });
+      }
+    });
+    if (src.camera) lv.camera = Object.assign({}, src.camera);
+    if (src.zones) lv.zones = src.zones.map(function (z) { return Object.assign({}, z); });
+    if (src.points) lv.points = src.points.map(function (p) { return Object.assign({}, p); });
+    if (src.music) lv.music = src.music;
+    return lv;
+  }
+
+  // An exported scene OR project -> a project. `name` names the single level of a scene (the
+  // export has no level name - it was the file name). deserialize() then fills in everything
+  // the export does not carry: worldSize comes from contentBounds, exactly as it does for
+  // projects that predate the field.
+  function importExported(obj, name) {
+    const p = { size: (obj.size || [320, 240]).slice(), assets: importAssets(obj.assets),
+      sounds: obj.sounds || {}, levels: [], current: 0 };
+    if (obj.format === "picogame-project" || obj.levels) {
+      p.levels = (obj.levels || []).map(function (lv, i) {
+        return importLevel(lv, lv.name || ("level" + (i + 1)));
+      });
+    } else {
+      p.levels = [importLevel(obj, name || "level1")];
+    }
+    if (!p.levels.length) p.levels = [newLevel("level1")];
+    return deserialize(p);
+  }
+
+  function exportScene(project, idx, ascii) {
     const level = project.levels[idx == null ? project.current : idx];
-    const o = buildLevel(level);
+    const o = buildLevel(level, ascii);
     const out = { format: "picogame-scene", version: 1, size: project.size.slice(),
       background: level.background.slice(), assets: exportAssets(project), layers: o.layers };
     if (o.camera) out.camera = o.camera;
@@ -248,12 +393,12 @@
     return out;
   }
 
-  function exportProject(project) {
+  function exportProject(project, ascii) {
     const out = { format: "picogame-project", version: 1, size: project.size.slice(),
       assets: exportAssets(project), levels: [] };
     if (Object.keys(project.sounds || {}).length) out.sounds = project.sounds;
     out.levels = project.levels.map(function (l) {
-      const o = buildLevel(l);
+      const o = buildLevel(l, ascii);
       const e = { name: l.name, background: l.background.slice(), layers: o.layers };
       if (o.camera) e.camera = o.camera;
       if (o.zones) e.zones = o.zones;
@@ -654,7 +799,7 @@
     }
     const layers = (scene.layers || []).map(L => {
       if (L.kind === "tilemap") {
-        const g2 = L.grid, nrows = g2.length, cols = nrows ? g2[0].length : 0;
+        const g2 = layerGrid(L), nrows = g2.length, cols = nrows ? g2[0].length : 0;
         const grid = new Uint8Array(cols * nrows); let orient = null;
         g2.forEach((row, ry) => { for (let cx = 0; cx < cols; cx++) { const v = cx < row.length ? row[cx] : 0; grid[ry * cols + cx] = v & 0xFF; if (v >> 8) { if (!orient) orient = new Uint8Array(cols * nrows); orient[ry * cols + cx] = v >> 8; } } });
         const pos = L.pos || [0, 0];
@@ -697,6 +842,9 @@
     layerSizeForWorld: layerSizeForWorld,
     tileW: tileW, tileH: tileH, isImg: isImg, tileCount: tileCount,
     removeAsset: removeAsset, exportAssets: exportAssets, exportScene: exportScene,
+    layerGrid: layerGrid, asciiRows: asciiRows,
+    importExported: importExported, importLevel: importLevel, importAssets: importAssets,
+    findConflictMarkers: findConflictMarkers,
     exportProject: exportProject, serialize: serialize, deserialize: deserialize, clone: clone,
     importTiled: importTiled, TILED_ORIENT: TILED_ORIENT,
     bakePal8: bakePal8, inlinePal8Asset: inlinePal8Asset, w565: w565,

@@ -287,4 +287,116 @@ section("sceneModule == tools/scene_build.py output (golden fixtures under web/f
 });
 ok();
 
+// ---- ASCII map form: legend+rows must be a lossless, byte-identical alternative to the grid ----
+section("ASCII export (legend+rows) bakes identically to the int grid");
+(function () {
+  const p = E.newProject();
+  p.assets.tiles = { type: "tileset_color", fw: 16, fh: 16, colors: { 1: [120, 90, 60], 2: [255, 220, 60], 3: [40, 40, 40] } };
+  const tm = E.newTilemap("tiles", 6, 3);
+  tm.grid = [[0, 0, 2, 2, 0, 0],
+             [0, 1, 1, 1, 1, 0],
+             [1, 1, 3, 3, 1, 1 | (1 << 8)]];     // last cell also carries a flipX orientation
+  p.levels[0].tilemaps = [tm];
+
+  const grid = E.exportScene(p, null, false), ascii = E.exportScene(p, null, true);
+  assert.ok(grid.layers[0].grid, "default export keeps the int grid");
+  assert.ok(!ascii.layers[0].grid && ascii.layers[0].rows, "ascii export emits rows, not a grid");
+
+  // the picture reads like the level: '.' is empty, chars are assigned by ascending tile value
+  // an oriented cell is a value of its own, so it reads as its own character ('+' = brick, flipX)
+  assert.deepStrictEqual(ascii.layers[0].rows, ["..oo..", ".####.", "##==#+"]);
+  assert.deepStrictEqual(ascii.layers[0].legend, { ".": 0, "#": 1, o: 2, "=": 3, "+": 257 });
+
+  // both forms read back to the same grid, and BAKE to the same bytes (incl. the orient plane)
+  assert.deepStrictEqual(E.layerGrid(ascii.layers[0]), tm.grid);
+  assert.strictEqual(E.sceneModule(ascii), E.sceneModule(grid),
+    "an ASCII scene must bake byte-identically to the same scene as a grid");
+})();
+ok();
+
+section("ASCII export falls back to the grid when a map outgrows the legend alphabet");
+(function () {
+  const p = E.newProject();
+  p.assets.tiles = { type: "tileset", fw: 8, fh: 8, frames: 400, src: "t.png" };
+  const tm = E.newTilemap("tiles", 120, 2);
+  let v = 1;
+  tm.grid = tm.grid.map(function (r) { return r.map(function () { return v++; }); });   // 240 distinct
+  p.levels[0].tilemaps = [tm];
+  const out = E.exportScene(p, null, true);
+  assert.ok(out.layers[0].grid && !out.layers[0].rows, "too many distinct tiles -> stays a grid");
+})();
+ok();
+
+// ---- importing an EXPORTED scene/project back into the editor (the round trip) ----
+function richProject() {
+  const p = E.newProject();
+  p.assets.tiles = { type: "tileset", fw: 16, fh: 16, frames: 5, src: "tiles.png", props: { 1: { solid: true } } };
+  p.assets.hero = { type: "sprite", fw: 12, fh: 16, frames: 6, src: "hero.png", transparent: 0,
+                    animations: { walk: { frames: [0, 1], fps: 8, loop: true } } };
+  p.sounds = { jump: { src: "jump.wav" } };
+  const bg = E.newTilemap("tiles", 60, 15);            // 960 px wide -> a scrolling world
+  bg.grid[14] = new Array(60).fill(1);
+  bg.grid[10][4] = 2 | (1 << 8);                       // an oriented cell
+  const front = E.newTilemap("tiles", 60, 15, true);
+  front.grid[0][0] = 3;
+  const lv = p.levels[0];
+  lv.tilemaps = [bg, front];
+  lv.entities = [{ asset: "hero", name: "player", x: 40, y: 208, anchor: [0.5, 1], frame: 0, anim: "walk", data: { lives: 3 } },
+                 { asset: "hero", tag: "enemies", x: 224, y: 208, anchor: [0.5, 1], frame: 0 },
+                 { asset: "hero", tag: "enemies", x: 480, y: 208, anchor: [0.5, 1], frame: 0 }];
+  lv.hud = [{ name: "score", x: 4, y: 4, fg: [255, 255, 255], bg: [0, 0, 0] }];
+  lv.particles = [{ name: "fx", capacity: 64, size: 2, gravity: 0.5, fade: true }];
+  lv.zones = [{ tag: "door", x: 900, y: 180, w: 20, h: 40 }];
+  lv.points = [{ name: "spawn", x: 40, y: 208 }];
+  lv.camera = { mode: "follow", target: "player", axis: "x", bounds: [0, 0, 960, 240] };
+  lv.music = "theme";
+  lv.worldSize = [960, 240];
+  return p;
+}
+
+section("import(export(project)) == export(project), in both map forms");
+[false, true].forEach(function (ascii) {
+  const scene = E.exportScene(richProject(), null, ascii);
+  const back = E.importExported(JSON.parse(JSON.stringify(scene)), "level1");
+  assert.deepStrictEqual(E.exportScene(back, null, ascii), scene,
+    (ascii ? "ascii" : "grid") + " form must survive export -> import -> export unchanged");
+});
+ok();
+
+section("import derives the world extent (a scrolling level keeps its camera bounds)");
+(function () {
+  const back = E.importExported(E.exportScene(richProject(), null, true), "level1");
+  // the export carries only the device screen, so worldSize must come from the content (960x240),
+  // else a scrolling level would come back one screen wide - and drag its camera bounds with it
+  assert.deepStrictEqual(back.levels[0].worldSize, [960, 240]);
+  assert.deepStrictEqual(back.levels[0].camera.bounds, [0, 0, 960, 240]);
+  assert.strictEqual(back.levels[0].entities.filter(function (e) { return e.tag === "enemies"; }).length, 2,
+    "an exported group unfolds back into tagged entities");
+})();
+ok();
+
+section("import handles the project form (bank + several levels)");
+(function () {
+  const p = richProject();
+  p.levels.push(E.newLevel("level2", [320, 240]));
+  const proj = E.exportProject(p, true);
+  const back = E.importExported(JSON.parse(JSON.stringify(proj)));
+  assert.strictEqual(back.levels.length, 2);
+  assert.deepStrictEqual(back.levels.map(function (l) { return l.name; }), ["level1", "level2"]);
+  assert.deepStrictEqual(E.exportProject(back, true), proj);
+})();
+ok();
+
+section("git conflict markers are detected, ASCII map rows are not mistaken for them");
+(function () {
+  const conflicted = ["{", " \"rows\": [", "<<<<<<< HEAD", "  \"###...\",", "=======",
+                      "  \"...###\",", ">>>>>>> agent", " ]", "}"].join("\n");
+  assert.deepStrictEqual(E.findConflictMarkers(conflicted), [3, 5, 7]);
+  assert.deepStrictEqual(E.findConflictMarkers("{\n \"a\": 1\n}"), []);
+  // a level row may legitimately be a run of '=' or '<' tiles - only a marker at line start counts
+  assert.deepStrictEqual(E.findConflictMarkers('  "=======",\n  "<<<<<<<",'), []);
+  assert.deepStrictEqual(E.findConflictMarkers("||||||| base\n"), [1]);   // diff3 style
+})();
+ok();
+
 console.log("\neditor/test.js: ALL OK");
