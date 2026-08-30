@@ -28,20 +28,20 @@ jobs:
       - name: Images and audio referenced from a page exist
         run: |
           fail=0
-          grep -rhoE '\]\(\.\.?/?(img|audio)/[^)]+\)' docs --include="*.md" | tr -d '])' | sed 's/^(//' | sort -u |
+          # `... | while read` runs the loop in a SUBSHELL, so fail=1 was set there and lost and this
+          # check reported green no matter what it printed. Feed the loop instead of piping into it.
           while read -r rel; do
             f="docs/$(echo "$rel" | sed 's|^\.\./||; s|^\./||')"
             [ -e "$f" ] || { echo "missing asset: $rel"; fail=1; }
-          done
+          done < <(grep -rhoE '\]\(\.\.?/?(img|audio)/[^)]+\)' docs --include="*.md" | tr -d '])' | sed 's/^(//' | sort -u)
           exit $fail
       - name: Cross-doc links point at a file that exists
         run: |
           fail=0
           for f in $(find docs -name "*.md"); do
             # a doc link is relative to the file that carries it, so resolve it from there
-            grep -oE '\]\((\.\./)*[a-z0-9/-]+\.md[^)]*\)' "$f" | sed 's/](\([^)#]*\).*/\1/' | sort -u |
             while read -r t; do
               [ -e "$(dirname "$f")/$t" ] || { echo "$f: links to $t which does not exist"; fail=1; }
-            done
+            done < <(grep -oE '\]\((\.\./)*[a-z0-9/-]+\.md[^)]*\)' "$f" | sed 's/](\([^)#]*\).*/\1/' | sort -u)
           done
           exit $fail
