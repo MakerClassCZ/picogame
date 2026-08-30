@@ -68,6 +68,19 @@ at every tile, pick the non-wall neighbour minimizing straight-line distance to 
 tiles away, flee to its corner when closer. *picogame:* read neighbours from the `Tilemap`; use
 `sprite.near`-style squared distance (no sqrt) to score them. See `genre-patterns.md` §6.
 
+**Grid pathfinding (A* / BFS) — cheaper than it sounds.** For a chaser that must route AROUND
+walls (tower defense, tactics, roguelike mobs), greedy chase gets stuck in pockets; a real search on
+the *tile grid* fixes it and the grid keeps it cheap: coordinates fit a byte, a 40x30 map is 1200
+cells. BFS (no heuristic, a `bytearray` for visited + a list as the queue) is enough when all steps
+cost 1 and is the simplest to get right; A* adds a "distance-to-goal" score to expand fewer cells.
+Proven on far weaker hardware than the RP2040 (the Gamebuino EnGarde runs A* per enemy on a SAMD21).
+*picogame:* search over `picogame_tiles` solidity, not pixels; store came-from as a `bytearray` of
+direction codes (2 bits/cell) and walk it back. Budget it like AI, not physics: pathfind ONE
+enemy per frame round-robin, or only when the target's tile changes - the path stays valid until
+then. For many chasers sharing one goal, flip it around: ONE BFS flood from the player (a "distance
+field" bytearray), then every enemy just steps to its lowest-valued neighbour - N enemies for the
+price of one search.
+
 **Lockstep fleet (Space Invaders).** Move the whole grid as one unit: track live min/max X, reverse
 direction and drop ~8 px at the edge, fire one shot per column from the lowest live alien gated by a
 random roll. *picogame:* a `picogame_pool` of aliens + a single shared "fleet offset" added each

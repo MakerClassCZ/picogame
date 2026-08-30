@@ -26,6 +26,7 @@ Vrácený `View` zpřístupňuje obsah scény:
 - `view.tile_xy(px, py)` - světové pixely -> buňka `(tx, ty)` primárního (prvního) tilemapu.
 - `view.is_solid(tx, ty)` - zkratka pro `tile_has(tx, ty, "solid")`.
 - `view.tile_has(tx, ty, prop)` - True, pokud má dlaždice primárního tilemapu v dané buňce pojmenovanou vlastnost (z připraveného `tileprops`).
+- `view.set_tile_prop(tile, prop, on=True)` - přepne příznak TYPU dlaždice za běhu: všechny buňky s touto dlaždicí změní význam naráz (páka zprůchodní všechny mřížové dlaždice, led roztaje). Jednu buňku naopak změníš výměnou dlaždice přes nativní `tilemap.set_tile`. Změny platí do dalšího `load()` - načtení úrovně významy dlaždic resetuje, i při sdíleném banku.
 - `view.point(name)` - `(x, y)` pojmenovaného bodu, nebo None.
 - `view.in_zone(x, y, tag=None)` - první zóna `(tag, x, y, w, h)` obsahující daný bod (volitelně filtrovaná podle tagu), jinak None.
 - `view.play(sound_id)` - přehraje připravený zvuk podle ID. Pokud zvuk nebo zvukový výstup chybí, nic neudělá.

@@ -77,6 +77,22 @@ class View:
     def is_solid(self, tx, ty):
         return self.tile_has(tx, ty, "solid")
 
+    def set_tile_prop(self, tile, prop, on=True):
+        """Flip a flag for a TILE TYPE at runtime: every cell holding that tile
+        changes meaning at once (a lever makes all gate tiles walkable, ice
+        melts, Baba-style rules rewrite what ROCK does). Complements the native
+        Tilemap.set_tile, which changes ONE cell by swapping its tile instead.
+        Tables are copied per load(), so changes never leak into other levels
+        sharing a bank; a prop that was never baked is created on first set."""
+        t = self._props.setdefault(self._tm[1], {})
+        b = t.get(prop)
+        if b is None:
+            # engine cells are one byte, so 256 covers every possible tile value
+            b = t[prop] = bytearray(256)
+        elif tile >= len(b):
+            b.extend(bytes(tile + 1 - len(b)))
+        b[tile] = 1 if on else 0
+
     def tile_has(self, tx, ty, prop):
         b = self._prop_bytes(prop)
         if b is None or self._tm is None:
@@ -158,12 +174,17 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
 
     if bank is not None:                      # shared bank: reuse its bitmaps/props/anims
         bitmaps = bank["bitmaps"]
-        v._props = bank["tileprops"]
+        src_props = bank["tileprops"]
         anims = bank["anims"]
     else:                                     # standalone scene: build from its own assets
         bitmaps = _build_bitmaps(pg, scene["assets"])
-        v._props = scene.get("tileprops", {})
+        src_props = scene.get("tileprops", {})
         anims = scene.get("anims", {})
+    # A per-load bytearray copy of the prop tables, so set_tile_prop can flip
+    # flags at runtime without writing into the baked module or into a bank
+    # shared by other levels - loading a level resets its tile meanings.
+    v._props = {aid: {name: bytearray(b) for name, b in tabs.items()}
+                for aid, tabs in src_props.items()}
 
     def _animate(sprite, aid, name):
         if aid in anims and name:

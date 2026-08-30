@@ -26,6 +26,7 @@ The returned `View` is your handle to everything:
 - `view.tile_xy(px, py)` - world pixel -> `(tx, ty)` cell of the primary (first) tilemap.
 - `view.is_solid(tx, ty)` - shorthand for `tile_has(tx, ty, "solid")`.
 - `view.tile_has(tx, ty, prop)` - True if the primary tilemap's tile at that cell has the named property (from the baked `tileprops`).
+- `view.set_tile_prop(tile, prop, on=True)` - flip a flag for a tile TYPE at runtime: every cell holding that tile changes meaning at once (a lever makes all gate tiles walkable, ice melts). One cell instead: swap its tile with the native `tilemap.set_tile`. Changes last until the next `load()` - loading a level resets its tile meanings, even with a shared bank.
 - `view.point(name)` - `(x, y)` for a named point, or None.
 - `view.in_zone(x, y, tag=None)` - first zone `(tag, x, y, w, h)` containing the point (optionally filtered by tag), else None.
 - `view.play(sound_id)` - play a baked sfx by id (no-op if audio/sample is missing).
