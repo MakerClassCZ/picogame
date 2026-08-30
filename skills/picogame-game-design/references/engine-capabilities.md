@@ -214,11 +214,14 @@ scene.set_view(ox, oy)                                # changing view repaints t
 import picogame_pool
 bullets = picogame_pool.Pool(scene, bullet_bm, 12, anchor=(0.5, 0.5))
 b = bullets.spawn()                       # first free sprite, made visible (None if full)
-if b: b.move(x, y); b.data = -6           # data = per-entity state: keep it a NUMBER or tuple
-for b in bullets.items:                   # zero-alloc iteration  (a string-key dict here is the
-    if not b.visible: continue            #  exact anti-pattern the hot-loop guide bans: slower
-    b.fy += b.data                        #  + typo-prone; pack multiple fields into a tuple)
-    if b.fy < -8: bullets.free(b)         # free to recycle — never del/create per frame
+if b: b.move(x, y); b.data = -6           # data = per-entity state: a number for ONE field;
+for b in bullets.items:                   #  for several, pre-allocate a dict per slot at startup
+    if not b.visible: continue            #  and only MUTATE it (asteroids/cavern do this). What
+    b.fy += b.data                        #  matters is allocate-once-mutate-in-place - NEVER a
+    if b.fy < -8: bullets.free(b)         #  fresh tuple/dict per change (a rewritten 3-tuple
+                                          #  measures ~1 KB/frame of GC churn at 30 entities,
+                                          #  and is SLOWER than the mutated dict). free() to
+                                          #  recycle — never del/create per frame.
 ```
 
 **Runtime rotation / scale** (about the anchor; `1.0`/`0` = fast blit path)
