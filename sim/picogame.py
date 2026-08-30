@@ -105,6 +105,11 @@ def _fxput(fb, i, v, x, y, shadow, flash, dither, tint=None):
         fb[i] = v
 
 
+# Set False to force every blit down the general path -- the two must agree pixel for pixel.
+# selftest_blit.py flips this to fuzz one against the other; nothing else should touch it.
+_FAST_BLIT = True
+
+
 def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, flash=None,
           dither=0, tint=None, transpose=False):
     if bm is None:
@@ -154,6 +159,34 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
     x_end = min(dx0 + dw, cx1, W)
     y_end = min(dy0 + dh, cy1, H)
     fb = _host.fb
+
+    # FAST PATH: 1:1, no flips, no per-pixel effect, PAL8 - i.e. every tile of a tilemap and most
+    # sprite blits. The general loop below spends two Python CALLS per destination pixel
+    # (_src_pixel_row + _fxput); at ~80k pixels a frame that call overhead, not the pixel work, is
+    # what makes a sim frame expensive. Same reads, same writes, same ValueError - just inlined.
+    # Deliberately NOT a cache: nothing here can go stale, so a mutated bitmap needs no invalidation.
+    if (_FAST_BLIT and scale_q == 256 and not flip_x and not flip_y and not shadow and not flash
+            and not dither and tint is None and bm.format == PAL8):
+        data = bm.data
+        pal = bm.palette
+        npal = len(pal)
+        transp = bm.transparent if bm.has_transparent else -1
+        for y in range(y_start, y_end):
+            srow = (y - dy0) * bm.stride + fcol
+            drow = y * W
+            sx = x_start - dx0
+            for x in range(x_start, x_end):
+                idx = data[srow + sx]
+                sx += 1
+                if idx == transp:
+                    continue
+                if idx >= npal:
+                    # C does NOT clamp (UB contract) - raise to surface asset bugs, as _src_pixel_row does.
+                    raise ValueError("PAL8 index %d out of palette (%d entries) - fix the asset"
+                                     % (idx, npal))
+                fb[drow + x] = pal[idx]
+        return
+
     for y in range(y_start, y_end):
         sy = ((y - dy0) * step) >> 16
         if sy >= sh:
@@ -503,8 +536,17 @@ class Tilemap:
     def _draw(self, vx, vy, clip):
         tw, th = self.tileset.width, self.tileset.height
         nframes = self.tileset.frames
-        for ty in range(self.map_h):
-            for tx in range(self.map_w):
+        # Only walk the tiles the clip rect can actually show. _blit rejects an off-screen tile
+        # anyway, but a map is usually far wider than the screen (a 80x15 level = 1200 tiles against
+        # ~315 visible), so the call overhead alone was most of a sim frame. Pure culling: the
+        # skipped tiles contribute no pixels, so output is unchanged.
+        cx0, cy0, cx1, cy1 = clip
+        tx_lo = max(0, (cx0 - self.ox - vx) // tw)
+        tx_hi = min(self.map_w, (cx1 - self.ox - vx) // tw + 1)
+        ty_lo = max(0, (cy0 - self.oy - vy) // th)
+        ty_hi = min(self.map_h, (cy1 - self.oy - vy) // th + 1)
+        for ty in range(ty_lo, ty_hi):
+            for tx in range(tx_lo, tx_hi):
                 off = ty * self.map_w + tx
                 v = self.grid[off]
                 if v >= nframes:

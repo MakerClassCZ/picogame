@@ -122,8 +122,14 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
     # tracemalloc: RETAINED growth, filtered to game + lib only (profiler/engine excluded)
     if "t" in snap:
         span = max(1, end - warm)
+        # The inclusive game filter is a DIRECTORY glob, so a game sitting in the repo root pulls
+        # in sim/ and everything else beside it -- the report then blames the simulator, and its
+        # own profiler printer, for a leak in your game. Exclude the sim explicitly: the header
+        # promises the engine is excluded, so it has to be.
+        sim_dir = os.path.dirname(os.path.abspath(__file__))
         filt = (tracemalloc.Filter(True, os.path.join(game_dir, "*")),
-                tracemalloc.Filter(True, os.path.join(root, "lib", "*")))
+                tracemalloc.Filter(True, os.path.join(root, "lib", "*")),
+                tracemalloc.Filter(False, os.path.join(sim_dir, "*")))
         s0 = snap["t"].filter_traces(filt)
         s1 = tracemalloc.take_snapshot().filter_traces(filt)
         diff = s1.compare_to(s0, "lineno")
@@ -138,6 +144,26 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
         else:
             print("   none — no retained game/lib growth (clean).")
     print(bar)
+
+
+def _install_virtual_clock():
+    """Make picogame_clock believe time passes only when the game sleeps.
+
+    Clock already has an uncapped mode, but it measures REAL elapsed time -- in a headless loop that
+    is a fraction of a millisecond, so a dt-scaled game crawls (and `x / dt` can divide by zero). What
+    a verification run wants is the opposite: skip the wait, keep the timeline. So we replace the
+    module's clock source with a counter and its sleep with an advance of that counter. Real work
+    costs zero virtual milliseconds, so Clock finds itself exactly one interval ahead of each
+    boundary, "sleeps" that interval, and hands the game a dt of exactly 1/fps every frame.
+
+    Patched at module level (`_ms` / `_sleep` are bound there, which is what makes this a two-line
+    seam). Anything reading the wall clock directly is untouched -- that is the honest limit here.
+    """
+    import picogame_clock
+    now = [picogame_clock._ms()]
+    picogame_clock._ms = lambda: now[0]
+    picogame_clock._sleep = lambda seconds: now.__setitem__(
+        0, (now[0] + int(seconds * 1000 + 0.5)) & picogame_clock._MASK)
 
 
 def main():
@@ -158,6 +184,13 @@ def main():
                          "taps X for 2 frames at 40 (a tap is what just_pressed needs) and lets go "
                          "at 60. FRAME counts polled frames from 1: the button is down on that "
                          "frame's input read. Headless only (a live window reads the real keyboard).")
+    ap.add_argument("--fast", action="store_true",
+                    help="headless: run the frame loop at full speed by giving picogame_clock a "
+                         "VIRTUAL clock -- the frame sleep is skipped but dt still reads the nominal "
+                         "1/fps, so dt-scaled movement behaves exactly as it does at the real rate "
+                         "(and becomes deterministic: no machine-load jitter between runs). Turns a "
+                         "3600-frame soak from two minutes of wall clock into however long the "
+                         "compute takes. A game that reads time.monotonic() itself is NOT faked.")
     ap.add_argument("--profile", action="store_true",
                     help="headless run under cProfile + tracemalloc; print a perf report "
                          "(call counts, time [sim-skewed], per-frame game/lib allocation)")
@@ -166,7 +199,7 @@ def main():
     # Backend default: a human running `run.py game.py` wants to SEE it, so open a live pygame window
     # when pygame is available. A screenshot/profile run (or a box without pygame) stays headless (pil).
     if args.backend is None:
-        if args.shot or args.shot_at or args.profile or args.keys:
+        if args.shot or args.shot_at or args.profile or args.keys or args.fast:
             args.backend = "pil"
         else:
             try:
@@ -194,6 +227,12 @@ def main():
         _host.setup_keymap()
         print("[sim] controls: arrows / WASD = move,  F / Ctrl = A,  G / Space = B,  "
               "R / Q = X,  T / E = Y,  close the window to quit")
+    if args.fast:
+        if args.backend == "pygame":
+            print("[sim] --fast is ignored with a live window (a window has to run in real time).")
+        else:
+            _install_virtual_clock()
+
     if args.hold:                      # hold buttons for the whole run (input testing)
         for name in args.hold.split(","):
             _host.pressed_pins.add(_button_pin(name))
