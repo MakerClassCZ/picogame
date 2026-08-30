@@ -67,7 +67,7 @@ scene.add_all(enemies)
 scene.add(player)
 hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4,
                   pg.rgb565(255, 255, 255), pg.rgb565(0, 0, 0))   # fixed layer
-hud.reserve(28)
+hud.reserve(40)   # the widest line this HUD ever sets ("COINS 19/19  LIVES 3  99999  BEST 99999")
 
 _move_result = [0, 0, False]   # reused out-param [new_y, new_vy, landed] from move_v() (avoids a per-frame tuple alloc)
 
@@ -145,8 +145,8 @@ def solid_at(pixel_x, pixel_y):
 def move_v(x, y, vy, half_w):
     # ONE-WAY platforms: you jump UP through a platform from below and land on its TOP when falling.
     if vy > 0:                                   # falling
-        # If the BODY (body_mid_y-height) is embedded in a platform - i.enemy. we jumped UP into it - fall
-        # straight out the bottom (one-way pass-through, no getting stuck). Testing body_mid_y-body, not
+        # If the BODY (mid-height) is embedded in a platform - i.e. we jumped UP into it - fall
+        # straight out the bottom (one-way pass-through, no getting stuck). Testing mid-body, not
         # the feet, is key: when simply STANDING, the feet sit on the platform's top edge (which
         # reads as "in" the tile) but the body is clear, so we still land normally.
         body_mid_y = y - PLAYER_H // 2
@@ -175,11 +175,14 @@ def follow():
     scene.set_view(int(view_x), 0)
 
 
-def reset_player():
+def reset_player(mercy=True):
     state.px, state.py = 40.0, (ROWS - 2) * TILE
     state.vy = 0.0
     state.landed = False
-    state.invuln = 45          # ~1.5 s of mercy, long enough to walk clear of the spawn
+    # Mercy frames belong to a RESPAWN, not to the first spawn: the hurt path puts you back inside
+    # the enemy that hit you. Granting them at game start just makes the player blink for 1.5 s
+    # before anything has happened.
+    state.invuln = 45 if mercy else 0
 
 
 def new_game():
@@ -187,7 +190,7 @@ def new_game():
     state = State()
     spawn_cols = build_level()
     spawn_enemies(spawn_cols)
-    reset_player()
+    reset_player(mercy=False)
     follow()
 
 
@@ -199,7 +202,7 @@ print("LEFT/RIGHT run, UP/B jump. Stomp enemies, grab coins, reach the green fla
 def main():
     # --- per-frame loop in a FUNCTION (not module scope): names become array-indexed locals,
     # not globals-dict lookups (measured on-device win; picogame-game-design hot-loop style guide).
-    _shown_coins, _shown_lives, _shown_score = -1, -1, -1
+    _shown_coins, _shown_lives, _shown_score, _shown_best = -1, -1, -1, -1
     while True:
         btn.poll()
 
@@ -304,8 +307,12 @@ def main():
 
         follow()
         shown_lives = max(0, state.lives)
-        if state.coins != _shown_coins or shown_lives != _shown_lives or state.score != _shown_score:
-            _shown_coins, _shown_lives, _shown_score = state.coins, shown_lives, state.score
+        # `best` belongs in this test: clearing the level awards the bonus and then restarts, so
+        # coins/lives/score land back on their starting values - identical to what is already shown -
+        # and without `best` here the new record never repaints. A win then looks like nothing happened.
+        if (state.coins != _shown_coins or shown_lives != _shown_lives
+                or state.score != _shown_score or best != _shown_best):
+            _shown_coins, _shown_lives, _shown_score, _shown_best = state.coins, shown_lives, state.score, best
             hud.set("COINS %d/%d  LIVES %d  %05d  BEST %05d"
                     % (state.coins, state.coins_total, shown_lives, state.score, best))
         kit.tick()
