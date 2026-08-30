@@ -63,18 +63,37 @@ For platformer walls and floors, move and resolve **one axis at a time** (X, the
 wedges in corners; probe the leading edge at two points, and step a fast fall one pixel at a time so a
 big `vy` can't tunnel through a floor. It's plain per-object Python: cheap, no special engine call.
 ```python
-def move_x(x, y, dx, hw):                       # stop at the wall, don't enter it
-    e = x + (hw if dx > 0 else -hw)
-    return x if solid(e, y - 2) or solid(e, y - 14) else x + dx
+def move_x(x, y, dx, hw):                       # step, like move_y: probing only the CURRENT edge
+    step = 1 if dx > 0 else -1                  # and then moving dx leaves the body inside the wall
+    for _ in range(abs(int(dx))):
+        e = x + step + (hw if dx > 0 else -hw)  # the edge AFTER this pixel of movement
+        if solid(e, y - 2) or solid(e, y - 14):
+            return x                            # flush against the wall
+        x += step
+    return x
 
-def move_y(x, y, vy, hw):                        # step down so a big vy can't tunnel through the floor
-    if vy > 0:
-        for _ in range(vy):
-            if solid(x, y + 1) or solid(x - hw, y + 1) or solid(x + hw, y + 1):
-                return y, 0, True                # landed: y held, vy zeroed, grounded
-            y += 1
-    return y + vy, vy, False
+def move_y(x, y, vy, hw):                        # resolve in the DIRECTION OF TRAVEL, 1 px at a time,
+    step = 1 if vy > 0 else -1                   # so a big vy can't tunnel through a floor OR a ceiling
+    probe = 1 if vy > 0 else -15                 # leading edge: the feet falling, the head rising
+    for _ in range(abs(int(vy))):
+        if solid(x, y + probe) or solid(x - hw, y + probe) or solid(x + hw, y + probe):
+            return y, 0, vy > 0                  # blocked: y held, vy zeroed; grounded only downward
+        y += step
+    # A small vy moves no whole pixels, so the loop never probed. Standing still, gravity is well
+    # under 1 px/frame - without this the flag would read False on those frames and flicker every
+    # other one. Jumping still works (a coyote timer hides it); a footstep sound or a grounded
+    # animation does not.
+    on_ground = vy > 0 and (solid(x, y + 1) or solid(x - hw, y + 1) or solid(x + hw, y + 1))
+    return y, (0 if on_ground else vy), on_ground
 ```
+
+**One resolver, not two branches.** Stepping only while falling gives you a *one-way platform* — the
+player jumps up through it and lands on top, which is a real design and the cheapest one. But the
+moment the level gains a ceiling, a shaft or a closed room built from that tile, it is passable from
+below and reads as a bug. Bolting a separate rising case on beside the falling one rots quickly: the
+falling half stays hard-coded for `+y`, and walls and shafts each want a third case. Take the
+direction from the sign, as above, and one-way collapses into a single condition on the probe
+(`solid(...) and vy > 0`) instead of a parallel code path.
 
 ## Scrolling camera
 When the world is bigger than the screen: follow and clamp the view; keep the HUD on a `fixed` layer.
@@ -93,16 +112,26 @@ scene.refresh()                  # only the changed cells repaint
 ## Impact feedback
 Combine a sound, short flash, restrained shake, [hit-stop](/helpers/effects/), or particles according to the size of the event.
 ```python
-spr.flash = WHITE                # flat, 1-3 frames
+spr.flash = WHITE                # flat white pixels - and it does NOT clear itself
+flash_t = 2                      # so count it down and switch it off, or the sprite stays white
 shake.add(0.4)                   # picogame_fx.Shake; shake.tick() each frame
 if audio: audio.sfx(picogame_audio.tone(150, 70))
+
+# ... each frame:
+if flash_t:
+    flash_t -= 1
+    if not flash_t: spr.flash = 0
 ```
 
 ## Damage forgiveness: hitbox & i-frames
 Make a timing game feel fair: a hitbox smaller than the sprite, plus a mercy window after a hit.
 ```python
-if inv == 0 and threat.near(player, 12):   # hitbox < sprite art
-    inv = 45                     # i-frames; blink the player while inv > 0
+if inv:                                    # count the window down, and blink while it runs
+    inv -= 1
+    player.visible = not (inv >> 2) & 1
+elif threat.near(player, 12):              # hitbox < sprite art
+    inv = 45                               # mercy frames: one hit can't chain-kill
+    player.visible = True
 ```
 
 ## Score chain

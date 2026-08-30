@@ -207,7 +207,12 @@ it spawns goes.** Cheap to write, easy to forget, and the bug it causes reads as
 rather than a placement one: the impact effect, the decal, the placed block, the teleport exit, the
 dropped item ends up *inside* the tile that stopped the mover, so whatever appears there next is
 embedded in geometry and falls through the world. You don't need a ray for this — a projectile that
-visibly flies is already stepping, so the previous step IS the flush contact point:
+visibly flies is already stepping, so the previous step IS the flush contact point. **The axis you
+were stepping on when the probe hit is also the surface normal** — step X and you hit a vertical
+face, step Y and you hit a floor or a ceiling, with the sign of the step giving the direction. That
+is free from the loop below, and it is what anything ORIENTED at the contact point needs: a decal
+that must lie flat on the wall, a spark that sprays away from it, a placed thing that has to know
+which way is "out". Keep both, the position and the axis:
 
 ```python
 while alive:

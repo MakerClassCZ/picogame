@@ -63,18 +63,35 @@ U plošinovkových zdí a podlah hýbej a řeš kolizi **vždy po jedné ose** (
 v rozích; sonduj náběžnou hranu ve dvou bodech a rychlý pád krokuj po pixelu, aby velké `vy` neproletělo
 podlahou. Je to čistý Python per objekt: levné, žádné speciální volání enginu.
 ```python
-def move_x(x, y, dx, hw):                       # zastav u zdi, nevjeď do ní
-    e = x + (hw if dx > 0 else -hw)
-    return x if solid(e, y - 2) or solid(e, y - 14) else x + dx
+def move_x(x, y, dx, hw):                       # krokuj jako move_y: sondovat jen SOUČASNOU hranu
+    step = 1 if dx > 0 else -1                  # a pak se posunout o dx nechá tělo uvnitř zdi
+    for _ in range(abs(int(dx))):
+        e = x + step + (hw if dx > 0 else -hw)  # hrana PO tomto pixelu pohybu
+        if solid(e, y - 2) or solid(e, y - 14):
+            return x                            # těsně u zdi
+        x += step
+    return x
 
-def move_y(x, y, vy, hw):                        # krokuj dolů, ať velké vy neproletí podlahou
-    if vy > 0:
-        for _ in range(vy):
-            if solid(x, y + 1) or solid(x - hw, y + 1) or solid(x + hw, y + 1):
-                return y, 0, True                # přistání: y drženo, vy vynulováno, na zemi
-            y += 1
-    return y + vy, vy, False
+def move_y(x, y, vy, hw):                        # řeš ve SMĚRU POHYBU, po jednom pixelu, ať velké
+    step = 1 if vy > 0 else -1                   # vy neproletí podlahou ANI stropem
+    probe = 1 if vy > 0 else -15                 # náběžná hrana: při pádu nohy, při stoupání hlava
+    for _ in range(abs(int(vy))):
+        if solid(x, y + probe) or solid(x - hw, y + probe) or solid(x + hw, y + probe):
+            return y, 0, vy > 0                  # zablokováno: y drženo, vy nula; na zemi jen dolů
+        y += step
+    # Malé vy neposune o celý pixel, takže smyčka vůbec nesondovala. Při stání je gravitace hluboko
+    # pod 1 px/snímek - bez tohohle by příznak obden blikal. Skoku to nevadí (schová to coyote
+    # timer), zvuku kroků nebo animaci stání ano.
+    on_ground = vy > 0 and (solid(x, y + 1) or solid(x - hw, y + 1) or solid(x + hw, y + 1))
+    return y, (0 if on_ground else vy), on_ground
 ```
+
+**Jeden resolver, ne dvě větve.** Krokovat jen při pádu dá *jednosměrnou plošinku* — hráč jí proskočí
+zdola a přistane na ní, což je legitimní návrh a ten nejlevnější. Jenže jakmile level dostane strop,
+šachtu nebo uzavřenou místnost z téže dlaždice, jde jimi zdola projít a působí to jako chyba. Přilepit
+vedle padací větve zvláštní stoupací se rychle rozpadne: padací půlka zůstane napevno pro `+y` a zdi
+i šachty si vyžádají třetí případ. Vezmi směr ze znaménka jako výše a jednosměrnost se scvrkne na
+jedinou podmínku u sondy (`solid(...) and vy > 0`) místo paralelní cesty.
 
 ## Posouvající se kamera
 Když je svět větší než obrazovka: sleduj a omez pohled; HUD nech na `fixed` vrstvě.
@@ -93,16 +110,26 @@ scene.refresh()                  # překreslí se jen změněné buňky
 ## Odezva na zásah
 Podle síly události zkombinuj zvuk, krátký záblesk, mírný otřes, [hit-stop](/cs/helpers/effects/) nebo částice.
 ```python
-spr.flash = WHITE                # plná barva na 1–3 snímky
+spr.flash = WHITE                # plná barva - a sama se NEZHASNE
+flash_t = 2                      # odpočítej ji a vypni, jinak sprite zůstane bílý
 shake.add(0.4)                   # picogame_fx.Shake; shake.tick() každý snímek
 if audio: audio.sfx(picogame_audio.tone(150, 70))
+
+# ... každý snímek:
+if flash_t:
+    flash_t -= 1
+    if not flash_t: spr.flash = 0
 ```
 
 ## Vstřícný hitbox a dočasná nezranitelnost
 U akčních her pomůže hitbox menší než grafika a krátká nezranitelnost po zásahu.
 ```python
-if inv == 0 and threat.near(player, 12):   # hitbox < grafika spritu
-    inv = 45                     # dočasná nezranitelnost; blikej, dokud inv > 0
+if inv:                                    # okno odpočítej a po dobu jeho běhu blikej
+    inv -= 1
+    player.visible = not (inv >> 2) & 1
+elif threat.near(player, 12):              # hitbox < grafika spritu
+    inv = 45                               # dočasná nezranitelnost: jeden zásah nesmí řetězit
+    player.visible = True
 ```
 
 ## Řetěz skóre
