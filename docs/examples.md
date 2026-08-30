@@ -20,7 +20,7 @@ python3 sim/run.py games/snake/code.py      # any game
 You need Python 3 (add `pip install pygame` for a live window; without it the run just saves a screenshot).
 
 **🎮 On real hardware.** Any Raspberry Pi Pico with a small screen, a few buttons and a buzzer plays
-these — a ready-made **PicoPad**, or one you [build yourself](/hardware/). Flash the firmware, copy the
+these — a ready-made **PicoPad**, or one you [build yourself](hardware.md). Flash the firmware, copy the
 game's files, done.
 
 ## The games
@@ -58,7 +58,7 @@ also works as a template: start from the closest one and reshape it. They all li
 
 ## Put a game on a device
 
-1. Flash `firmware.uf2` — steps on [Run on hardware](/hardware/).
+1. Flash `firmware.uf2` — steps on [Run on hardware](hardware.md).
 2. Copy the game's `code.py` onto the CIRCUITPY drive, plus the helper modules and any asset files it
    imports (each game's header comment lists them).
 

@@ -16,7 +16,7 @@ against is the PicoPad.
 | Desktop simulator | your PC | A development tool rather than a hardware target. It runs the same game-facing API but does not reproduce device RAM limits or timing. |
 
 The engine is a native C module in a CircuitPython fork. PicoPad has a **prebuilt firmware**; for other
-boards you build the fork for that board, see [The firmware build](/firmware/).
+boards you build the fork for that board, see [The firmware build](firmware.md).
 
 ## Download firmware
 
@@ -27,7 +27,7 @@ required `lib/` modules from [picogame-libs](https://github.com/MakerClassCZ/pic
 The **PicoPad** firmware is the reference build and is tested on the device. Builds without a
 specific tested status in the table are experimental and may need board-specific work. For a
 reproducible release, build the CircuitPython fork for the exact board and commit you use (see
-[The firmware build](/firmware/)).
+[The firmware build](firmware.md)).
 :::
 
 | Board | Firmware |
@@ -57,7 +57,7 @@ launcher all run on hardware. Configure it in
 `settings.toml` (`CIRCUITPY_DISPLAY_WIDTH`/`_HEIGHT`/`_ROTATION`) with one of two colour depths —
 `setup()` handles either automatically: `CIRCUITPY_DISPLAY_COLOR_DEPTH=16` for full-colour RGB565
 (e.g. 320×240), or `=8` for RGB332, the only depth picodvi offers at **640×480** (full resolution).
-See [Run on hardware](/hardware/) for the framebuffer/colour-depth details.
+See [Run on hardware](hardware.md) for the framebuffer/colour-depth details.
 **Audio** on the Fruit Jam is the I2S TLV320 DAC — install `adafruit_tlv320` + `adafruit_bus_device`
 in `CIRCUITPY/lib` (they aren't bundled) and raise the volume keys, or it's silent; `PICOGAME_DEBUG=1`
 prints why. **Input** is a USB gamepad or keyboard (the board has no game buttons) — see
@@ -100,7 +100,7 @@ On a board with **no onboard display** (a bare Pico), you also build the display
 - **A CircuitPython-supported MCU** — RP2040, RP2350 or ESP32-S3 are the tested families.
 - **RAM** usually sets the asset budget. The current measured builds provide about **190 KB** of
   heap on RP2040 and **520 KB** on RP2350; the largest contiguous block is smaller and varies with
-  firmware configuration. Measure your build (see [Fit it in RAM](/memory/)).
+  firmware configuration. Measure your build (see [Fit it in RAM](memory.md)).
 - **An SPI display** driven by `displayio` (or a DVI/HSTX framebuffer on RP2350 boards like the Fruit Jam).
 - **A few buttons** on GPIO — a D-pad + A/B is the baseline; X/Y are optional. Or a USB gamepad/keyboard on a USB-host board.
 - **Optional: a PWM-capable pin** for a small speaker, **or an I2S DAC** (sound is opt-in).
@@ -122,7 +122,7 @@ tested or supported targets; other `displayio` SPI displays may need verificatio
   and a game enables 12-bit only where the board advertises it (`picogame.RGB444_SUPPORTED`, e.g.
   `rgb444="auto"` in `picogame_game.setup`). Requesting `rgb444=True` on a build without the support
   raises an error rather than mis-driving the panel (ST7789/ST7735 have COLMOD 12-bit, ILI9341 does
-  not). Details in [Clocks, SPI & display limits](/hardware-limits/).
+  not). Details in [Clocks, SPI & display limits](hardware-limits.md).
 
 ## Build your own on a breadboard
 

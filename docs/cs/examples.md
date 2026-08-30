@@ -19,7 +19,7 @@ python3 sim/run.py games/snake/code.py      # kterákoli hra
 Potřebuješ Python 3 (pro živé okno přidej `pip install pygame`; bez něj se běh jen uloží jako screenshot).
 
 **🎮 Na skutečném hardwaru.** Tyhle hry rozběhne jakékoli Raspberry Pi Pico s malým displejem, pár
-tlačítky a bzučákem — hotový **PicoPad**, nebo [vlastní stavba](/cs/hardware/). Nahraješ firmware,
+tlačítky a bzučákem — hotový **PicoPad**, nebo [vlastní stavba](hardware.md). Nahraješ firmware,
 zkopíruješ soubory hry, hotovo.
 
 ## Hry
@@ -57,7 +57,7 @@ slouží i jako šablona: začni od nejbližší a přetvoř ji. Všechny najde�
 
 ## Nahrání hry do zařízení
 
-1. Nahraj `firmware.uf2` — postup na stránce [Spuštění na hardwaru](/cs/hardware/).
+1. Nahraj `firmware.uf2` — postup na stránce [Spuštění na hardwaru](hardware.md).
 2. Zkopíruj `code.py` hry na disk CIRCUITPY, plus pomocné moduly a případné asset soubory, které
    importuje (úvodní komentář každé hry je vypisuje).
 

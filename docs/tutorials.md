@@ -73,7 +73,7 @@ After the tutorials, continue with:
   skeleton** to start your own project from (open it in the
   [Playground](/playground/?ex=game-skeleton)). This is the natural next step now that
   you've built three games by hand.
-- **[Feature guide](/features/)** — the task-oriented tour of everything the engine can do
+- **[Feature guide](features.md)** — the task-oriented tour of everything the engine can do
   (which drawing surface to pick, sprite transforms, collision, HUDs, audio, RAM budgeting),
   with alternatives for each. Use it when choosing a tool for a task.
 - **The helpers** (`lib/`) — the pure-Python modules you met above (`picogame_pool`,

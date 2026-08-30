@@ -4,7 +4,7 @@ Nejdřív zjisti dostupnou paměť a cenu největších položek, potom změř s
 konci stránky pomáhá až tehdy, když opakované velké alokace skutečně tříští haldu.
 
 :::note[Opravu jsi nasadil, ale nic se nezměnilo?]
-Zastaralý `.mpy` v `/lib` na desce **zastíní** odpovídající `.py` při importu, takže se úprava v Pythonu nespustí — po každé změně knihovny ho smaž nebo znovu sestav (viz [Spuštění na hardwaru](/cs/hardware/)).
+Zastaralý `.mpy` v `/lib` na desce **zastíní** odpovídající `.py` při importu, takže se úprava v Pythonu nespustí — po každé změně knihovny ho smaž nebo znovu sestav (viz [Spuštění na hardwaru](hardware.md)).
 :::
 
 :::tip[Triáž při MemoryError — začni tady]
@@ -94,7 +94,7 @@ def largest_block():
    některé prvky `picogame_ui`). Podrobnosti najdeš v [Kreslicích cestách](/cs/concepts/drawing-paths/).
 2. **Fullscreen pozadí ukládej jako tilemapu, ne jako bitmapu.** 320×240 PAL8 pozadí je ~75 KB
    (RGB565 dvojnásobek) — na RP2040 často moc. Rozřež obrázek na tily 8×8, nech si jen *unikátní*
-   tily (malý tileset) plus mřížku indexů a vykresli to vrstvou [`Tilemap`](/cs/engine/). Pozadí se
+   tily (malý tileset) plus mřížku indexů a vykresli to vrstvou [`Tilemap`](engine.md). Pozadí se
    hodně opakují, takže tileset + mřížka indexů je zlomek plné bitmapy. `png2picogame.py --dedup`
    sloučí shodné (i otočené/zrcadlené) tily za tebe; přesně tak port MoonMineru na Fruit Jamu vejde
    fullscreen scény na RP2040.

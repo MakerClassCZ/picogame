@@ -23,8 +23,7 @@ firmware; everything here is plain Python on top of it, and you only pay for wha
 
 **One sentence per module, grouped the same way:
 [the picogame-libs README](https://github.com/MakerClassCZ/picogame-libs#readme)** — that index is
-the complete one and a test keeps it that way. Full signatures:
-[the API reference](https://picogame.makerclass.cz/reference/).
+the complete one and a test keeps it that way. Full signatures: **[`docs/reference.md`](../docs/reference.md)**, right here in the clone (also served at [picogame.makerclass.cz/reference/](https://picogame.makerclass.cz/reference/)).
 
 ## About this folder
 

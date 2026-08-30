@@ -5,7 +5,7 @@ and the pure-Python `picogame_*` helper libraries in `lib/`. Signatures show par
 names and defaults; `*` marks keyword-only arguments. Colours are wire-order RGB565 ints
 (build them with `rgb565`). For longer explanations see the [engine guide](engine.md).
 
-**See also:** [Fit it in RAM](/memory/) · [Drawing paths](/concepts/drawing-paths/) · [Performance](/performance/) · [Run on hardware](/hardware/) · [Coming from another engine](/concepts/coming-from/).
+**See also:** [Fit it in RAM](memory.md) · [Drawing paths](/concepts/drawing-paths/) · [Performance](/performance/) · [Run on hardware](hardware.md) · [Coming from another engine](/concepts/coming-from/).
 
 ---
 
@@ -100,6 +100,7 @@ Most games never call these (`picogame_game.setup` + `Scene` use them internally
 - `road_edges(rl, rr, hw, n, cx0, dist, cfg)` — one racing-road frame's **curve accumulator + integer edge tables** in a single call (the OutRun-genre `compute_road` loop). `rl`/`rr` = int16 outputs for `Canvas.road`, `hw` = int32 Q16 per-row half-widths, `cx0` = Q16 screen centre (incl. lateral offset), `dist` = integer world distance, `cfg` = int32[7] curve/hill config. Pairs with `Canvas.road` for a 0-RAM 30 fps road on the RP2040.
 - `vblank()` — (DVI boards, RP2350) block until the scanout's next vertical blanking (≤ ~16.7 ms). Starting a full-frame compose right after vblank keeps the publish front consistently behind the beam, so each sweep shows one **whole** frame — removes single-buffer tearing while the compose fits within two sweeps. Costs the wait: budget it against your FPS cap.
 - `core1(on) -> bool` — (RP2 boards) route splittable engine kernels (`Canvas.mode7` rows, the framebuffer compose bands) through the second core. Returns the **resulting** state: `False` when core1 is unavailable — e.g. a **USB-host board (Fruit Jam) runs its USB service on core1 permanently**, so the engine refuses rather than stomping it. Dual-core compose measured ~1.75× on an RP2350 with a free core1.
+- **`core1` is NOT in a CircuitPython release.** It lives on the fork's `picogame-core1` branch and has not gone upstream, so `pg.core1` raises `AttributeError` on any firmware you download from circuitpython.org. Guard it with `hasattr(pg, "core1")` and treat the dual-core path as an optimisation you may not have.
 
 ### Procedural noise (coherent value noise, 0..1)
 - `value2d(x, y, *, seed=0) -> float` · `value1d(x, *, seed=0) -> float`
@@ -129,7 +130,7 @@ Most games never call these (`picogame_game.setup` + `Scene` use them internally
 
 ### `picogame_usbpad` — USB HID gamepad source (USB-host boards, e.g. Fruit Jam)
 - `UsbPad(buttons=None)` — a button **source** for `Buttons(usb=…)` (auto-attached by default on a USB-host build). Reads a USB HID gamepad and ORs it into the button mask, so a plugged-in pad works with **zero game code changes**. Needs a USB-host CircuitPython build (`usb.core`); a no-op on boards without it.
-- Default map = the ubiquitous DragonRise `081f:e401` SNES-style pad; remap per pad from `settings.toml` (`PICOGAME_USBPAD`, no reflash — see [Custom board](/custom-board/)). Discover a new pad's report bytes with `tools/usbpad_probe.py`.
+- Default map = the ubiquitous DragonRise `081f:e401` SNES-style pad; remap per pad from `settings.toml` (`PICOGAME_USBPAD`, no reflash — see [Custom board](custom-board.md)). Discover a new pad's report bytes with `tools/usbpad_probe.py`.
 - `.mapped` — mask of buttons this pad can report; `VERSION`, `MAPPED` module constants.
 
 ### `picogame_usbkbd` — USB HID keyboard source (USB-host boards)
@@ -159,7 +160,7 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 
 ### `picogame_shapes` — single-colour bitmap generators
 - `rect(w, h, color)` · `circle(d, color)` · `ring(d, color, thickness=2)`
-- `from_mask(mask, color)` — Bitmap from a string mask (`'#'` = set).
+- `from_mask(mask, color)` — Bitmap from a **list of strings**, one per row (`'#'`, `'X'` or `'1'` = set); sized to the mask. Passing a single string is not an error — each CHARACTER becomes a row, so you get a 1-pixel-wide sprite and no exception.
 - `atlas(frames_data, w, h, color)` — pack w×h buffers into a multi-frame Bitmap.
 - `color_frames(w, h, colors)` — frame i = solid `colors[i]`.
 - `tileset_colors(w, h, colors)` — tileset: frame 0 empty, frames 1..N coloured.
@@ -215,7 +216,7 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 
 ### `picogame_audioout` — one output device for any board
 - `make_output(sample_rate=22050, pin=None)` — returns this board's audio output, chosen automatically: an I2S DAC (Fruit Jam TLV320) when the board has `I2S_BCLK`, else a PWM output on `pin` (or the board default). Used by both `picogame_audio` and `picogame_synth`, so a game needs no board-specific audio code. Raises `RuntimeError` if no output exists.
-- The TLV320's output select + the three volume trims are set from `settings.toml` (`PICOGAME_AUDIO_OUT`, `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` — see [Custom board](/custom-board/)); the driver's defaults are deliberately quiet, so raise them toward 0 dB. `PICOGAME_DEBUG = 1` prints why a DAC failed to init.
+- The TLV320's output select + the three volume trims are set from `settings.toml` (`PICOGAME_AUDIO_OUT`, `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` — see [Custom board](custom-board.md)); the driver's defaults are deliberately quiet, so raise them toward 0 dB. `PICOGAME_DEBUG = 1` prints why a DAC failed to init.
 
 ### `picogame_audio` — sample playback (PWM or I2S DAC)
 - `Audio(pin=None, voices=4, sample_rate=22050, channels=1, bits=16, signed=True)` · `.load(path)` · `.play(sample, *, voice=None, loop=False, volume=1.0)` · `.sfx(sample, volume=1.0)` · `.music(sample, loop=True, volume=1.0)` · `.stop(voice=None)` · `.stop_music()` · `.deinit()` · `.is_playing`.

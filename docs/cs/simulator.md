@@ -68,4 +68,4 @@ tyhle věci si ověř na zařízení.
 | Grafika | tvary generované kódem | vlastní PNG a převedená grafika |
 
 Až hra běží dobře, zkopíruj ji na desku a ověř časování, ovládání, zvuk a spotřebu paměti.
-Viz [Spuštění na hardwaru](/cs/hardware/).
+Viz [Spuštění na hardwaru](hardware.md).

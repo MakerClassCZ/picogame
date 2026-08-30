@@ -5,7 +5,7 @@ know the budget, know what the big items cost, measure instead of guessing — a
 heap fragmentation. The technique at the end (a pre-allocated **arena**) is broadly reusable.
 
 :::note[Applied the fix but nothing changed?]
-A stale `.mpy` in the board's `/lib` **shadows** the matching `.py` at import, so a Python edit never runs — delete or rebuild it after any lib change (see [Run on hardware](/hardware/)).
+A stale `.mpy` in the board's `/lib` **shadows** the matching `.py` at import, so a Python edit never runs — delete or rebuild it after any lib change (see [Run on hardware](hardware.md)).
 :::
 
 :::tip[MemoryError triage — start here]
@@ -97,7 +97,7 @@ def largest_block():
 2. **Store a full-screen background as a tilemap, not a bitmap.** A 320×240 PAL8 background is
    ~75 KB (RGB565 doubles it) — often too much on an RP2040. Cut the image into 8×8 tiles, keep
    only the *unique* tiles (a small tileset) plus a grid of indices, and draw it with a
-   [`Tilemap`](/engine/) layer. Backgrounds repeat a lot, so the tileset + index grid is a
+   [`Tilemap`](engine.md) layer. Backgrounds repeat a lot, so the tileset + index grid is a
    fraction of the full bitmap. `png2picogame.py --dedup` merges identical (and rotated/mirrored)
    tiles for you; this is how the Fruit Jam MoonMiner port fits its full-screen scenes on an RP2040.
 3. **Allocate big/long-lived buffers first, at boot**, and keep them; don't free and

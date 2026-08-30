@@ -15,7 +15,7 @@ Výstup: `ports/raspberrypi/build-pajenicko_picopad/firmware.uf2`. Nahraj přes 
 (podrž BOOTSEL při zapojení, pak přetáhni `.uf2` na disk `RPI-RP2`) jako každý CircuitPython
 firmware.
 
-Viz [Spuštění na hardwaru](/cs/hardware/) pro stranu zařízení a [Vejít se do RAM](/cs/memory/)
+Viz [Spuštění na hardwaru](hardware.md) pro stranu zařízení a [Vejít se do RAM](memory.md)
 pro RAM rozpočet.
 
 ## Kde picogame žije ve stromu
@@ -61,7 +61,7 @@ aby toto čekání omezil. Řídí SPI a DMA na RP2040 přímo:
 Bez této volby zůstává přenositelný backend přes `bus.send`. Překryv pomáhá při překreslení
 více stripů, takže u malého dirty regionu je rozdíl malý a u celé obrazovky větší. Hodnota
 25–30 % naměřená v benchmarku PicoPadu závisí na konfiguraci; podmínky popisuje stránka
-[Takt, SPI a limity displeje](/cs/hardware-limits/).
+[Takt, SPI a limity displeje](hardware-limits.md).
 
 ## Konfigurace desky
 
@@ -77,7 +77,7 @@ CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'   # + odpovídající změna
 
 **SPI hodiny displeje (v `board.c`).** Požaduj **62,5 MHz** (125/2) pro ST7789, ne 60 —
 dělička PL022 (jen sudá) zaokrouhlí 60 dolů na poloviční rychlost. Viz
-[Hodiny, SPI a limity displeje](/cs/hardware-limits/).
+[Hodiny, SPI a limity displeje](hardware-limits.md).
 
 **Ponech firmware obecný.** Ponech plnou sadu modulů zapnutou; vypni jen to, co zařízení fyzicky
 nemůže použít.
@@ -109,7 +109,7 @@ backend je nealokuje a vrací pro oba hodnotu `None`. Výchozí hodnota SPI back
 `FAST_DISPLAY`: **8** řádků s DMA a **24** bez DMA. Jde o výchozí hodnoty pro výkon měřených
 backendů; menší hodnota vždy používá méně RAM. Nastavení pro desku změň přes
 `-DPICOGAME_STRIP_H=N` a pro hru přes `picogame_game.setup(strip_h=N)`; za běhu čti
-`picogame.STRIP_H`. Víc ve [Vejít se do RAM](/cs/memory/).
+`picogame.STRIP_H`. Víc ve [Vejít se do RAM](memory.md).
 
 ---
 

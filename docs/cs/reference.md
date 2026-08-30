@@ -5,7 +5,7 @@ a pomocné knihovny `picogame_*` v čistém Pythonu ve složce `lib/`. Signatury
 a výchozí hodnoty; `*` označuje argumenty zadávané pouze jménem. Barvy jsou celá čísla RGB565
 ve wire order; vytvářej je pomocí `rgb565()`. Podrobnosti najdeš v [průvodci enginem](../engine.md).
 
-**Viz také:** [Vejít se do paměti](/cs/memory/) · [Kreslicí cesty](/cs/concepts/drawing-paths/) · [Výkon](/cs/performance/) · [Spuštění na zařízení](/cs/hardware/) · [Přicházíš z jiného enginu](/cs/concepts/coming-from/).
+**Viz také:** [Vejít se do paměti](memory.md) · [Kreslicí cesty](/cs/concepts/drawing-paths/) · [Výkon](/cs/performance/) · [Spuštění na zařízení](hardware.md) · [Přicházíš z jiného enginu](/cs/concepts/coming-from/).
 
 ---
 
@@ -100,6 +100,7 @@ Většina her je nikdy nevolá (interně je používá `picogame_game.setup` + `
 - `road_edges(rl, rr, hw, n, cx0, dist, cfg)` — **akumulátor zatáček + celočíselné tabulky okrajů** jednoho snímku závodní silnice v jediném volání (smyčka `compute_road` OutRun žánru). `rl`/`rr` = int16 výstupy pro `Canvas.road`, `hw` = int32 Q16 poloviční šířky per řádek, `cx0` = Q16 střed obrazovky (vč. laterálního posunu), `dist` = celočíselná světová vzdálenost, `cfg` = int32[7] konfigurace zatáček/kopců. Páruje se s `Canvas.road` na 0-RAM silnici ve 30 fps na RP2040.
 - `vblank()` — (DVI desky, RP2350) blokuje do dalšího vertikálního zatmění scanoutu (≤ ~16,7 ms). Kompozice odstartovaná hned po vblanku drží publikační frontu konzistentně za paprskem, takže každý sweep zobrazí jeden **celý** snímek — odstraňuje single-buffer tearing, dokud se kompozice vejde do dvou sweepů. Stojí to čekání: počítej s ním proti FPS capu.
 - `core1(on) -> bool` — (RP2 desky) pošle dělitelné kernely enginu (`Canvas.mode7` řádky, pásy fb kompozice) přes druhé jádro. Vrací **výsledný** stav: `False`, když core1 není k dispozici — např. **USB-host deska (Fruit Jam) na něm trvale provozuje USB servis**, takže engine odmítne místo jeho přepsání. Dvoujádrová kompozice změřena ~1,75× na RP2350 s volným core1.
+- **`core1` NENÍ v žádném releasu CircuitPythonu.** Žije na větvi `picogame-core1` v našem forku a do upstreamu zatím nešel, takže `pg.core1` na firmwaru staženém z circuitpython.org vyhodí `AttributeError`. Ošetři to přes `hasattr(pg, "core1")` a ber dvoujádrovou cestu jako optimalizaci, kterou možná nemáš.
 
 ### Procedurální šum (koherentní value noise, 0..1)
 - `value2d(x, y, *, seed=0) -> float` · `value1d(x, *, seed=0) -> float`
@@ -129,7 +130,7 @@ Většina her je nikdy nevolá (interně je používá `picogame_game.setup` + `
 
 ### `picogame_usbpad` — USB HID gamepad jako zdroj (desky s USB hostem, např. Fruit Jam)
 - `UsbPad(buttons=None)` — zdroj tlačítek pro `Buttons(usb=…)` (na buildu s USB hostem se připojí sám). Čte USB HID gamepad a ORuje ho do masky, takže připojený pad funguje **bez jakékoli změny kódu hry**. Vyžaduje CircuitPython build s USB hostem (`usb.core`); na deskách bez něj se nezavádí.
-- Výchozí mapování = běžný DragonRise `081f:e401` (SNES-style pad); přemapuj kterýkoli pad ze `settings.toml` (`PICOGAME_USBPAD`, bez reflashe — viz [Vlastní deska](/cs/custom-board/)). Report byty nového padu zjistíš pomocí `tools/usbpad_probe.py`.
+- Výchozí mapování = běžný DragonRise `081f:e401` (SNES-style pad); přemapuj kterýkoli pad ze `settings.toml` (`PICOGAME_USBPAD`, bez reflashe — viz [Vlastní deska](custom-board.md)). Report byty nového padu zjistíš pomocí `tools/usbpad_probe.py`.
 - `.mapped` — maska tlačítek, která pad umí hlásit; modulové konstanty `VERSION`, `MAPPED`.
 
 ### `picogame_usbkbd` — USB HID klávesnice jako zdroj (desky s USB hostem)
@@ -159,7 +160,7 @@ Kterou textovou cestu použít (`Canvas.text` vs vyrenderovaná Bitmap vs StripD
 
 ### `picogame_shapes` — generátory jednobarevných bitmap
 - `rect(w, h, color)` · `circle(d, color)` · `ring(d, color, thickness=2)`
-- `from_mask(mask, color)` — Bitmap z řetězcové masky (`'#'` = nastaveno).
+- `from_mask(mask, color)` — Bitmap ze **seznamu řetězců**, jeden na řádek (`'#'`, `'X'` nebo `'1'` = nastaveno); rozměr podle masky. Předat jeden řetězec není chyba — každý ZNAK se stane řádkem, takže dostaneš sprite široký 1 pixel a žádnou výjimku.
 - `atlas(frames_data, w, h, color)` — zabalí buffery w×h do vícesnímkové bitmapy.
 - `color_frames(w, h, colors)` — snímek `i` vyplní barvou `colors[i]`.
 - `tileset_colors(w, h, colors)` — tileset: snímek 0 je prázdný, snímky 1..N obarvené.
@@ -215,7 +216,7 @@ Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný 
 
 ### `picogame_audioout` — jeden výstup pro libovolnou desku
 - `make_output(sample_rate=22050, pin=None)` — vrátí audio výstup desky, vybraný automaticky: I2S DAC (Fruit Jam TLV320), když má deska `I2S_BCLK`, jinak PWM výstup na `pin` (nebo výchozím pinu desky). Používá ho `picogame_audio` i `picogame_synth`, takže hra nepotřebuje žádný kód specifický pro desku. Vyhodí `RuntimeError`, pokud výstup neexistuje.
-- Výběr výstupu TLV320 a tři hlasitostní trimy se nastavují ze `settings.toml` (`PICOGAME_AUDIO_OUT`, `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` — viz [Vlastní deska](/cs/custom-board/)); výchozí hodnoty driveru jsou schválně tiché, tak je zvedni k 0 dB. `PICOGAME_DEBUG = 1` vypíše, proč DAC selhal.
+- Výběr výstupu TLV320 a tři hlasitostní trimy se nastavují ze `settings.toml` (`PICOGAME_AUDIO_OUT`, `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` — viz [Vlastní deska](custom-board.md)); výchozí hodnoty driveru jsou schválně tiché, tak je zvedni k 0 dB. `PICOGAME_DEBUG = 1` vypíše, proč DAC selhal.
 
 ### `picogame_audio` — přehrávání samplů (PWM nebo I2S DAC)
 - `Audio(pin=None, voices=4, sample_rate=22050, channels=1, bits=16, signed=True)` · `.load(path)` · `.play(sample, *, voice=None, loop=False, volume=1.0)` · `.sfx(sample, volume=1.0)` · `.music(sample, loop=True, volume=1.0)` · `.stop(voice=None)` · `.stop_music()` · `.deinit()` · `.is_playing`.

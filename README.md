@@ -48,6 +48,7 @@ Both browser tools are static apps you can also self-host - their source is righ
 | [`sim/`](sim/) | the desktop simulator (try/develop games on your PC) |
 | [`lib/`](lib/) | the `picogame_*` helper modules — a mirror of [picogame-libs](https://github.com/MakerClassCZ/picogame-libs) |
 | [`tools/`](tools/) | asset converters and build helpers |
+| [`docs/`](docs/) | **the documentation itself** — every page of the site, as plain markdown you can read in the clone (API reference, hardware, memory, scene format) and send a PR to |
 | [`skills/`](skills/) | the [`picogame-game-design`](skills/picogame-game-design/) skill for AI coding agents (design fundamentals, full API, genre playbooks) |
 
 > The `picogame_*` helper modules this code imports are bundled in **`lib/`** — a generated mirror of

@@ -65,4 +65,4 @@ Both expose the same game-facing API, so the same game code runs in either. Unde
 | Assets | code-generated shapes | your own PNGs and converted art |
 
 Once a game runs well, copy it to the board and test its timing, controls, audio, and memory use.
-See [Run on hardware](/hardware/).
+See [Run on hardware](hardware.md).

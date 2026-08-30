@@ -1,6 +1,6 @@
 # Running picogame on hardware (PicoPad / RP2040)
 
-You can build and test in the browser or the [desktop simulator](/simulator/) before copying
+You can build and test in the browser or the [desktop simulator](simulator.md) before copying
 the game to a device. The simulator does not reproduce the device's RAM limits, timing, controls,
 or audio, so verify those on the board. On a PicoPad, deployment takes three steps.
 

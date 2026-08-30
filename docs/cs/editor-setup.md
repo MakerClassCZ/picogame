@@ -12,7 +12,7 @@ používá dva druhy modulů:
    - `pip install circuitpython-stubs` pokrývá všechny upstream moduly CircuitPythonu;
    - `picogame` samotný zatím v upstreamu není, jeho stub proto vychází zvlášť jako **`picogame-stubs`**
      — wheel připojený ke každému [release picogame-libs](https://github.com/MakerClassCZ/picogame-libs/releases)
-     (generovaný z docstringů enginu, stejný zdroj jako [reference](/cs/reference/)).
+     (generovaný z docstringů enginu, stejný zdroj jako [reference](reference.md)).
 
 ## Nastavení
 

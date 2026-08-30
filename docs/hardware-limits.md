@@ -8,7 +8,7 @@ For the RAM budget and deployment, see **[HARDWARE.md](hardware.md)**. For the f
 rendering paths, see the **[engine guide](engine.md#under-the-hood)**.
 
 Looking for what the engine can and can't do in a *game* — RAM, frame rate, features? See
-**[Coming from another engine](/concepts/coming-from/)** and **[Fit it in RAM](/memory/)**. This page is
+**[Coming from another engine](/concepts/coming-from/)** and **[Fit it in RAM](memory.md)**. This page is
 firmware clock / SPI / display tuning.
 
 ---
@@ -88,7 +88,7 @@ The SPI clock is the *one* transfer knob the divider gives you. A second, orthog
 **transfer-bound** platform is **`Display(rgb444=True)`** (12-bit packed pixels, ~25% less SPI per
 frame, gated by `picogame.RGB444_SUPPORTED`). It trades a per-strip pack cost for fewer bytes on the
 wire, so it only wins where the panel is the bottleneck. It's compiled out on the CPU-balanced
-PicoPad. See [The firmware build](/firmware/).
+PicoPad. See [The firmware build](firmware.md).
 
 ---
 

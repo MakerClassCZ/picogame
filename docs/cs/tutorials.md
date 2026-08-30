@@ -71,7 +71,7 @@ Po dokončení tutoriálů můžeš pokračovat těmito směry:
   hry** připravená ke spuštění, ze které rozjedeš vlastní projekt (otevři si ji v
   [Hřišti](/cs/playground/?ex=game-skeleton)). Právě teď, když máš tři hry postavené ručně,
   je to přirozený další krok.
-- **[Průvodce funkcemi](/cs/features/)** — úkolově zaměřená prohlídka všeho, co engine umí
+- **[Průvodce funkcemi](features.md)** — úkolově zaměřená prohlídka všeho, co engine umí
   (kterou kreslicí plochu zvolit, transformace spritů, kolize, HUD, zvuk a hospodaření s RAM),
   a s alternativami. Použij ji, když vybíráš vhodný nástroj.
 - **Pomocné moduly** (`lib/`) — čistě pythonové moduly z tutoriálů (`picogame_pool`,

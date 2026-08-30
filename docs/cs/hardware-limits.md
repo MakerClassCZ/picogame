@@ -8,7 +8,7 @@ Rozpočet RAM a nasazení popisuje **[HARDWARE.md](../hardware.md)**. Rychlý a 
 backend vysvětluje **[průvodce enginem](../engine.md#pod-kapotou)**.
 
 Hledáš, co engine *ve hře* umí a neumí — RAM, snímková frekvence, funkce? Viz
-**[Přicházíš z jiného enginu](/cs/concepts/coming-from/)** a **[Vejít se do paměti](/cs/memory/)**. Tahle
+**[Přicházíš z jiného enginu](/cs/concepts/coming-from/)** a **[Vejít se do paměti](memory.md)**. Tahle
 stránka je ladění firmwarových hodin / SPI / displeje.
 
 ---
@@ -88,7 +88,7 @@ Takt SPI je jediná přenosová hodnota, kterou určuje dělička. Druhou nezáv
 platformu **omezenou přenosem** je **`Display(rgb444=True)`** (12bitové balené pixely, ~25 % méně
 dat SPI na snímek, řízeno `picogame.RGB444_SUPPORTED`). Balení pixelů po pásech stojí část času CPU,
 ale po sběrnici se přenese méně bajtů. Vyplatí se tedy jen tam, kde je úzkým hrdlem panel. Ve firmwaru
-pro PicoPad tato volba není zahrnutá. Viz [Build firmwaru](/cs/firmware/).
+pro PicoPad tato volba není zahrnutá. Viz [Build firmwaru](firmware.md).
 
 ---
 

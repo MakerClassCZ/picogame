@@ -24,9 +24,9 @@ RAM ve zkratce: uchovávaný celoobrazovkový `Canvas` ≈ 150 KB; `StripDraw` /
 | spousta malých jisker / úlomků | `Particles` | [Reference](../reference.md) |
 | terén / obloha s přirozenou variací | šum počítaný v C: `value2d` / `fbm2d` | [Reference](../reference.md) |
 | pseudo-3D podlaha nebo first-person stěny | `Canvas.mode7` (podlaha, přes `picogame_mode7`) / `picogame_ray` (stěny) — obojí do `StripDraw` | [Pseudo-3D](/cs/helpers/pseudo-3d/) |
-| skutečné flat-shaded polygonové 3D (blocky světy, low-poly) | `pg.project` (dávková projekce, float/fixed podle `pg.FPU`) + `pg.Triangles` (C-kompozitovaná dávková vrstva; na canvas cestě `Canvas.fill_triangles`) | [Pseudo-3D](/cs/helpers/pseudo-3d/) · [Reference](/cs/reference/) |
+| skutečné flat-shaded polygonové 3D (blocky světy, low-poly) | `pg.project` (dávková projekce, float/fixed podle `pg.FPU`) + `pg.Triangles` (C-kompozitovaná dávková vrstva; na canvas cestě `Canvas.fill_triangles`) | [Pseudo-3D](/cs/helpers/pseudo-3d/) · [Reference](reference.md) |
 | izometrická deska (RPG / taktiky / builder) | `picogame_iso.IsoView` (celočíselná projekce + painter's klíč + dávka `emit_blocks`) | [Pseudo-3D](/cs/helpers/pseudo-3d/) |
-| závodní silnice ve stylu OutRun ve 30 fps | `pg.road_edges` + `Canvas.road` (per-scanline smyčka v C, do `StripDraw`) | [Reference](/cs/reference/) |
+| závodní silnice ve stylu OutRun ve 30 fps | `pg.road_edges` + `Canvas.road` (per-scanline smyčka v C, do `StripDraw`) | [Reference](reference.md) |
 
 ## Hratelnost
 

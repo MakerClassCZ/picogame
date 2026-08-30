@@ -12,7 +12,7 @@ a picogame program uses two kinds of modules:
    - `pip install circuitpython-stubs` covers every upstream CircuitPython module;
    - `picogame` itself isn't upstream yet, so its stub ships separately as **`picogame-stubs`** —
      a wheel attached to every [picogame-libs release](https://github.com/MakerClassCZ/picogame-libs/releases)
-     (generated from the engine's own docstrings, the same source as the [reference](/reference/)).
+     (generated from the engine's own docstrings, the same source as the [reference](reference.md)).
 
 ## Setup
 

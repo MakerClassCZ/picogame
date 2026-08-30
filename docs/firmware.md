@@ -15,7 +15,7 @@ Output: `ports/raspberrypi/build-pajenicko_picopad/firmware.uf2`. Flash it over
 **BOOTSEL** (hold BOOTSEL while plugging in, then drag the `.uf2` onto the `RPI-RP2` drive)
 like any CircuitPython firmware.
 
-See [Run on hardware](/hardware/) for the device side and [Fit it in RAM](/memory/) for the
+See [Run on hardware](hardware.md) for the device side and [Fit it in RAM](memory.md) for the
 RAM budget.
 
 ## Where picogame lives in the tree
@@ -64,7 +64,7 @@ portable `bus.send` renderer; it's just slower because each strip transfer block
 only helps when a repaint spans multiple strips, so the win grows with per-strip blit cost:
 near zero for a small dirty-region update and larger for a full-frame, transform-heavy
 scene. Treat the 25–30% measured on the PicoPad benchmark as configuration-specific; see
-[Clocks, SPI & display limits](/hardware-limits/) for the test setup.
+[Clocks, SPI & display limits](hardware-limits.md) for the test setup.
 
 ## Board configuration
 
@@ -80,7 +80,7 @@ CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'   # + a matching linker-scri
 
 **Display SPI clock (in `board.c`).** Request **62.5 MHz** (125/2) for the ST7789, not 60 —
 the PL022's even-only divider rounds 60 down to half speed. See
-[Clocks, SPI & display limits](/hardware-limits/).
+[Clocks, SPI & display limits](hardware-limits.md).
 
 **Keep the image general-purpose.** Leave the full module set on; only disable what this
 device physically can't use.
@@ -112,7 +112,7 @@ the framebuffer path returns `None` for both and does not allocate them. The SPI
 keyed to `FAST_DISPLAY`: **8** rows with DMA and **24** without. These are performance defaults
 for the measured paths; a smaller value always uses less buffer RAM. Override per board with
 `-DPICOGAME_STRIP_H=N`, or per game via `picogame_game.setup(strip_h=N)`; read it at runtime
-as `picogame.STRIP_H`. More in [Fit it in RAM](/memory/).
+as `picogame.STRIP_H`. More in [Fit it in RAM](memory.md).
 
 ---
 

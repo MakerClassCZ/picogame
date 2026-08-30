@@ -16,7 +16,7 @@ měří, je PicoPad.
 | Desktopový simulátor | tvůj počítač | Vývojový nástroj, ne cílové zařízení. Nabízí stejné API hry, ale nereprodukuje omezení RAM ani časování desky. |
 
 Engine je nativní C modul ve forku CircuitPythonu. PicoPad má **hotový firmware**; pro ostatní desky
-si fork pro danou desku sestavíš, viz [Build firmwaru](/cs/firmware/).
+si fork pro danou desku sestavíš, viz [Build firmwaru](firmware.md).
 
 ## Firmware ke stažení
 
@@ -27,7 +27,7 @@ Každý odkaz níže vede na build firmwaru pro jednu desku. Nahraj jej a potom 
 Firmware pro **PicoPad** je referenční build testovaný na zařízení. Buildy bez výslovného
 označení „testováno“ v tabulce jsou experimentální a mohou vyžadovat úpravy pro konkrétní desku.
 Pro opakovatelné vydání sestav fork CircuitPythonu pro přesnou desku a commit, který používáš
-(viz [Build firmwaru](/cs/firmware/)).
+(viz [Build firmwaru](firmware.md)).
 :::
 
 | Deska | Firmware |
@@ -57,7 +57,7 @@ ho v `settings.toml`
 (`CIRCUITPY_DISPLAY_WIDTH`/`_HEIGHT`/`_ROTATION`) s jednou ze dvou barevných hloubek — `setup()` zvládne
 obě automaticky: `CIRCUITPY_DISPLAY_COLOR_DEPTH=16` pro plnobarevné RGB565 (např. 320×240), nebo `=8` pro
 RGB332, jedinou hloubku, kterou picodvi nabízí při **640×480** (plné rozlišení). Detaily o
-framebufferu a barevné hloubce viz [Spuštění na hardwaru](/cs/hardware/).
+framebufferu a barevné hloubce viz [Spuštění na hardwaru](hardware.md).
 **Zvuk** na Fruit Jamu je I2S DAC TLV320 — nainstaluj `adafruit_tlv320` + `adafruit_bus_device` do
 `CIRCUITPY/lib` (nedodávají se) a zvedni volume klíče, jinak je ticho; `PICOGAME_DEBUG=1` vypíše proč.
 **Vstup** je USB gamepad nebo klávesnice (deska nemá herní tlačítka) — viz
@@ -99,7 +99,7 @@ Na desce **bez vestavěného displeje** (holý Pico) navíc sestavíš displej v
 - **MCU podporované CircuitPythonem** — testované rodiny jsou RP2040, RP2350 a ESP32-S3.
 - **RAM** obvykle určuje rozpočet na grafiku. Aktuálně měřené buildy poskytují přibližně
   **190 KB** haldy na RP2040 a **520 KB** na RP2350. Největší souvislý blok je menší a mění se
-  podle konfigurace firmwaru, proto svůj build změř (viz [Vejít se do paměti](/cs/memory/)).
+  podle konfigurace firmwaru, proto svůj build změř (viz [Vejít se do paměti](memory.md)).
 - **SPI displej** ovládaný přes `displayio` (nebo DVI/HSTX framebuffer na RP2350 deskách jako Fruit Jam).
 - **Pár tlačítek** na GPIO — základ je D-pad + A/B; X/Y jsou volitelné. Nebo USB gamepad/klávesnice na desce s USB hostem.
 - **Volitelně: pin s PWM** pro malý reproduktor, **nebo I2S DAC** (zvuk je opt-in).
@@ -121,7 +121,7 @@ podporované cíle; jiné SPI displeje podporované v `displayio` je potřeba ov
   12 bitů zapne jen tam, kde to deska inzeruje (`picogame.RGB444_SUPPORTED`, např.
   `rgb444="auto"` v `picogame_game.setup`). Požadavek `rgb444=True` v buildu bez podpory vyvolá
   chybu, místo aby špatně řídil panel (ST7789/ST7735 mají COLMOD 12-bit, ILI9341 ne). Detaily v
-  [Hodiny, SPI a limity displeje](/cs/hardware-limits/).
+  [Hodiny, SPI a limity displeje](hardware-limits.md).
 
 ## Postav si vlastní na nepájivém poli
 

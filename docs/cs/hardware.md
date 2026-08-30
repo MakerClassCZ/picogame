@@ -1,6 +1,6 @@
 # Spuštění picogame na hardwaru (PicoPad / RP2040)
 
-Hru můžeš nejprve sestavit a testovat **v prohlížeči nebo [desktopovém simulátoru](/cs/simulator/)** (`sim/`). Přechod
+Hru můžeš nejprve sestavit a testovat **v prohlížeči nebo [desktopovém simulátoru](simulator.md)** (`sim/`). Přechod
 na **PicoPad** potom tvoří tři vratné kroky. Za stručným postupem následují podrobnosti o RAM, `.mpy`
 a firmwaru, které využiješ u větší hry nebo při portování na vlastní desku.
 
