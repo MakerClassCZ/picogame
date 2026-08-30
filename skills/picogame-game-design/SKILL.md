@@ -303,10 +303,8 @@ Templates in `templates/` (pull when the workflow says): `design-brief.md` — f
 
 ## Part 3 — The workflow
 
-0. **Check the skill is current**: run `python3 tools/check_skill_api.py` (repo root). If it fails,
-   trust `api-reference.md` + the live helper sources over any prose example here.
-   *No-repo environments* (web playground, "write me a code.py" chat): skip the check, write a
-   **single self-contained file** — no sibling imports, inline art — per the playground contract.
+*No-repo environments* (web playground, "write me a code.py" chat): write a **single
+self-contained file** — no sibling imports, inline art — per the playground contract.
 
 1. **Frame the concept** (§1.1–1.2): who plays, how long, what feeling; the one core verb; the loop
    in one sentence. Fill `templates/design-brief.md`.
@@ -315,7 +313,7 @@ Templates in `templates/` (pull when the workflow says): `design-brief.md` — f
 3. **Scope for the device** (§1.8–1.9) + the RAM budget in `engine-capabilities.md`.
 4. **Choose engine blocks** → `engine-capabilities.md`: Sprite (+ `picogame_pool` for many), Tilemap
    for boards, StripDraw for full-frame effects, Canvas for rarely-changing panels, `set_view` camera,
-   `picogame_ui` HUD. For a specific mechanic (AI, parallax, procedural, ghosts) → `techniques.md`.
+   `picogame_ui` HUD. For a specific mechanic (**collision/projectiles**, AI, parallax, procedural, ghosts) → `techniques.md`. Collision is the one people re-derive instead of looking up: §5 has the stepped-mover rule (keep the LAST FREE position — that is where anything it spawns goes) and says when `pg.raycast` does and does not apply.
    **Level geometry is DATA — never prose.** The moment a request describes tiles in words ("a ceiling
    just below the HUD", "a wall three quarters of the way up"), stop translating it into coordinates in
    your head: put the map in an **ASCII grid** and show it. `picogame_scene` levels take
@@ -361,8 +359,10 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
 
 **Machine-verifiable — the agent confirms these (sim run + screenshot + RAM estimate):**
 1. **Runs clean** — N frames in the sim with no exception (`sim/run.py … --frames N`), not just
-   "imports." Then a **`--frames 3600`** (≈2 min) run must also finish clean — it catches per-frame
-   allocations and heap fragmentation a short run hides (`engine-capabilities.md §5`).
+   "imports." Then a **`--frames 3600 --fast`** run must also finish clean — it catches per-frame
+   allocations and heap fragmentation a short run hides (`engine-capabilities.md §5`). `--fast` skips
+   the frame sleep (`dt` still reads the nominal 1/fps, so the game behaves identically) — without it
+   the soak takes two minutes of waiting, which is how it ends up quietly shortened.
 2. It **reads at a glance** in the PNG — *name* the player's shape+colour and each threat's from the
    shot alone; if you can't tell them apart by **shape AND colour** (not colour alone), it fails. HUD legible.
    This applies to **every object you just added**, not only the player: find it in the shot and check

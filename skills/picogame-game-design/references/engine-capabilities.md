@@ -92,8 +92,7 @@ objects stay cheap; only beyond ~6 scattered changes do they merge toward a full
 > **This table is the SINGLE SOURCE OF TRUTH for the helper API.** Module names, method names and
 > signatures live here only; everywhere else (SKILL.md, techniques.md, genre-patterns.md) names the
 > module and points back here rather than restating a signature — so a rename is a one-place edit.
-> `tools/check_skill_api.py` greps the skill's `picogame_*` identifiers against `lib/` and fails on a
-> mismatch (run it after any lib rename).
+> A maintainer check greps these identifiers against the real `lib/` so a rename can't rot the prose.
 
 | Module | What it gives you | Reach for it when |
 |---|---|---|
@@ -425,7 +424,7 @@ python sim/run.py game.py --backend pygame                  # live interactive w
 ```
 CLI: `game` (positional), `--frames N` (default 150), `--backend pil|pygame`, `--shot PATH`,
 `--shot-at N`, `--hold NAME,NAME` (logical `UP/DOWN/LEFT/RIGHT/A/B/X/Y`), `--keys TIMELINE`,
-`--profile` (per-frame timing).
+`--profile` (per-frame timing). `--fast` runs headless at full speed — the frame sleep is skipped but `dt` stays nominal, so a long soak costs compute, not wall clock.
 `--keys` is `FRAME:BUTTON[:HELD_FRAMES]` items separated by commas — `25:B:3` taps B for 3 frames at
 frame 25, `40:X` presses and holds, `60:-X` releases. This is how you test anything read with
 `just_pressed` (shoot, jump, confirm, place): `--hold` can only express "down the whole run", so a

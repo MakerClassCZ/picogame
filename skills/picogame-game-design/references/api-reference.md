@@ -1,7 +1,10 @@
 <!-- Full picogame API reference (native C engine + helper libs), bundled into the skill so the
      exact signatures are available OFFLINE — the C engine is a compiled native module with no
-     .py to read. SOURCE OF TRUTH: picogame-web/REFERENCE.md (regenerate this copy from there
-     when the engine API changes). -->
+     .py to read. SOURCE OF TRUTH: the public repo's docs/reference.md - this copy may add detail
+     (argument RANGES, "clamp before the call" notes) but must never document FEWER symbols.
+     A maintainer check enforces that; it had drifted 13 symbols behind before the check existed,
+     so an agent using the skill did not know pg.project, vspans, core1 or vblank were there. (The old pointer named picogame-web/REFERENCE.md, a file that no longer exists,
+     which is how the drift went unnoticed.) -->
 
 # picogame — quick reference
 
@@ -22,6 +25,7 @@ names and defaults; `*` marks keyword-only arguments. Colours are wire-order RGB
 - `RGB444_SUPPORTED` — `bool`; whether this board's panel can drive 12-bit RGB444 (lets one game opt into `Display(rgb444=True)` only where it works).
 - `rgb565(r, g, b) -> int` — wire-order colour from 8-bit channels.
 - `collide(x1, y1, x2, y2, ax1, ay1, ax2, ay2) -> bool` — AABB overlap (8 args = box vs box) or point-in-box (6 args: `collide(x1, y1, x2, y2, px, py)`). Inclusive AABB, so boxes collide when they touch (pass sprite boxes as `(x, y, x+w, y+h)`; fires on contact).
+- `FPU` — `bool`; `True` when the 3D math primitives (`pg.project`) run the hardware-float path (RP2350, ESP32-S3), `False` on the RP2040 (16.16 fixed-point). Pack `project` buffers to match: `array("f")` when `pg.FPU` else `array("i")` with values `int(v * 65536)`.
 
 ### `Bitmap(data, width, height, *, format=RGB565, palette=None, frames=1, stride=0, transparent=None)`
 An image atlas of equal-size frames (any size). `data` is a buffer; `palette` (array of wire colours) is required for `PAL8`. `transparent` = the index/colour skipped when blitting.
@@ -83,6 +87,9 @@ A RAM RGB565 drawing surface composited as a Scene layer (`width*height*2` bytes
 - `text(x, y, s, fg, font, bg=None)` — composite a string in C, rasterizing each glyph of `font` (a `fontio.BuiltinFont`) on the fly: no Python glyph cache and no per-call Bitmap/Sprite. `bg=None` → transparent glyph background. ASCII/built-in font only. Works on a Canvas or a `StripDraw` view; the latter does not retain a separate text surface.
 - `mode7(texture, horizon, y_off, z, rx0, ry0, rsx, rsy, cam_x, cam_y)` — fill the rows below `horizon` with a **Mode-7 perspective floor** of `texture` (power-of-2 dims; one world unit = one tile). 10 fixed-point (16.16) args — you normally let `picogame_mode7.Camera` compute them from a camera pose. Draws into a Canvas or a 0-RAM `StripDraw` view (pass `y_off` = the strip top).
 - Read-only props: `x`, `y`, `width`, `height`.
+- `vspans(x0s, x1s, tops, bots, colors, n, x_off=0, y_off=0)` — fill `n` **vertical colour spans** in one call: span *i* covers `x0s[i]..x1s[i]` × `tops[i]..bots[i]` (both exclusive) in `colors[i]`; all five are uint16 arrays. The batch primitive for column renderers — `picogame_ray` paints its merged wall runs with one call per strip (`x_off=-vx, y_off=-vy` replay, off-band spans rejected with two compares), which made its per-strip cost independent of the run count (measured: a full-screen stride-1 raycast frame 203–275 ms → ~27 ms (~36 fps)).
+- `fill_triangles(verts, colors, n, x_off=0, y_off=0)` — fill `n` triangles in **one call**: `verts` = int16 `x0,y0,x1,y1,x2,y2` per triangle, `colors` = wire-RGB565 uint16 per triangle. Same rasteriser as `fill_triangle`, but the whole batch crosses the Python/C boundary once — the win for many small triangles (blocky 3D, low-poly, isometric), where the ~10 µs per-call overhead otherwise dominates. `x_off`/`y_off` translate every vertex before clipping: pass `y_off=-vy` in a `StripDraw` callback to **replay one screen-space batch into each render strip** (off-band triangles are rejected with three compares) — full-res 3D with no retained canvas at all, the preferred path on framebuffer boards. Companion of `pg.project` and `picogame_iso.emit_blocks`.
+- `road(ri0, tab, rl, rr, d05_q8, d07_q8, colors)` — draw one **OutRun-style racing-road strip** from precomputed tables: the whole per-scanline loop (sky/road/rumble/dash colour picks) in one call. `ri0` = road-table row at this surface's row 0 (negative = sky rows); `tab` = int16 rows of `{edge_w, dash_hw, wb05_q8, wb07_q8, flags}`; `rl`/`rr` = int16 per-row edges from `pg.road_edges`; `d05/d07` = Q8 scroll phases; `colors` = 6× uint16 `{sky, road_a, road_b, rumble_a, rumble_b, dash}`. Designed as a `StripDraw` callback body (0-RAM road).
 
 ### `StripDraw(callback, x=0, y=0, width=0, height=0, *, always_dirty=True)`
 Immediate-mode layer with **no pixel buffer**: each refresh it calls `callback(view, vx, vy, vw, vh)` once per render strip inside its rect. `view` is a Canvas pointing at the live strip (use Canvas primitives, incl. `view.text`); view-local `(0,0)` = screen `(vx, vy)`. In a scrolling scene add it `fixed`.
@@ -90,10 +97,21 @@ Immediate-mode layer with **no pixel buffer**: each refresh it calls `callback(v
 - `invalidate()` — mark it dirty so the next refresh repaints it (the way to update an `always_dirty=False` panel when its content changes).
 - Read/write props: `x`, `y`, `width`, `height` — move or resize the layer (after shrinking, call `scene.invalidate()`) · `always_dirty`.
 
+### `Triangles(verts, colors)`
+A retained **screen-space triangle batch** the compositor rasterises **entirely in C** per render strip (cheap band reject + the Canvas rasteriser) — no pixel buffer AND no Python per strip. `verts` = int16 array (`x0,y0,x1,y1,x2,y2` per triangle), `colors` = uint16 wire-RGB565 per triangle — both **caller-owned** (fill them in place each frame). This is **the 3D-scene layer**: `pg.project` into the arrays, painter's-order the faces, set `count`, `scene.refresh()`. Because no Python runs during compose, it stays composable by the core1 band split — unlike a `StripDraw` callback.
+- `count` — how many triangles draw next refresh (clamped to the buffer capacity); **assigning marks the layer dirty** for a full repaint (set it every frame in a live 3D scene).
+- Measured (roadhop lab): replaces the `fill_triangles`-in-StripDraw replay with ~30 % less refresh time at 320×240 and unlocks the dual-core compose (640×480 at a locked 20 fps on an RP2350 with a free second core).
+- Read/write props: `x`, `y`, `width`, `height` — move or resize the layer (after shrinking, call `scene.invalidate()`) · `always_dirty`.
+
 ### Low-level draw functions
 Most games never call these (`picogame_game.setup` + `Scene` use them internally), but they are exposed for hand-built render loops.
 - `render(display, sprites, buffer, x0, y0, x1, y1, *, background=0)` — render a sprite list into the region `[x0,x1) × [y0,y1)` and push it to `display`. `buffer` is a reusable strip buffer (≥ region-width × 2 bytes). **Mixing with a retained scene:** the scene doesn't know `render()` changed the pixels — if the region overlaps the scene's play rect, call `scene.invalidate()` after (or use `picogame_game.overlay`, which does both); HUD bands outside the play rect don't need it.
 - `invert(display, on)` — toggle the panel's hardware colour inversion. Changes the panel's inversion state without sending pixel data, so a brief invert makes a full-screen negative flash (a 1-bit "hit" look) with no redraw. See `picogame_fx.InvertFlash`.
+- `project(cam, pts, n, out_sx, out_sy)` — **batch perspective projection** of `n` 3D points to screen in C. `cam` = 15 camera params `(ex,ey,ez, rx,rz, ux,uy,uz, fx,fy,fz, focal, cx0, cy0, near)`, `pts` = `n×3` world coords, `out_sx`/`out_sy` = int16 screen coords (a point behind the near plane gets the sentinel `-32768` — skip its faces). Buffer format follows `pg.FPU` (float32 on FPU boards, 16.16 int32 on the RP2040 — a format mismatch culls everything = black screen). One call per frame + `Canvas.fill_triangles` = real flat-shaded polygon 3D (Elite-class): project your vertices, painter's-sort faces, fill. ~0.7 ms/480 pts on an RP2350, ~2.2 ms on an RP2040.
+- `road_edges(rl, rr, hw, n, cx0, dist, cfg)` — one racing-road frame's **curve accumulator + integer edge tables** in a single call (the OutRun-genre `compute_road` loop). `rl`/`rr` = int16 outputs for `Canvas.road`, `hw` = int32 Q16 per-row half-widths, `cx0` = Q16 screen centre (incl. lateral offset), `dist` = integer world distance, `cfg` = int32[7] curve/hill config. Pairs with `Canvas.road` for a 0-RAM 30 fps road on the RP2040.
+- `vblank()` — (DVI boards, RP2350) block until the scanout's next vertical blanking (≤ ~16.7 ms). Starting a full-frame compose right after vblank keeps the publish front consistently behind the beam, so each sweep shows one **whole** frame — removes single-buffer tearing while the compose fits within two sweeps. Costs the wait: budget it against your FPS cap.
+- `core1(on) -> bool` — (RP2 boards) route splittable engine kernels (`Canvas.mode7` rows, the framebuffer compose bands) through the second core. Returns the **resulting** state: `False` when core1 is unavailable — e.g. a **USB-host board (Fruit Jam) runs its USB service on core1 permanently**, so the engine refuses rather than stomping it. Dual-core compose measured ~1.75× on an RP2350 with a free core1.
+- **`core1` is NOT in a CircuitPython release.** It lives on the fork's `picogame-core1` branch and has not gone upstream, so `pg.core1` raises `AttributeError` on any firmware you download from circuitpython.org. Guard it with `hasattr(pg, "core1")` and treat the dual-core path as an optimisation you may not have.
 
 ### Procedural noise (coherent value noise, 0..1)
 - `value2d(x, y, *, seed=0) -> float` · `value1d(x, *, seed=0) -> float`
@@ -109,6 +127,7 @@ Most games never call these (`picogame_game.setup` + `Scene` use them internally
 - `open_framebuffer(width, height, color_depth=None) -> display` — set the resolution from inside a game on a framebuffer board (Fruit Jam DVI), e.g. `open_framebuffer(640, 480)`; a no-op that returns the current display on a fixed SPI panel. Pass the result to `setup(display=…)`.
 - `screen() -> (width, height)` — the screen size; `display()` — the display object. Both read `supervisor.runtime.display` (the board's primary display - set by the firmware, or published by boot.py; the sim and the playground shim it), so the same game runs on a PicoPad, a Fruit Jam and a bare Pico. Lay games out from `screen()`, never from a hardcoded 320×240.
 - `resolve_display(display=None) -> (display, is_framebuffer)` — normalise a display/framebuffer handle (used by the HUD / immediate-render helpers).
+- `display()` — that same display object (for `pg.render`, `picogame_fx.InvertFlash`, …). Both read `supervisor.runtime.display` — the board's primary display, which CircuitPython picks right after board init and which a `boot.py`, a launcher or `open_framebuffer()` publishes with `supervisor.runtime.display = disp`. That is the one way a display reaches a game, so the same file runs on a PicoPad, a Fruit Jam, a bare Pico, in the simulator and in the browser playground (the last two ship a small `supervisor` shim).
 
 ### `picogame_clock` — frame pacing
 - `Clock(fps=30, max_dt=0.1)` · `.set_fps(fps)` · `.tick() -> dt` (sleep to frame, return seconds) · `.tick_async()` (the same, for `asyncio` loops).
@@ -152,7 +171,7 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 
 ### `picogame_shapes` — single-colour bitmap generators
 - `rect(w, h, color)` · `circle(d, color)` · `ring(d, color, thickness=2)`
-- `from_mask(mask, color)` — Bitmap from a string mask (`'#'` = set).
+- `from_mask(mask, color)` — Bitmap from a **list of strings**, one per row (`'#'`, `'X'` or `'1'` = set); sized to the mask. A single string duck-types through and makes each CHARACTER a row — a 1-pixel-wide sprite, no exception, so only a screenshot catches it.
 - `atlas(frames_data, w, h, color)` — pack w×h buffers into a multi-frame Bitmap.
 - `color_frames(w, h, colors)` — frame i = solid `colors[i]`.
 - `tileset_colors(w, h, colors)` — tileset: frame 0 empty, frames 1..N coloured.
@@ -245,9 +264,18 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - `load(pg, scene, display=None, strip_h=None, font=None, bank=None) -> View` — build a scene from a baked SCENE dict.
 - `load_bank(pg, bank)` — build a shared asset bank once (reuse across levels).
 - `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`.
+- `load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True) -> View` — bake a level's scene JSON on the device and load it, skipping `scene_build.py`. For ITERATING on a level; ship the pre-baked module. Colour-tileset levels only.
+
+### `picogame_scenebake` — on-device scene baker
+- `bake(scene) -> SCENE` — turn an editor scene JSON (already parsed) into the runtime SCENE dict, byte-identical to `tools/scene_build.py`. PNG-backed assets raise `NotImplementedError` (median-cut quantization stays on the desktop).
+- Prefer `picogame_scene.load_json()`: it holds the JSON text and the parse tree as locals, which is what keeps the ~17 kB peak transient. Bake EARLY, while the heap is still contiguous.
+- Costs ~3.6 kB while imported; `load_json(..., release=True)` drops it after the last level.
 
 ### `picogame_mode7` — Mode-7 perspective floor
 - `Camera(fov=0.66)` · `.draw(canvas, texture, x, y, angle, horizon, height, y_off=0)` — drive the C `Canvas.mode7` floor from a friendly camera pose (position in world/tile units, heading in radians, `height` = how high the camera sits). `texture` dims must be powers of two, one world unit = one tile. Draw into a 0-RAM `StripDraw` view. See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).
+
+### `picogame_iso` — isometric projection
+- `IsoView(ox, oy, tw, th)` (`tw`/`th` = tile half-width/half-height; 2:1 diamond → `th = tw//2`) · `.to_screen(gx, gy, h=0)` · `.depth(gx, gy, h=0)` (back-to-front painter's key) · `.screen_to_grid(sx, sy)` · `.cube_faces(gx, gy, height_px)` (top/right/left faces of a raised block) · `.emit_blocks(cells, tv, tc)` (alloc-free batch: writes flat-shaded cube triangles for many blocks straight into int16/uint16 buffers for ONE `Canvas.fill_triangles` call; returns the triangle count) — the **cheapest pseudo-3D there is**: integer add/shift only, no divide, no C dependency, which is why it runs well on the RP2040. Unlocks iso RPG / strategy / tactics / builder. Static boards: render once + dirty-rect the movers (30 fps); `emit_blocks` is for rebuild-every-frame scenes (~2× faster than a Python `cube_faces` loop). See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).
 
 ### `picogame_ray` — first-person raycaster
 - `Raycaster(world, wall_colors, sky, floor, fov=0.66, stride=2)` · `.cast(px, py, ang, sw, sh)` (once/frame) · `.draw(view, vx, vy, vw, vh)` (StripDraw callback) · `.solid(x, y)` (wall test) · `.attach(sd)` (temporal repaint) · `.project_sprite(sx, sy)` (billboard) — DDA walls via the native `pg.raycast` caster (integer 16.16 C on device, Python in the sim) into a 0-RAM `StripDraw` view (~22-30 fps). `stride` = perf/quality knob; `attach(sd)` + `always_dirty=False` repaints only the changed column band (still/slow ~30 fps). See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).
