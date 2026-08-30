@@ -79,8 +79,83 @@ def main():
     pg._FAST_BLIT = True
     print("selftest_blit: %d trials, %d exercised the fast path, %d mismatches"
           % (TRIALS, fast_cases, bad))
+    bad += tilemap_trials(pg, _host)
     return 1 if bad else 0
 
+
+
+# --------------------------------------------------------------------------------------------
+# Tilemap._draw has its own fast path: it culls the tile loop to what the clip rect can reach.
+# That is a SECOND place a drawing shortcut can drop pixels, and the first version of it did -
+# a TRANSPOSED tile on a non-square tileset draws tw x th swapped, so it reaches outside the cell
+# the cull bounds were derived from. selftest above covers _blit and would never have seen it.
+def _tilemap_case(rng, pg, _host, transposed):
+    """A tilemap with a deliberately non-square tileset, optionally carrying orientation bits."""
+    import array
+    tw, th = 16, 8                       # non-square on purpose: transpose then changes the footprint
+    frames = 3
+    stride = tw * frames
+    data = bytearray(rng.randrange(1, frames) for _ in range(stride * th))
+    pal = array.array("H", [0] + [rng.randrange(1, 65536) for _ in range(frames)])
+    ts = pg.Bitmap(data, tw, th, format=pg.PAL8, palette=pal, frames=frames,
+                   stride=stride, transparent=0)
+    cols, rows = 30, 12
+    tm = pg.Tilemap(ts, cols, rows)
+    for ty in range(rows):
+        for tx in range(cols):
+            tm.set_tile(tx, ty, rng.randrange(frames))
+    if transposed:
+        for ty in range(rows):
+            for tx in range(cols):
+                if rng.random() < 0.3:
+                    tm.set_tile(tx, ty, rng.randrange(frames), transpose=True)
+    return tm
+
+
+def tilemap_trials(pg, _host, trials=200):
+    """Culled vs unculled must paint the same pixels, transposed tiles included."""
+    import random
+    fb = _host.fb
+    W, H = _host.W, _host.H
+    orig = pg.Tilemap._draw
+    bad = 0
+    for t in range(trials):
+        frames = []
+        for cull in (True, False):
+            rng = random.Random(t)
+            tm = _tilemap_case(rng, pg, _host, transposed=(t % 2 == 0))
+            tm.ox, tm.oy = rng.randint(-20, 20), rng.randint(-20, 20)
+            vx, vy = rng.randint(-200, 20), rng.randint(-60, 20)
+            for i in range(len(fb)):
+                fb[i] = 0
+            if cull:
+                orig(tm, vx, vy, (0, 0, W, H))
+            else:
+                _draw_every_tile(tm, vx, vy, (0, 0, W, H), pg)
+            frames.append(list(fb))
+        if frames[0] != frames[1]:
+            bad += 1
+            if bad <= 3:
+                d = [i for i in range(len(fb)) if frames[0][i] != frames[1][i]]
+                print("TILEMAP MISMATCH trial %d: %d px differ, first at (%d,%d)"
+                      % (t, len(d), d[0] % W, d[0] // W))
+    print("selftest_blit: %d tilemap trials, %d mismatches" % (trials, bad))
+    return bad
+
+
+def _draw_every_tile(tm, vx, vy, clip, pg):
+    """Reference: no culling at all — walk the whole map."""
+    ts = tm.tileset
+    tw, th = ts.width, ts.height
+    for ty in range(tm.map_h):
+        for tx in range(tm.map_w):
+            off = ty * tm.map_w + tx
+            v = tm.grid[off]
+            if v >= ts.frames:
+                continue
+            o = tm.orient[off] if tm.orient is not None else 0
+            pg._blit(ts, tm.ox + tx * tw + vx, tm.oy + ty * th + vy, v,
+                     bool(o & 1), bool(o & 2), clip, 1.0, False, None, 0, None, bool(o & 4))
 
 if __name__ == "__main__":
     sys.exit(main())

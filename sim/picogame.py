@@ -541,10 +541,16 @@ class Tilemap:
         # ~315 visible), so the call overhead alone was most of a sim frame. Pure culling: the
         # skipped tiles contribute no pixels, so output is unchanged.
         cx0, cy0, cx1, cy1 = clip
-        tx_lo = max(0, (cx0 - self.ox - vx) // tw)
-        tx_hi = min(self.map_w, (cx1 - self.ox - vx) // tw + 1)
-        ty_lo = max(0, (cy0 - self.oy - vy) // th)
-        ty_hi = min(self.map_h, (cy1 - self.oy - vy) // th + 1)
+        # A TRANSPOSED tile draws tw x th swapped, so on a non-square tileset its footprint reaches
+        # outside the cell these bounds are derived from. An audit reported culling dropping such a
+        # tile; I could NOT reproduce it end to end, so treat this as cheap insurance against a
+        # geometry the bounds do not model, not as a fix for a demonstrated bug. selftest_blit's
+        # tilemap fuzz has never generated the case either - if you go looking, start there.
+        pad = 1 if (self.orient is not None and tw != th) else 0
+        tx_lo = max(0, (cx0 - self.ox - vx) // tw - pad)
+        tx_hi = min(self.map_w, (cx1 - self.ox - vx) // tw + 1 + pad)
+        ty_lo = max(0, (cy0 - self.oy - vy) // th - pad)
+        ty_hi = min(self.map_h, (cy1 - self.oy - vy) // th + 1 + pad)
         for ty in range(ty_lo, ty_hi):
             for tx in range(tx_lo, tx_hi):
                 off = ty * self.map_w + tx
