@@ -177,8 +177,9 @@ When you write or read engine code, expect these rules; they hold across every m
 - **Pool size = `capacity`; per-call burst = `count`** (`Particles.emit(x,y,count,…)`,
   `Pool(scene,bm,capacity)`, `pool.count()` = alive count).
 - **No-event sentinel = `None`; explicit cancel = `ui.CANCEL`.** `Menu/SceneMenu.tick → idx | None |
-  CANCEL`; `GridCursor.tick → (tx,ty) | None | CANCEL`. (Guard before comparing: `if pick is not
-  None and pick >= 0`.)
+  CANCEL`; `GridCursor.tick → (tx,ty) | None | CANCEL`. Guard with
+  `if pick is not None and pick is not ui.CANCEL:` — it works for BOTH return shapes. (`pick >= 0`
+  works only for the Menu's int index; on GridCursor's tuple it raises TypeError.)
 - **`render_text(...) → (bmp, w, h)`** is a tuple (not a bare Bitmap) — hence `render_text`, not
   `*_bitmap`. Optional constructor args are keyword-only.
 - Animation: `frames` = count, `fps` = rate, `speed` = per-tick motion.
@@ -219,7 +220,9 @@ for b in bullets.items:                   #  for several, pre-allocate a dict pe
     if not b.visible: continue            #  and only MUTATE it (asteroids/cavern do this). What
     b.fy += b.data                        #  matters is allocate-once-mutate-in-place - NEVER a
     if b.fy < -8: bullets.free(b)         #  fresh tuple/dict per change (a rewritten 3-tuple
-                                          #  measures ~1 KB/frame of GC churn at 30 entities,
+                                          #  measures ~1 KB/frame of GC churn at 30 entities
+                                          #  ON MICROPYTHON - the sim/CPython cannot observe
+                                          #  same-frame churn (tracemalloc sees only leaks),
                                           #  and is SLOWER than the mutated dict). free() to
                                           #  recycle — never del/create per frame.
 ```
@@ -253,8 +256,9 @@ transparency** without alpha (fading enemies, ghosts, fog). Animating `dither` r
 animating the flash/tint *colour* while it stays on needs `touch()`.
 
 **`sprite.touch()` after mutating a bitmap in place** — *the dirty-rect won't notice
-pixels you change directly in a Bitmap's backing buffer.* If you write into a Bitmap's
-`data` (or a `StreamSheet`/arena buffer) without changing the sprite's `x/y/frame/bitmap`,
+pixels you change directly in a Bitmap's backing buffer.* If you write into the buffer you
+passed the Bitmap at construction (there is no public `.data` - keep your own reference; a
+`StreamSheet`/arena buffer counts too) without changing the sprite's `x/y/frame/bitmap`,
 the scene sees no change and skips it. After an in-place pixel edit, mark the sprite dirty.
 > `Sprite.touch()` **is** in the engine (it bumps an internal `seq` the
 > dirty-rect snapshot compares). It's the correct escape hatch after raw in-place edits — e.g.

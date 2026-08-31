@@ -57,6 +57,20 @@ def _parse_keys(spec):
             if not down:
                 raise SystemExit("[sim] --keys: HELD_FRAMES makes no sense on a release, got %r" % item)
             events.setdefault(frame + held, []).append((pin, False))
+    # A bare FRAME:BTN with no later release/tap is HELD to the end of the run. That is valid
+    # (it is how you hold a direction), but when the intent was a TAP the run is silently
+    # edge-dead: just_pressed fires once at the press and never again, and every later "press"
+    # in the tester's head does nothing. Warn - a probe lost 40 minutes to four such runs.
+    open_holds = {}
+    for frame in sorted(events):
+        for pin, down in events[frame]:
+            if down:
+                open_holds[pin] = frame
+            else:
+                open_holds.pop(pin, None)
+    for pin, frame in sorted(open_holds.items()):
+        print("[sim] --keys note: %s pressed at frame %d is HELD to the end "
+              "(use %d:%s:2 for a tap)" % (pin, frame, frame, pin.replace("SW_", "")))
     return events
 
 

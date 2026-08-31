@@ -147,13 +147,13 @@ Kterou textovou cestu použít (`Canvas.text` vs vyrenderovaná Bitmap vs StripD
 - `render_text(pg, text, fg=None, outline=None, mid=None, bg=None) -> (bitmap, w, h)` — vykreslí přibaleným bitmapovým fontem; volitelné `outline`/`mid` dají levný 2tónový obrysový vzhled.
 
 ### `picogame_ui` — HUD a menu widgety (`LINE_H = 12`)
-- `SceneLabel(scene, pg, font, x, y, fg, bg)` · `.set(text)` · `.destroy()` — textový popisek nezávislý na kameře (fixed vrstva Scene); destroy() odpojí JEDNORÁZOVÝ popisek, aby ho GC uklidil (opakované HUD: postav jednou + set/hide).
+- `SceneLabel(scene, pg, font, x, y, fg, bg)` · `.set(text)` · `.reserve(chars)` · `.destroy()` — textový popisek nezávislý na kameře (fixní vrstva scény). `reserve(chars)` ho přepne na buffer PEVNÉ šířky postavený jednou: `set()` pak skládá znaky na místě — nulová alokace na update a popisek nemůže růst-realokovat na fragmentované haldě. Nemá `.move()` ani metriku šířky, takže měnící se hodnotu CENTRUJ rezervací nejširšího řetězce a paddingem mezerami (font má pevnou buňku, 6 px/znak). destroy() odpojí JEDNORÁZOVÝ popisek, aby ho GC uvolnil (opakovaný HUD: postav jednou + set/hide).
 - `SceneBox(scene, pg, font, x, y, w, h, fg, bg, nlines=3, key=None, border=None)` · `.show(lines)` · `.hide()` · `.set_line(i, text)` — víceřádkový panel ve scéně (dialog/log) · `.destroy()` = jednorázový úklid (vyžaduje firmware se `Scene.remove`).
 - `HudBar(pg, display, buffer, x, y, w, h, bg)` · `.add(sprite)` (ikona Sprite) · `.label(font, x, y, fg, text=" ")` → objekt popisku, který aktualizuješ přes `handle.set(text)` · `.draw()` — okamžitě skládaný pruh bez pixelové plochy velikosti panelu; volej při změně HUD.
 - `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
 - `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace · `.draw(display, buffer, force=False)`.
 - `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace — totéž menu jako vrstva ve scéně.
-- `GridCursor(cols, rows, tx=0, ty=0, wrap=False)` · `.index` · `.tick(btn)` — kurzor na D-padu po mřížce (inventář / herní deska).
+- `GridCursor(cols, rows, tx=0, ty=0, wrap=False)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — kurzor na D-padu po mřížce (inventář / herní deska). `tick` se hýbe drženým D-padem (auto-repeat) a vrací vybranou buňku na A, `ui.CANCEL` na B, jinak `None`; hlídej přes `if pick is not None and pick is not ui.CANCEL:` (tuple neumí `>= 0`).
 
 ### `picogame_options` — menu nastavení
 - `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` — obrazovka nastavení (přepínače/volby) ve scéně.
@@ -213,7 +213,7 @@ Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný 
 - `Bag(items, rng)` · `.next()` — shuffle-bag (7-bag) anti-streak randomizér.
 
 ### `picogame_save` — NVM perzistence
-- `Save(key, schema, *, offset=0)` · `.defaults()` · `.load() -> dict` · `.save(values)` · `.reset()`. Přežije restart/smazání souborového systému.
+- `Save(key, schema, *, offset=0)` — `schema` = uspořádaný dict `jméno -> (formátový znak struct, výchozí)`; ukázka → [/helpers/data/](/helpers/data/). · `.defaults()` · `.load() -> dict` · `.save(values)` · `.reset()`. Přežije restart/smazání souborového systému.
 
 ### `picogame_audioout` — jeden výstup pro libovolnou desku
 - `make_output(sample_rate=22050, pin=None)` — vrátí audio výstup desky, vybraný automaticky: I2S DAC (Fruit Jam TLV320), když má deska `I2S_BCLK`, jinak PWM výstup na `pin` (nebo výchozím pinu desky). Používá ho `picogame_audio` i `picogame_synth`, takže hra nepotřebuje žádný kód specifický pro desku. Vyhodí `RuntimeError`, pokud výstup neexistuje.

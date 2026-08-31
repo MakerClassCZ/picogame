@@ -190,6 +190,13 @@ The reference gives the field formats; these are the decisions it leaves to you,
 - **`cfg` curve frequencies are Q20 degrees per world unit**: a curve pattern that repeats every
   `D` world units wants `f1 = 360 * 2**20 // D`. Amplitudes `a1k`/`a2k` are Q16, pre-multiplied
   by the per-row gain.
+- **Numeric operating limit: the phase products wrap at ±2³¹** (the firmware accumulators are
+  int32, and the sim wraps identically on purpose). With an arbitrary period the wrap point is
+  not a whole number of sine periods, so the road pattern JUMPS there — at typical top speeds
+  that is a visible glitch every minute or two of play. The fix is structural, not a bigger
+  int: pick **power-of-two periods** so `f = 360 * 2**20 / P` is exact, and wrap your `dist`
+  by the longest period (all `cfg`/`d05`/`d07` phases stay continuous because it is a multiple
+  of every period in play).
 
 A complete minimal road - runs in the simulator as-is (the sim implements the pair
 bit-identically to the firmware):

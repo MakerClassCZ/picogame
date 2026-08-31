@@ -592,7 +592,13 @@ OutRun look: curves, hills, rumble strips, ~0 RAM — see `examples/picogame_str
 **`picogame_mode7` floor** for a *textured, steerable* ground you drive across in any direction
 (kart-racer look, ~29 fps full-screen, also 0 RAM in a `StripDraw`). Mode-7 gives real texture and
 free rotation but no hills; the scanline road gives hills and crests but no true 2D ground. Traffic
-and scenery are ordinary Sprites with `sprite.scale = F/(F+z)`, sorted back-to-front.
+and scenery are ordinary Sprites. **Match the sprite maths to the renderer you picked:** with the
+SEGMENT projector, `sprite.scale = F/(F+z)`; with the C road pair the rows are LINEAR in screen
+space, so scale by the row's half-width instead (`scale = hw[row] / hw[N-1] * FULL`), or cars read
+mis-sized against the road at their own row. Draw order: the engine draws in add order (no
+z-sort), so use the fixed-slots pattern — pre-add N sprites once, each frame sort your entity
+list and re-assign it into the slots (worked example: the billboard section of
+`docs/pages/helpers/pseudo-3d.md`).
 
 **The C road pair (2026-08, device-proven on picobike: 15 → 39 fps):** the per-scanline Python road
 loop is the genre's classic wall — replace it with the engine primitives. Once per frame
@@ -714,6 +720,10 @@ player. Too many inputs (destroys death legibility). Step-wise difficulty spikes
 (use smooth ramps). Allowing 180° instant reversal in Snake. Floaty/inconsistent
 jump impulse. No object pooling (recycle a fixed handful — critical on tiny RAM).
 
+**Trail/history recycling** (wake-style games, snakes, ghost paths): the worked pattern is
+`demos/picogame_snake.py` (a bounded deque drained in place + a Tilemap body - zero per-frame
+allocation); read it before hand-rolling a ring buffer.
+
 **MVP:** one core verb with deterministic tunable physics (the 3–4 constants) ·
 fair generation with a guaranteed-solvable spacing clamp · sub-1-second one-button
 restart + persistent high score.
@@ -785,7 +795,12 @@ timing pressure at all** (see the quality-bar note).
 + `picogame_options` — these widgets exist for exactly this.
 
 **ENGINE MAPPING** — Cards as sprites driven by **one multi-frame bitmap** (`frame` =
-card face) or drawn with **`Canvas.text`** (0-RAM labels); the hand is a small list/
+card face), or DRAWN: **one `StripDraw(always_dirty=False)` per card slot**, built once at
+boot — the callback's `view` IS a Canvas, so `view.fill_round_rect` + `view.text` paint the
+card with zero retained bytes. Three rules the pattern lives on (worked example:
+`games/picatro/code.py`, `class Card`): the callback ERASES its own rect first (a StripDraw
+does not clear), coords are absolute-minus-strip-origin (`ox = self.x - vx`), and you
+`invalidate()` a slot only when its card changes. The hand is a small list/
 `Pool`; a `state` machine (DRAW → SELECT → RESOLVE → NEXT); **`picogame_rand.Bag`**
 for the deck (no-streak draws = fair) and a seeded `Rand` for daily/repeatable runs;
 **`picogame_save`** for meta-progression. Almost all cost is UI + logic, so RAM is
@@ -799,6 +814,13 @@ player agency to shape the deck (add/remove/upgrade between encounters).
 labels**, not paragraphs; use `Canvas.text` sparingly). Making it real-time (it's
 turn-based — don't force arcade pacing or the arcade quality bar). Per-frame
 rebuilding of card lists (reuse). Opaque effects (show the number/outcome).
+
+**JUICE for a menu game** (screenshake is structurally out - fixed layers ignore `set_view`,
+so SS1.3's list needs a substitute): card LIFT on select (redraw the slot a few px higher),
+a 1-3 frame colour flash on the hit panel (swap the fill colour + `invalidate()`), number
+pop-ups via a short-lived SceneLabel, `Particles` sparks on damage (they ride ABOVE StripDraws),
+hit-stop on big resolves, and `sfx.Kit` on every card played. All of it is invalidate-driven -
+none of it needs a moving camera.
 
 **MVP:** a deck (`Bag`) · a hand you select from (`GridCursor` + `SceneMenu`) · a
 resolve step with a visible score/damage · a short run of ~3 encounters · seeded

@@ -158,7 +158,7 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 - `render_text(pg, text, fg=None, outline=None, mid=None, bg=None) -> (bitmap, w, h)` — render with the bundled bitmap font; optional `outline`/`mid` give a cheap 2-tone outlined look.
 
 ### `picogame_ui` — HUD & menu widgets (`LINE_H = 12`)
-- `SceneLabel(scene, pg, font, x, y, fg, bg)` · `.set(text)` · `.destroy()` — camera-independent text label (a fixed Scene layer); destroy() detaches a ONE-SHOT label so GC reclaims it (recurring HUD: build once + set/hide instead).
+- `SceneLabel(scene, pg, font, x, y, fg, bg)` · `.set(text)` · `.reserve(chars)` · `.destroy()` — camera-independent text label (a fixed Scene layer). `reserve(chars)` switches it to a FIXED-width buffer built once: `set()` then composes glyphs in place — zero allocation per update, and the label cannot grow-realloc on a fragmented heap. There is no `.move()` and no width metric, so CENTRE a changing value by reserving the widest string and padding with spaces (the font cell is fixed-width, 6 px/char). destroy() detaches a ONE-SHOT label so GC reclaims it (recurring HUD: build once + set/hide instead).
 - `SceneBox(scene, pg, font, x, y, w, h, fg, bg, nlines=3, key=None, border=None)` · `.show(lines)` · `.hide()` · `.set_line(i, text)` · `.destroy()` — a multi-line in-scene panel (dialog/log); destroy() = one-shot teardown (needs firmware with `Scene.remove`).
 - `HudBar(pg, display, buffer, x, y, w, h, bg)` · `.add(sprite)` (an icon Sprite) · `.label(font, x, y, fg, text=" ")` → a text handle; update it with `handle.set(text)` · `.draw()` (repaint the bar, call on HUD changes) — a fixed bar that composites sprites + labels (0 retained RAM).
 - `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
@@ -224,7 +224,7 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - `Bag(items, rng)` · `.next()` — shuffle-bag (7-bag) anti-streak randomizer.
 
 ### `picogame_save` — NVM persistence
-- `Save(key, schema, *, offset=0)` · `.defaults()` · `.load() -> dict` · `.save(values)` · `.reset()`. Survives reboot/filesystem wipe.
+- `Save(key, schema, *, offset=0)` — `schema` = an ordered dict of `name -> (struct format char, default)`; worked example: `docs/pages/helpers/data.md`. · `.defaults()` · `.load() -> dict` · `.save(values)` · `.reset()`. Survives reboot/filesystem wipe.
 
 ### `picogame_audioout` — one output device for any board
 - `make_output(sample_rate=22050, pin=None)` — returns this board's audio output, chosen automatically: an I2S DAC (Fruit Jam TLV320) when the board has `I2S_BCLK`, else a PWM output on `pin` (or the board default). Used by both `picogame_audio` and `picogame_synth`, so a game needs no board-specific audio code. Raises `RuntimeError` if no output exists.
