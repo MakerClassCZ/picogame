@@ -187,6 +187,12 @@ Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný 
 - Bity/masky: `B_SOLID B_HAZARD B_LADDER …` (indexy) a `SOLID HAZARD LADDER …` (masky).
 - `TileFlags(flags=None, tile_px=8)` — `flags` = `{tile_index: bitfield}` nebo seznam. `.get(tile, bit=None)` · `.set(tile, bit, value=True)` · `.at(tilemap, tx, ty, bit)` · `.at_px(tilemap, px, py, bit)` (kolize jedním řádkem). Klíčováno tile indexem (sdíleno všemi buňkami, které ho používají).
 
+### `picogame_script` — příběhové skripty jako generátory (Director)
+- `Director(pg, scene, buttons, font, box=None, nlines=3, fg=0xFFFF, bg=0x0000)` — pouští JEDEN příběhový skript nad živou scénou; `box` = obdélník dialogového panelu (výchozí: spodní pruh dle `screen()`).
+- `.on(name, genfunc)` (registrace) · `.start(script)` (jméno nebo generátor) · `.active` · `.tick() -> bool` — volej jednou za snímek **po** `buttons.poll()`; vrací True dokud skript běží VČETNĚ posledního kroku (stisk A, který zavřel poslední dialog, tak nepropadne do vstupu hry v témže snímku).
+- Čekací primitivy (uvnitř skriptu přes `yield from`): `.text(lines)` (stránka dialogu, A posouvá) · `.ask(lines) -> nastaví .answer` (volba A/B) · `.wait(frames)` · `.fade_out(speed)` / `.fade_in(speed)`.
+- Příběhové vlajky: `.ev(name)` / `.ev_set(name)` v `.events` (set — persistuj přes své save schéma). `.retarget(scene)` přepojí Directora po změně mapy.
+
 ### `picogame_seq` — sekvence řízené generátory (coroutine vzor)
 - `wait(frames)` · `over(frames, fn)` (fn(t), t 0..1) · `move_over(sprite, x, y, frames)` — vše jsou generátory; skládej je přes `yield from`.
 - `Seq(gen=None)` · `.start(gen)` · `.tick() -> done` — posune o jeden krok za snímek (meziscény, „udělej X za N snímků“).
@@ -255,7 +261,7 @@ Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný 
 ### `picogame_scene` — deklarativní loader levelů
 - `load(pg, scene, display=None, strip_h=None, font=None, bank=None) -> View` — vytvoří scénu z připraveného slovníku `SCENE`; na SPI backendu má `View` dva strip buffery, na framebufferu jsou `view.bufA` a `view.bufB` rovny `None`.
 - `load_bank(pg, bank)` — postaví sdílenou asset banku jednou (znovupoužitelnou napříč levely).
-- `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`.
+- `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`. · `.set_tile_prop(tile, prop, on=True)` — přepni příznak TYPU dlaždice za běhu: každá buňka s tou dlaždicí změní význam najednou (páka zprůchodní všechny brány, led roztaje). Doplňuje nativní `Tilemap.set_tile`, který mění JEDNU buňku; tabulky se kopírují per `load()`, takže změny neprosáknou do jiných úrovní sdílejících bank.
 - `load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True) -> View` — zapeče scene JSON levelu přímo na desce a načte ho, bez kroku přes `scene_build.py`. Na ITERACI levelu; hotovou hru posílej se zapečeným modulem. Jen barevné tilesety.
 
 ### `picogame_scenebake` — baker scén na desce

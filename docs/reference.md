@@ -187,6 +187,12 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - Bits/masks: `B_SOLID B_HAZARD B_LADDER …` (indices) and `SOLID HAZARD LADDER …` (masks).
 - `TileFlags(flags=None, tile_px=8)` — `flags` = `{tile_index: bitfield}` or a list. `.get(tile, bit=None)` · `.set(tile, bit, value=True)` · `.at(tilemap, tx, ty, bit)` · `.at_px(tilemap, px, py, bit)` (collision one-liner). Keyed by tile index (shared by all cells using it).
 
+### `picogame_script` — story scripts as generators (Director)
+- `Director(pg, scene, buttons, font, box=None, nlines=3, fg=0xFFFF, bg=0x0000)` — runs ONE story script at a time over a live scene; `box` = the dialog panel rect (default: a bottom strip sized from `screen()`).
+- `.on(name, genfunc)` (register) · `.start(script)` (a name or a generator) · `.active` · `.tick() -> bool` — call once per frame **after** `buttons.poll()`; returns True while a script runs, INCLUDING its final step (so the A press that dismissed the last dialog cannot fall through into the same frame's game input).
+- Waiting primitives (use with `yield from` inside a script): `.text(lines)` (dialog page, A advances) · `.ask(lines) -> sets .answer` (A/B choice) · `.wait(frames)` · `.fade_out(speed)` / `.fade_in(speed)`.
+- Story flags: `.ev(name)` / `.ev_set(name)`, kept in `.events` (a set — persist it via your save schema). `.retarget(scene)` re-points the Director after a map change.
+
 ### `picogame_seq` — generator-driven sequences (coroutine pattern)
 - `wait(frames)` · `over(frames, fn)` (fn(t), t 0..1) · `move_over(sprite, x, y, frames)` — all are generators; compose with `yield from`.
 - `Seq(gen=None)` · `.start(gen)` · `.tick() -> done` — advance one step per frame (cutscenes, "do X over N frames").
@@ -255,7 +261,7 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 ### `picogame_scene` — declarative level loader
 - `load(pg, scene, display=None, strip_h=None, font=None, bank=None) -> View` — build a scene from a baked SCENE dict.
 - `load_bank(pg, bank)` — build a shared asset bank once (reuse across levels).
-- `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`.
+- `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`. · `.set_tile_prop(tile, prop, on=True)` — flip a flag for a TILE TYPE at runtime: every cell holding that tile changes meaning at once (a lever makes all gate tiles walkable, ice melts). Complements the native `Tilemap.set_tile`, which swaps ONE cell; tables are copied per `load()`, so changes never leak into other levels sharing a bank.
 - `load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True) -> View` — bake a level's scene JSON on the device and load it, skipping `scene_build.py`. For ITERATING on a level; ship the pre-baked module. Colour-tileset levels only.
 
 ### `picogame_scenebake` — on-device scene baker

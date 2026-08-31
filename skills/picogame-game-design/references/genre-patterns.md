@@ -614,43 +614,36 @@ z-sort), so use the fixed-slots pattern — pre-add N sprites once, each frame s
 list and re-assign it into the slots (worked example: the billboard section of
 `docs/pages/helpers/pseudo-3d.md`).
 
-**The C road pair (2026-08, device-proven on picobike: 15 → 39 fps):** the per-scanline Python road
-loop is the genre's classic wall — replace it with the engine primitives. **Know the trade first:
-the C pair's curvature is a fixed two-sine FIELD of world distance, not an authored track** — you
-choose four numbers, not corners. It gives you an endless, non-repeating road (which suits a 1–3
-minute handheld run), but you cannot author a specific enter/hold/leave corner, a fork, or a
-memorable circuit. Want those? Accumulate the edges in Python from your own per-segment curvature
-table — and budget for it: that per-row loop is ~8–10 ms/frame on an RP2040 (measured on picobike
-before the C pair), i.e. a quarter of a 30 fps budget. Decide this BEFORE designing the track;
-the TRACK DESIGN paragraph above assumes the authored-segment model. **Start with the
-`picogame_road.Road` wrapper** (human units: curve periods + swing in px, hills via `set_grade`,
-`curve_at()` for centrifugal pull, `row_of()`/`half_of()` for sprites — it owns every fixed-point
-table and the phase-wrap safety below). Drop to the raw pair only for a custom road look. Raw: once per frame
-`pg.road_edges(rl, rr, hw_q16, n, cx0_q16, int(dist), cfg)` runs the whole bottom-up curve
-accumulator in C (cfg = int32×7: two Q20 curve frequencies, two Q16 amp×gain terms, world step,
-curve step, row offset); per strip `view.road(vy - horizon, tab, rl, rr, d05_q8, d07_q8, colors)`
-draws sky/road/rumbles/dashes as spans (tab = static int16×5 per row: edge width, dash half-width,
-two Q8 stripe phases, flags; colors = uint16×6). Keep in Python only: grass fill (1 rect/strip), the
-finish-line chequer (a few rows near the lap line), **hills** (below), and gameplay. The simulator
-implements the pair bit-identically to the firmware (golden-tested), so build and screenshot the
-road in the sim like any other game. Guard with `hasattr(pg, "road_edges")` only for OLD firmware.
-Contract + worked argument derivation: `docs/pages/helpers/pseudo-3d.md` and `docs/reference.md`
-(`road_edges`, `Canvas.road`).
+**The road renderer — `picogame_road.Road` (device-proven on picobike: 15 → 39 fps over the
+Python loop):** the per-scanline Python road is the genre's classic wall; the wrapper drives the
+native `pg.road_edges` + `Canvas.road` pair from human units and owns every fixed-point table:
 
-**HILLS are not in `road_edges`** — it emits only left/right edges, so `cfg` is curvature-only.
-Hills come from **moving the horizon per frame**, i.e. from the `ri0` you pass to `view.road()`.
-The recipe (device-proven on picobike):
-- pick `HILL_AMP` = max horizon shift in px (24 at 320×240) and derive a per-frame `grade` in
-  −1..+1 from the world distance (two *incommensurate* sines read as irregular hills; one plain
-  sine reads as a washboard). `pitch = -int(grade * HILL_AMP)`, then `base = HORIZON + pitch`
-  and each strip draws `view.road(vy - base, …)`. Positive grade (downhill) lifts the horizon,
-  so MORE road rows are visible.
-- **Two setup consequences**, both easy to miss: the `StripDraw` region must start `HILL_AMP` px
-  ABOVE the nominal horizon (headroom for the road to rise), and the per-row tables (`hw`, `tab`)
-  must be sized `rows + HILL_AMP` so a downhill frame never indexes past their end.
-- Feed `grade` back into the sim (`speed += grade * PULL`) — a hill you can only see is scenery;
-  a hill you can feel in the throttle is a mechanic. Ramp `grade` to zero near the start/finish
-  so the results screen sits on level ground.
+- `Road(pg, W, H, horizon, colors, curves=((period_wu, swing_px), ...), hill_amp=...)` — curve
+  periods in world units, swing in pixels of lateral bend (periods are pow2-rounded internally:
+  the int32 phase-wrap safety).
+- per frame: `road.tick(dist, lateral_px)`; per strip: `road.draw(view, vy)`; **hills**:
+  `road.set_grade(-1..1)` moves the horizon (downhill lifts it — more road visible). Give the
+  StripDraw `hill_amp` px of headroom ABOVE the nominal horizon; the wrapper sizes its tables.
+  Derive grade from two *incommensurate* sines of distance (one plain sine reads as a washboard),
+  and feed it into speed (`speed += grade * PULL`) — a hill you can only see is scenery.
+- gameplay reads the SAME curve model back: `curve_at(dist)` for centrifugal pull / AI, and
+  `row_of(z)` / `half_of(row)` / `edges_of(row)` to place and scale sprites ON the road
+  (the rows are linear — scale by `half_of`, not `F/(F+z)`).
+
+**Know the trade first: the curvature is a fixed two-sine FIELD of world distance, not an
+authored track** — you choose periods and swings, not corners. That gives an endless,
+non-repeating road (which suits a 1–3 minute handheld run), but you cannot author a specific
+enter/hold/leave corner, a fork, or a memorable circuit. Want those? Accumulate the edges in
+Python from your own per-segment curvature table — and budget for it: ~8–10 ms/frame on an
+RP2040 (measured on picobike before the C pair), a quarter of a 30 fps budget. Decide BEFORE
+designing the track; the TRACK DESIGN paragraph above assumes the authored-segment model.
+
+The raw pair (`pg.road_edges` + `Canvas.road`) is for a custom road look only — its full calling
+contract (row order, tables, typecodes, the phase-wrap rule) lives in
+`docs/pages/helpers/pseudo-3d.md` and the API reference. The simulator implements the pair
+bit-identically to the firmware (golden-tested), so build and screenshot the road in the sim like
+any other game; `hasattr(pg, "road_edges")` guards only OLD firmware. Keep in Python: grass fill
+(one rect/strip), the finish-line chequer, and gameplay.
 
 ### 8B. Top-Down (Super Sprint / Micro Machines / Mario Kart)
 
