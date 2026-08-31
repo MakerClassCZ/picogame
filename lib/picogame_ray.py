@@ -244,7 +244,20 @@ class Raycaster:
 
     def draw(self, view, vx, vy, vw, vh):
         """StripDraw callback: sky/floor background for this band, then the pre-merged
-        wall runs that cross it (the RLE merge runs once per frame in cast(), not here)."""
+        wall runs that cross it (the RLE merge runs once per frame in cast(), not here).
+
+        ROW 0 IS THE TOP OF THE RAYCAST VIEW, not of the screen: the horizon sits at
+        `sh >> 1` of the height you passed `cast()`, compared against `vy`. If your layer
+        does NOT start at screen y=0 - the reserved-HUD-band pattern, `setup(top=BAND)` +
+        `StripDraw(cb, 0, BAND, W, H - BAND)` - pass `vy - BAND`:
+
+            def cb(view, vx, vy, vw, vh):
+                rc.draw(view, vx, vy - BAND, vw, vh)
+
+        Without it the whole view renders BAND pixels too high: the top of the picture hides
+        under the HUD and a strip of bare floor colour is left at the bottom. The alternative
+        is to keep the view full-screen (`cast(..., H)`, layer at y=0) and float the HUD over
+        it as fixed SceneLabels - costs no view height, which suits a first-person game."""
         if self.top is None:
             return
         fr = view.fill_rect

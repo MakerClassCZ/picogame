@@ -51,16 +51,50 @@ def ring(d, color, thickness=2):
     return _bm(data, d, d, color)
 
 
+def _mask_into(mask, buf, w, stride=0, x0=0):
+    # Rasterise one string mask into `buf` at column x0 of a `stride`-wide sheet
+    # (stride 0 = the buffer is exactly one w-wide frame). Shared by from_mask/masks.
+    if not stride:
+        stride = w
+    for y, row in enumerate(mask):
+        base = y * stride + x0
+        for x, ch in enumerate(row):
+            if ch in "#X1":
+                buf[base + x] = 1
+
+
 def from_mask(mask, color):
     """mask: list of strings, '#'/'X'/'1' = set. Returns a bitmap sized to it."""
     h = len(mask)
     w = max(len(r) for r in mask)
     data = bytearray(w * h)
-    for y, row in enumerate(mask):
-        for x, ch in enumerate(row):
-            if ch in "#X1":
-                data[y * w + x] = 1
+    _mask_into(mask, data, w)
     return _bm(data, w, h, color)
+
+
+def masks(mask_list, color):
+    """Multi-frame `from_mask`: a list of string masks -> ONE horizontal atlas Bitmap
+    (frame i = mask_list[i]), sized to the largest mask; shorter rows just leave
+    transparent pixels. This is the missing step between `from_mask` (one frame, and it
+    hands back a finished Bitmap) and `atlas` (which wants raw 0/1 buffers nothing else
+    produces) - animated or multi-state mask art needed it and every game re-derived it.
+
+        bm = shp.masks(["..#..", ".###.", "#####"], SPARK)   # 3-frame animation
+        spr = pg.Sprite(bm, x, y); spr.frame = 2
+    """
+    n = len(mask_list)
+    if n and isinstance(mask_list[0], str):
+        # a flat list of strings is ONE mask, not a frame list - it would silently produce
+        # 1px-wide frames instead of raising, so say what the caller probably meant
+        raise TypeError("masks() takes a LIST of masks (each a list of strings); "
+                        "for a single mask use from_mask()")
+    h = max(len(m) for m in mask_list)
+    w = max(max(len(r) for r in m) for m in mask_list)
+    stride = w * n
+    data = bytearray(stride * h)
+    for f, mask in enumerate(mask_list):
+        _mask_into(mask, data, w, stride, f * w)
+    return _bm(data, w, h, color, frames=n, stride=stride)
 
 
 def atlas(frames_data, w, h, color):

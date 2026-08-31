@@ -3,7 +3,7 @@
 # scatter XP embers that your lantern's glow MAGNETS in; XP -> level-up (flare + the dark recoils) -> pick
 # 1 of 3; survive. Juice: warm death-bursts + dissolve, XP pickup pops, low-HP gutter, rationed invert.
 # Controls: D-pad move | X dash (i-frames) | A confirm (level-up / retry).
-# Run:  python3 sim/run.py games/corona/code.py --backend pygame
+# Run:  cd repos/picogame-final && python3 sim/run.py games/picogame_corona.py --backend pygame
 
 import gc
 import math

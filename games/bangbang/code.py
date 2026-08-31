@@ -187,18 +187,9 @@ _SOCK = [
 ]
 
 
-def _mbuf(rows):
-    b = bytearray(8 * 10)
-    for y, row in enumerate(rows):
-        for x, ch in enumerate(row):
-            if ch == "#":
-                b[y * 8 + x] = 1
-    return b
-
-
 WINDCOL = pg.rgb565(210, 60, 0)
-sock_bm = shp.atlas([_mbuf(f) for f in _SOCK], 8, 10, WINDCOL)
-del HULL, _SOCK, _bar_pts, _mbuf   # bake-time scaffolding only; final bitmaps own their own buffers
+sock_bm = shp.masks(_SOCK, WINDCOL)          # string masks -> one 5-frame atlas, in one call
+del HULL, _SOCK, _bar_pts   # bake-time scaffolding only; final bitmaps own their own buffers
 
 # --- audio: build the synthio SFX kit NOW, AFTER the big graphics buffers above (terrain
 # Tilemap + barrel atlas). Doing it here keeps the heap unfragmented for those big contiguous
