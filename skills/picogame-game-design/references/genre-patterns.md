@@ -601,9 +601,10 @@ accumulator in C (cfg = int32×7: two Q20 curve frequencies, two Q16 amp×gain t
 curve step, row offset); per strip `view.road(vy - horizon, tab, rl, rr, d05_q8, d07_q8, colors)`
 draws sky/road/rumbles/dashes as spans (tab = static int16×5 per row: edge width, dash half-width,
 two Q8 stripe phases, flags; colors = uint16×6). Keep in Python only: grass fill (1 rect/strip), the
-finish-line chequer (a few rows near the lap line), hills/pitch, and gameplay. Guard with
-`hasattr(pg, "road_edges")` so the same file still runs on the sim/old firmware via the Python
-fallback — the integration pattern is `picobike_bench_c.py` in the workspace.
+finish-line chequer (a few rows near the lap line), hills/pitch, and gameplay. The simulator
+implements the pair bit-identically to the firmware (golden-tested), so build and screenshot the
+road in the sim like any other game. Guard with `hasattr(pg, "road_edges")` only for OLD firmware —
+the integration pattern is `picobike_bench_c.py` in the workspace.
 
 ### 8B. Top-Down (Super Sprint / Micro Machines / Mario Kart)
 

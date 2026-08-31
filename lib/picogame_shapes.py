@@ -98,11 +98,16 @@ def color_frames(w, h, colors):
                      frames=n, stride=stride, transparent=0)
 
 
-def tileset_colors(w, h, colors):
+def tileset_colors(w, h, colors, gap=0):
     """A tileset bitmap: frame 0 = EMPTY (transparent), frame i = a solid fill of
     colors[i-1]. So a Tilemap reads tile value 0 as empty and 1..N as coloured
     tiles - the 'empty + N solid bricks/dots' sheet arkanoid/pacman/digdug each
-    built by hand. (Differs from color_frames, whose frame 0 is already a colour.)"""
+    built by hand. (Differs from color_frames, whose frame 0 is already a colour.)
+
+    gap=N carves an N-px TRANSPARENT right+bottom edge into each solid tile, so
+    touching same-colour tiles still read as individual tiles (a brick wall shows
+    mortar lines instead of solid stripes) - identity by silhouette, not colour
+    alone. 0 (default) = the old edge-to-edge fill."""
     import array as _array
     n = len(colors)
     frames = n + 1
@@ -111,7 +116,8 @@ def tileset_colors(w, h, colors):
     for f in range(1, frames):                  # frame 0 left all-zero (transparent)
         for y in range(h):
             base = y * stride + f * w
-            for x in range(w):
+            solid_w = w - gap if y < h - gap else 0     # bottom gap rows stay transparent
+            for x in range(solid_w):
                 data[base + x] = f
     pal = _array.array("H", [pg.rgb565(0, 0, 0)] + list(colors))
     return pg.Bitmap(data, w, h, format=pg.PAL8, palette=pal,

@@ -4,7 +4,7 @@
 # transparent / flip, anchors, the view offset (camera) + fixed (HUD) layers,
 # Tilemap / Particles / Canvas, and collide. Lets games run unchanged on a host.
 
-import math
+import math as _math
 import _host
 
 RGB565 = 0
@@ -14,8 +14,8 @@ STRIP_H = 8                  # render-strip height default, mirrors the DMA-boar
 RGB444_SUPPORTED = False     # capability flag (mirrors firmware); the desktop sim renders RGB565
 FAST_DISPLAY_SUPPORTED = True   # the sim's Display wrapper mirrors the fast backend's API
 FRAMEBUFFER_SUPPORTED = False  # mirrors firmware: constant always present
-W = _host.W
-H = _host.H
+_W = _host.W
+_H = _host.H
 
 _KIND_SPRITE = 0
 _KIND_TILEMAP = 1
@@ -34,7 +34,7 @@ def rgb565(r, g, b):
 class Bitmap:
     def __init__(self, data, width, height, *, format=RGB565, palette=None,
                  frames=1, stride=0, transparent=None):
-        self.data = data
+        self._data = data
         self.width = width
         self.height = height
         self.format = format
@@ -42,7 +42,7 @@ class Bitmap:
         self.frames = frames
         self.stride = stride if stride else width * frames
         self.transparent = transparent
-        self.has_transparent = transparent is not None
+        self._has_transparent = transparent is not None
         # is RGB565 data stored as 16-bit units (array/list) or raw 2-byte LE?
         self._u16 = not isinstance(data, (bytes, bytearray, memoryview))
 
@@ -50,8 +50,8 @@ class Bitmap:
 def _src_pixel(bm, sx, sy):
     """Return the wire-RGB565 value at (sx, sy) in the atlas, or None if transparent."""
     if bm.format == PAL8:
-        idx = bm.data[sy * bm.stride + sx]
-        if bm.has_transparent and idx == bm.transparent:
+        idx = bm._data[sy * bm.stride + sx]
+        if bm._has_transparent and idx == bm.transparent:
             return None
         if idx >= len(bm.palette):
             # The C blitter does NOT clamp (documented UB contract: indices MUST be
@@ -62,11 +62,11 @@ def _src_pixel(bm, sx, sy):
         return bm.palette[idx]
     # RGB565
     if bm._u16:
-        v = bm.data[sy * bm.stride + sx]
+        v = bm._data[sy * bm.stride + sx]
     else:
         off = (sy * bm.stride + sx) * 2
-        v = bm.data[off] | (bm.data[off + 1] << 8)
-    if bm.has_transparent and v == bm.transparent:
+        v = bm._data[off] | (bm._data[off + 1] << 8)
+    if bm._has_transparent and v == bm.transparent:
         return None
     return v
 
@@ -132,7 +132,7 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
     if transpose and scale_q == 256:       # cheap 90deg (mirrors the C transpose path)
         dw, dh = sh, sw                     # footprint swaps
         xs = max(dx0, cx0, 0); ys = max(dy0, cy0, 0)
-        xe = min(dx0 + dw, cx1, W); ye = min(dy0 + dh, cy1, H)
+        xe = min(dx0 + dw, cx1, _W); ye = min(dy0 + dh, cy1, _H)
         for y in range(ys, ye):
             ly = y - dy0                    # -> source X
             su0 = sw - 1 - ly if flip_x else ly
@@ -141,7 +141,7 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
                 sv = sh - 1 - lx if flip_y else lx
                 v = _src_pixel_row(bm, sv * bm.stride + fcol, su0)
                 if v is not None:
-                    _fxput(fb, y * W + x, v, x, y, shadow, flash, dither, tint)
+                    _fxput(fb, y * _W + x, v, x, y, shadow, flash, dither, tint)
         return
     # destination extent grows with scale; each dest pixel maps back to a source
     # pixel by nearest-neighbour (same technique as PicoLibSDK DrawImgMat, but
@@ -156,8 +156,8 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
     cx0, cy0, cx1, cy1 = clip
     x_start = max(dx0, cx0, 0)
     y_start = max(dy0, cy0, 0)
-    x_end = min(dx0 + dw, cx1, W)
-    y_end = min(dy0 + dh, cy1, H)
+    x_end = min(dx0 + dw, cx1, _W)
+    y_end = min(dy0 + dh, cy1, _H)
     fb = _host.fb
 
     # FAST PATH: 1:1, no flips, no per-pixel effect, PAL8 - i.e. every tile of a tilemap and most
@@ -167,13 +167,13 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
     # Deliberately NOT a cache: nothing here can go stale, so a mutated bitmap needs no invalidation.
     if (_FAST_BLIT and scale_q == 256 and not flip_x and not flip_y and not shadow and not flash
             and not dither and tint is None and bm.format == PAL8):
-        data = bm.data
+        data = bm._data
         pal = bm.palette
         npal = len(pal)
-        transp = bm.transparent if bm.has_transparent else -1
+        transp = bm.transparent if bm._has_transparent else -1
         for y in range(y_start, y_end):
             srow = (y - dy0) * bm.stride + fcol
-            drow = y * W
+            drow = y * _W
             sx = x_start - dx0
             for x in range(x_start, x_end):
                 idx = data[srow + sx]
@@ -194,7 +194,7 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
         if flip_y:
             sy = sh - 1 - sy
         srow = sy * bm.stride + fcol
-        drow = y * W
+        drow = y * _W
         for x in range(x_start, x_end):
             sx = ((x - dx0) * step) >> 16
             if sx >= sw:
@@ -208,8 +208,8 @@ def _blit(bm, dx0, dy0, frame, flip_x, flip_y, clip, scale=1.0, shadow=False, fl
 
 def _src_pixel_row(bm, srow, sx):
     if bm.format == PAL8:
-        idx = bm.data[srow + sx]
-        if bm.has_transparent and idx == bm.transparent:
+        idx = bm._data[srow + sx]
+        if bm._has_transparent and idx == bm.transparent:
             return None
         if idx >= len(bm.palette):
             # C does NOT clamp (UB contract, see _src_pixel) - raise to surface asset bugs.
@@ -217,11 +217,11 @@ def _src_pixel_row(bm, srow, sx):
                              % (idx, len(bm.palette)))
         return bm.palette[idx]
     if bm._u16:
-        v = bm.data[srow + sx]
+        v = bm._data[srow + sx]
     else:
         off = (srow + sx) * 2
-        v = bm.data[off] | (bm.data[off + 1] << 8)
-    if bm.has_transparent and v == bm.transparent:
+        v = bm._data[off] | (bm._data[off + 1] << 8)
+    if bm._has_transparent and v == bm.transparent:
         return None
     return v
 
@@ -235,8 +235,8 @@ class Sprite:
         self.visible = visible
         self.flip_x = flip_x
         self.flip_y = flip_y
-        self.anchor_x = 0.0
-        self.anchor_y = 0.0
+        self._anchor_x = 0.0
+        self._anchor_y = 0.0
         self.scale = 1.0          # uniform draw scale (nearest-neighbour)
         self.angle = 0.0          # rotation in degrees (about the anchor); 0 = fast path
         # blit effect: ONE shared slot (device parity). shadow/flash/dither/tint are
@@ -248,7 +248,7 @@ class Sprite:
 
     @property
     def x(self):
-        return int(math.floor(self._x))
+        return int(_math.floor(self._x))
 
     @x.setter
     def x(self, v):
@@ -256,7 +256,7 @@ class Sprite:
 
     @property
     def y(self):
-        return int(math.floor(self._y))
+        return int(_math.floor(self._y))
 
     @y.setter
     def y(self, v):
@@ -330,11 +330,11 @@ class Sprite:
 
     @property
     def anchor(self):
-        return (self.anchor_x, self.anchor_y)
+        return (self._anchor_x, self._anchor_y)
 
     @anchor.setter
     def anchor(self, t):
-        self.anchor_x, self.anchor_y = t[0], t[1]
+        self._anchor_x, self._anchor_y = t[0], t[1]
 
     def move(self, x, y):
         self._x = float(x)
@@ -353,7 +353,7 @@ class Sprite:
         h = (h * scale_q) >> 8               # (FLOOR of 8.8 scale, like C picogame_sprite_topleft)
         if self.transpose and scale_q == 256:   # footprint swaps only on the fast path (like C)
             w, h = h, w
-        return (self.x - int(self.anchor_x * w), self.y - int(self.anchor_y * h))
+        return (self.x - int(self._anchor_x * w), self.y - int(self._anchor_y * h))
 
     def _bounds(self):
         # drawn box (x1, y1, x2, y2); x2/y2 = far corner. Mirrors C picogame_sprite_aabb:
@@ -367,27 +367,27 @@ class Sprite:
             sh = (h * scale_q) >> 8
             if self.transpose and scale_q == 256:
                 sw, sh = sh, sw
-            tx = self.x - int(self.anchor_x * sw)
-            ty = self.y - int(self.anchor_y * sh)
+            tx = self.x - int(self._anchor_x * sw)
+            ty = self.y - int(self._anchor_y * sh)
             return (tx, ty, tx + sw, ty + sh)
         # rotated: transform the 4 UNSCALED-rect corners about the anchor pivot
         # (pivot in SOURCE pixels, scale applied to the corner deltas), floor each,
         # take the min/max bbox, then add C's margins. Mirrors corners_bbox +
         # picogame_sprite_aabb. NOTE: C uses a Q15 sine LUT at WHOLE degrees and
-        # Q16 fixed-point; math.sin/cos on a float angle can differ by +-1 px at
+        # Q16 fixed-point; _math.sin/cos on a float angle can differ by +-1 px at
         # quantization boundaries (accepted residual).
-        pivx = int(self.anchor_x * w)
-        pivy = int(self.anchor_y * h)
-        a = math.radians(self.angle)
-        cs, sn = math.cos(a), math.sin(a)
+        pivx = int(self._anchor_x * w)
+        pivy = int(self._anchor_y * h)
+        a = _math.radians(self.angle)
+        cs, sn = _math.cos(a), _math.sin(a)
         sc = scale_q / 256.0
         minx = miny = 1 << 30
         maxx = maxy = -(1 << 30)
         for (cx, cy) in ((0, 0), (w, 0), (0, h), (w, h)):
             du = (cx - pivx) * sc
             dv = (cy - pivy) * sc
-            X = int(math.floor(du * cs - dv * sn))
-            Y = int(math.floor(du * sn + dv * cs))
+            X = int(_math.floor(du * cs - dv * sn))
+            Y = int(_math.floor(du * sn + dv * cs))
             if X < minx:
                 minx = X
             if X > maxx:
@@ -435,8 +435,8 @@ def _blit_affine(bm, frame, flip_x, flip_y, clip, px, py, pivx, pivy, scale, ang
     sw, sh = bm.width, bm.height
     frame = frame % bm.frames if bm.frames > 1 else 0
     fcol = frame * sw
-    a = math.radians(ang_deg)
-    cs, sn = math.cos(a), math.sin(a)
+    a = _math.radians(ang_deg)
+    cs, sn = _math.cos(a), _math.sin(a)
     # forward-transform the 4 corners -> screen bounding box
     xs, ys = [], []
     for (u, v) in ((0, 0), (sw, 0), (0, sh), (sw, sh)):
@@ -444,10 +444,10 @@ def _blit_affine(bm, frame, flip_x, flip_y, clip, px, py, pivx, pivy, scale, ang
         xs.append(px + du * cs - dv * sn)
         ys.append(py + du * sn + dv * cs)
     cx0, cy0, cx1, cy1 = clip
-    x0 = max(int(math.floor(min(xs))), cx0, 0)
-    x1 = min(int(math.ceil(max(xs))), cx1, W)
-    y0 = max(int(math.floor(min(ys))), cy0, 0)
-    y1 = min(int(math.ceil(max(ys))), cy1, H)
+    x0 = max(int(_math.floor(min(xs))), cx0, 0)
+    x1 = min(int(_math.ceil(max(xs))), cx1, _W)
+    y0 = max(int(_math.floor(min(ys))), cy0, 0)
+    y1 = min(int(_math.ceil(max(ys))), cy1, _H)
     fb = _host.fb
     inv = 1.0 / scale
     for Y in range(y0, y1):
@@ -461,7 +461,7 @@ def _blit_affine(bm, frame, flip_x, flip_y, clip, px, py, pivx, pivy, scale, ang
                 sy = sh - 1 - iv if flip_y else iv
                 val = _src_pixel_row(bm, sy * bm.stride + fcol, sx)
                 if val is not None:
-                    _fxput(fb, Y * W + X, val, X, Y, shadow, flash, dither, tint)
+                    _fxput(fb, Y * _W + X, val, X, Y, shadow, flash, dither, tint)
 
 
 def _draw_sprite(s, vx, vy, clip):
@@ -475,67 +475,67 @@ def _draw_sprite(s, vx, vy, clip):
         w = s.bitmap.width if s.bitmap else 0
         h = s.bitmap.height if s.bitmap else 0
         _blit_affine(s.bitmap, s.frame, s.flip_x, s.flip_y, clip,
-                     s.x + vx, s.y + vy, s.anchor_x * w, s.anchor_y * h, s.scale, s.angle,
+                     s.x + vx, s.y + vy, s._anchor_x * w, s._anchor_y * h, s.scale, s.angle,
                      s.shadow, s.flash, s.dither, s.tint)
 
 
 class Tilemap:
     def __init__(self, tileset, cols, rows):
-        self.tileset = tileset
-        self.map_w = cols
-        self.map_h = rows
-        self.grid = bytearray(cols * rows)
-        self.orient = None        # lazy: bit0 flipX, bit1 flipY, bit2 transpose per cell
-        self.ox = 0
-        self.oy = 0
+        self._tileset = tileset
+        self._map_w = cols
+        self._map_h = rows
+        self._grid = bytearray(cols * rows)
+        self._orient = None        # lazy: bit0 flipX, bit1 flipY, bit2 transpose per cell
+        self._ox = 0
+        self._oy = 0
 
     # read-only getters mirroring the firmware (position via move(); size from ctor)
     @property
     def x(self):
-        return self.ox
+        return self._ox
 
     @property
     def y(self):
-        return self.oy
+        return self._oy
 
     @property
     def cols(self):
-        return self.map_w
+        return self._map_w
 
     @property
     def rows(self):
-        return self.map_h
+        return self._map_h
 
     def get_tile(self, tx, ty):
-        if tx < 0 or tx >= self.map_w or ty < 0 or ty >= self.map_h:
+        if tx < 0 or tx >= self._map_w or ty < 0 or ty >= self._map_h:
             return 0
-        return self.grid[ty * self.map_w + tx]
+        return self._grid[ty * self._map_w + tx]
 
     def set_tile(self, tx, ty, value, *, flip_x=False, flip_y=False, transpose=False):
-        if tx < 0 or tx >= self.map_w or ty < 0 or ty >= self.map_h:
+        if tx < 0 or tx >= self._map_w or ty < 0 or ty >= self._map_h:
             return None
-        off = ty * self.map_w + tx
-        self.grid[off] = value
+        off = ty * self._map_w + tx
+        self._grid[off] = value
         o = (1 if flip_x else 0) | (2 if flip_y else 0) | (4 if transpose else 0)
-        if o and self.orient is None:
-            self.orient = bytearray(self.map_w * self.map_h)
-        if self.orient is not None:
-            self.orient[off] = o
+        if o and self._orient is None:
+            self._orient = bytearray(self._map_w * self._map_h)
+        if self._orient is not None:
+            self._orient[off] = o
         return None
 
     def fill(self, v):
-        for i in range(len(self.grid)):
-            self.grid[i] = v
-            if self.orient is not None:
-                self.orient[i] = 0
+        for i in range(len(self._grid)):
+            self._grid[i] = v
+            if self._orient is not None:
+                self._orient[i] = 0
 
     def move(self, x, y):
-        self.ox = x
-        self.oy = y
+        self._ox = x
+        self._oy = y
 
     def _draw(self, vx, vy, clip):
-        tw, th = self.tileset.width, self.tileset.height
-        nframes = self.tileset.frames
+        tw, th = self._tileset.width, self._tileset.height
+        nframes = self._tileset.frames
         # Only walk the tiles the clip rect can actually show. _blit rejects an off-screen tile
         # anyway, but a map is usually far wider than the screen (a 80x15 level = 1200 tiles against
         # ~315 visible), so the call overhead alone was most of a sim frame. Pure culling: the
@@ -546,35 +546,35 @@ class Tilemap:
         # tile; I could NOT reproduce it end to end, so treat this as cheap insurance against a
         # geometry the bounds do not model, not as a fix for a demonstrated bug. selftest_blit's
         # tilemap fuzz has never generated the case either - if you go looking, start there.
-        pad = 1 if (self.orient is not None and tw != th) else 0
-        tx_lo = max(0, (cx0 - self.ox - vx) // tw - pad)
-        tx_hi = min(self.map_w, (cx1 - self.ox - vx) // tw + 1 + pad)
-        ty_lo = max(0, (cy0 - self.oy - vy) // th - pad)
-        ty_hi = min(self.map_h, (cy1 - self.oy - vy) // th + 1 + pad)
+        pad = 1 if (self._orient is not None and tw != th) else 0
+        tx_lo = max(0, (cx0 - self._ox - vx) // tw - pad)
+        tx_hi = min(self._map_w, (cx1 - self._ox - vx) // tw + 1 + pad)
+        ty_lo = max(0, (cy0 - self._oy - vy) // th - pad)
+        ty_hi = min(self._map_h, (cy1 - self._oy - vy) // th + 1 + pad)
         for ty in range(ty_lo, ty_hi):
             for tx in range(tx_lo, tx_hi):
-                off = ty * self.map_w + tx
-                v = self.grid[off]
+                off = ty * self._map_w + tx
+                v = self._grid[off]
                 if v >= nframes:
                     continue        # C skips out-of-range tile indices (no wrap)
-                o = self.orient[off] if self.orient is not None else 0
-                _blit(self.tileset, self.ox + tx * tw + vx, self.oy + ty * th + vy,
+                o = self._orient[off] if self._orient is not None else 0
+                _blit(self._tileset, self._ox + tx * tw + vx, self._oy + ty * th + vy,
                       v, bool(o & 1), bool(o & 2), clip, 1.0, False, None, 0, None, bool(o & 4))
 
 
 class Particles:
     def __init__(self, capacity, size=1, gravity=0.0, fade=False):
-        self.cap = capacity
-        self.size = size
-        self.gravity = gravity
-        self.fade = fade
-        self.px = []
-        self.py = []
-        self.vx = []
-        self.vy = []
-        self.life = []
-        self.life0 = []
-        self.color = []
+        self._cap = capacity
+        self._size = size
+        self._gravity = gravity
+        self._fade = fade
+        self._px = []
+        self._py = []
+        self._vx = []
+        self._vy = []
+        self._life = []
+        self._life0 = []
+        self._color = []
 
     def emit(self, x, y, count, speed=1, life=30, color=0xFFFF):
         if count < 0:
@@ -585,47 +585,47 @@ class Particles:
             raise ValueError("life must be > 0")
         import random
         for _ in range(count):
-            if len(self.px) >= self.cap:
+            if len(self._px) >= self._cap:
                 break
-            self.px.append(float(x))
-            self.py.append(float(y))
-            self.vx.append(random.uniform(-speed, speed))
-            self.vy.append(random.uniform(-speed, speed))
-            self.life.append(life)
-            self.life0.append(max(1, life))
-            self.color.append(color)
+            self._px.append(float(x))
+            self._py.append(float(y))
+            self._vx.append(random.uniform(-speed, speed))
+            self._vy.append(random.uniform(-speed, speed))
+            self._life.append(life)
+            self._life0.append(max(1, life))
+            self._color.append(color)
 
     def tick(self):
         i = 0
-        while i < len(self.px):
-            self.px[i] += self.vx[i]
-            self.py[i] += self.vy[i]
-            self.vy[i] += self.gravity
-            if self.life[i] <= 0:
-                for a in (self.px, self.py, self.vx, self.vy, self.life, self.life0, self.color):
+        while i < len(self._px):
+            self._px[i] += self._vx[i]
+            self._py[i] += self._vy[i]
+            self._vy[i] += self._gravity
+            if self._life[i] <= 0:
+                for a in (self._px, self._py, self._vx, self._vy, self._life, self._life0, self._color):
                     a[i] = a[-1]
                     a.pop()
                 continue
-            self.life[i] -= 1
+            self._life[i] -= 1
             i += 1
 
     def clear(self):
-        for a in (self.px, self.py, self.vx, self.vy, self.life, self.life0, self.color):
+        for a in (self._px, self._py, self._vx, self._vy, self._life, self._life0, self._color):
             del a[:]
 
     def _draw(self, vx, vy, clip):
         fb = _host.fb
-        sz = self.size
+        sz = self._size
         cx0, cy0, cx1, cy1 = clip
-        for i in range(len(self.px)):
-            x0 = int(self.px[i]) + vx
-            y0 = int(self.py[i]) + vy
-            c = self.color[i]
-            if self.fade:
-                c = _scale_wire(c, self.life[i], self.life0[i])
-            for yy in range(max(y0, cy0, 0), min(y0 + sz, cy1, H)):
-                drow = yy * W
-                for xx in range(max(x0, cx0, 0), min(x0 + sz, cx1, W)):
+        for i in range(len(self._px)):
+            x0 = int(self._px[i]) + vx
+            y0 = int(self._py[i]) + vy
+            c = self._color[i]
+            if self._fade:
+                c = _scale_wire(c, self._life[i], self._life0[i])
+            for yy in range(max(y0, cy0, 0), min(y0 + sz, cy1, _H)):
+                drow = yy * _W
+                for xx in range(max(x0, cx0, 0), min(x0 + sz, cx1, _W)):
                     fb[drow + xx] = c
 
 
@@ -663,43 +663,43 @@ class Canvas:
         # On device `buffer` (an arena slice / shared band buffer) is drawn into directly so the
         # Canvas can alias another object's memory (e.g. a Bitmap fed to pg.render). The sim mirrors
         # that aliasing via _U16Buf when a real bytes-like buffer is passed; otherwise it allocates.
-        self.w = width
-        self.h = height
-        self.transparent = transparent
-        self.has_transparent = transparent is not None
+        self._w = width
+        self._h = height
+        self._transparent = transparent
+        self._has_transparent = transparent is not None
         if isinstance(buffer, (bytearray, memoryview)):
-            self.data = _U16Buf(buffer)
+            self._data = _U16Buf(buffer)
         else:
-            self.data = [0] * (width * height)
+            self._data = [0] * (width * height)
         self.x = 0
         self.y = 0
 
     # read-only size getters mirroring the firmware (internals use w/h)
     @property
     def width(self):
-        return self.w
+        return self._w
 
     @property
     def height(self):
-        return self.h
+        return self._h
 
     def move(self, x, y):
         self.x = x
         self.y = y
 
     def clear(self, color):
-        for i in range(len(self.data)):
-            self.data[i] = color
+        for i in range(len(self._data)):
+            self._data[i] = color
 
     def pixel(self, x, y, color):
-        if 0 <= x < self.w and 0 <= y < self.h:
-            self.data[y * self.w + x] = color
+        if 0 <= x < self._w and 0 <= y < self._h:
+            self._data[y * self._w + x] = color
 
     def fill_rect(self, x, y, w, h, color):
-        for yy in range(max(0, y), min(self.h, y + h)):
-            base = yy * self.w
-            for xx in range(max(0, x), min(self.w, x + w)):
-                self.data[base + xx] = color
+        for yy in range(max(0, y), min(self._h, y + h)):
+            base = yy * self._w
+            for xx in range(max(0, x), min(self._w, x + w)):
+                self._data[base + xx] = color
 
     def text(self, x, y, s, fg, font, bg=None):
         # Sim mirror of the firmware Canvas.text(): composite glyphs straight into the surface.
@@ -715,36 +715,36 @@ class Canvas:
             rows = _pf._glyph_rows(font, ord(ch), fw, fh)
             for gy in range(fh):
                 cy = y + gy
-                if not (0 <= cy < self.h):
+                if not (0 <= cy < self._h):
                     continue
                 r = rows[gy]
-                base = cy * self.w
+                base = cy * self._w
                 for gx in range(fw):
                     cx = x + gx
-                    if not (0 <= cx < self.w):
+                    if not (0 <= cx < self._w):
                         continue
                     if r[gx]:
-                        self.data[base + cx] = fg
+                        self._data[base + cx] = fg
                     elif bg is not None:
-                        self.data[base + cx] = bg
+                        self._data[base + cx] = bg
             x += fw
 
     def blit(self, bm, x, y, frame=0, flip_x=False, flip_y=False):
         fw, fh = bm.width, bm.height
         for ry in range(fh):
             cy = y + ry
-            if not (0 <= cy < self.h):
+            if not (0 <= cy < self._h):
                 continue
             sy = (fh - 1 - ry) if flip_y else ry
-            base = cy * self.w
+            base = cy * self._w
             for rx in range(fw):
                 cx = x + rx
-                if not (0 <= cx < self.w):
+                if not (0 <= cx < self._w):
                     continue
                 sx = (fw - 1 - rx) if flip_x else rx
                 v = _src_pixel(bm, frame * fw + sx, sy)
                 if v is not None:
-                    self.data[base + cx] = v
+                    self._data[base + cx] = v
 
     def mode7(self, tex, horizon, y_off, z, rx0, ry0, rsx, ry_sx, cam_x, cam_y):
         # Perspective ground plane (Mode-7). sy is a row WITHIN this surface; the
@@ -760,7 +760,7 @@ class Canvas:
         mx, my = tw - 1, th - 1
         stride = tex.stride
         y0 = max(0, horizon - y_off + 1)
-        for sy in range(y0, self.h):
+        for sy in range(y0, self._h):
             denom = (sy + y_off) - horizon
             if denom <= 0:
                 continue
@@ -769,13 +769,13 @@ class Canvas:
             stepy = (rowdist * ry_sx) >> F
             fx = cam_x + ((rowdist * rx0) >> F)
             fy = cam_y + ((rowdist * ry0) >> F)
-            base = sy * self.w
-            for sx in range(self.w):
+            base = sy * self._w
+            for sx in range(self._w):
                 tx = (fx >> shx) & mx
                 ty = (fy >> shy) & my
                 v = _src_pixel_row(tex, ty * stride + tx, 0)
                 if v is not None:
-                    self.data[base + sx] = v
+                    self._data[base + sx] = v
                 fx += stepx
                 fy += stepy
 
@@ -805,7 +805,7 @@ class Canvas:
 
     def fill_circle(self, cx, cy, r, color):
         for dy in range(-r, r + 1):
-            span = int(math.sqrt(max(0, r * r - dy * dy)))
+            span = int(_math.sqrt(max(0, r * r - dy * dy)))
             self.fill_rect(cx - span, cy + dy, 2 * span + 1, 1, color)
 
     # ---- extra primitives (harvested from PicoLibSDK's draw set) ----
@@ -824,9 +824,9 @@ class Canvas:
     def ring(self, cx, cy, r, thickness, color):
         inner = max(0, r - thickness)
         for dy in range(-r, r + 1):
-            out = int(math.sqrt(max(0, r * r - dy * dy)))
+            out = int(_math.sqrt(max(0, r * r - dy * dy)))
             if abs(dy) <= inner:
-                ins = int(math.sqrt(max(0, inner * inner - dy * dy)))
+                ins = int(_math.sqrt(max(0, inner * inner - dy * dy)))
                 self.fill_rect(cx - out, cy + dy, out - ins, 1, color)
                 self.fill_rect(cx + ins + 1, cy + dy, out - ins, 1, color)
             else:
@@ -866,6 +866,62 @@ class Canvas:
                 continue
             self.fill_triangle(x0, y0, x1, y1, x2, y2, colors[i])
 
+    def road(self, ri0, tab, rl, rr, d05_q8, d07_q8, colors):
+        # Sim of the native Canvas.road (C: shared-module/picogame/Canvas.c picogame_canvas_road):
+        # one racing-road strip, all rows in one call. ri0 = road-table row of THIS surface's row 0
+        # (negative rows = sky); tab = int16 rows of {edge_w, dash_hw, wb05_q8, wb07_q8, flags};
+        # rl/rr = per-row integer edges (road_edges output); d05/d07 = Q8 scroll phases; colors =
+        # 6x uint16 {sky, road_a, road_b, rumble_a, rumble_b, dash}. Golden-tested against the C
+        # (selftest_road.py). Grass under the road and the finish chequer stay the caller's job.
+        ntab = len(tab) // 5
+        nedge = min(len(rl), len(rr))
+        if nedge < ntab:
+            ntab = nedge                       # never read past the shorter per-frame arrays
+        if ntab <= 0 or len(colors) < 6:
+            return
+        w = self._w
+        data = self._data
+        sky = colors[0]
+        for ly in range(self._h):
+            ri = ri0 + ly
+            if ri < 0:                         # above the horizon: sky
+                base = ly * w
+                for x in range(base, base + w):
+                    data[x] = sky
+                continue
+            if ri >= ntab:
+                ri = ntab - 1
+            ti = ri * 5
+            band = ((d05_q8 + tab[ti + 2]) >> 8) & 1
+            road_c = colors[1] if band else colors[2]
+            rumble = colors[3] if band else colors[4]
+            l = rl[ri]
+            r = rr[ri]
+            if r <= l:
+                continue
+            self._span(ly, l, r - 1, road_c)
+            ew = tab[ti]
+            self._span(ly, l, l + ew - 1, rumble)
+            self._span(ly, r - ew, r - 1, rumble)
+            if (tab[ti + 4] & 1) and (((d07_q8 + tab[ti + 3]) >> 8) & 1):
+                mid = (l + r) >> 1
+                dw = tab[ti + 1]
+                self._span(ly, mid - dw, mid + dw - 1, colors[5])
+
+    def _span(self, y, xs, xe, color):
+        # clipped horizontal run [xs, xe] inclusive - mirror of the C span565()
+        if y < 0 or y >= self._h:
+            return
+        if xs < 0:
+            xs = 0
+        if xe >= self._w:
+            xe = self._w - 1
+        if xs <= xe:
+            base = y * self._w
+            data = self._data
+            for x in range(base + xs, base + xe + 1):
+                data[x] = color
+
     def vspans(self, x0s, x1s, tops, bots, colors, n, x_off=0, y_off=0):
         # Sim of the native Canvas.vspans batch fill (C loops over fill_rect in ONE Python/C
         # crossing on device). Span i covers x0s[i]..x1s[i] by tops[i]..bots[i] (both exclusive)
@@ -891,14 +947,14 @@ class Canvas:
 
     def fill_ellipse(self, cx, cy, rx, ry, color):
         for dy in range(-ry, ry + 1):
-            span = int(rx * math.sqrt(max(0.0, 1.0 - (dy * dy) / float(ry * ry)))) if ry else 0
+            span = int(rx * _math.sqrt(max(0.0, 1.0 - (dy * dy) / float(ry * ry)))) if ry else 0
             self.fill_rect(cx - span, cy + dy, 2 * span + 1, 1, color)
 
     def ellipse(self, cx, cy, rx, ry, color):
         steps = max(8, int(6.2832 * max(rx, ry)))
         for i in range(steps):
             a = 6.2832 * i / steps
-            self.pixel(cx + int(rx * math.cos(a)), cy + int(ry * math.sin(a)), color)
+            self.pixel(cx + int(rx * _math.cos(a)), cy + int(ry * _math.sin(a)), color)
 
     def fill_round_rect(self, x, y, w, h, r, color):
         r = min(r, w // 2, h // 2)
@@ -920,13 +976,13 @@ class Canvas:
         fb = _host.fb
         cx0, cy0, cx1, cy1 = clip
         ox, oy = self.x + vx, self.y + vy
-        key = self.transparent
-        for yy in range(max(oy, cy0, 0), min(oy + self.h, cy1, H)):
-            srow = (yy - oy) * self.w
-            drow = yy * W
-            for xx in range(max(ox, cx0, 0), min(ox + self.w, cx1, W)):
-                v = self.data[srow + (xx - ox)]
-                if self.has_transparent and v == key:
+        key = self._transparent
+        for yy in range(max(oy, cy0, 0), min(oy + self._h, cy1, _H)):
+            srow = (yy - oy) * self._w
+            drow = yy * _W
+            for xx in range(max(ox, cx0, 0), min(ox + self._w, cx1, _W)):
+                v = self._data[srow + (xx - ox)]
+                if self._has_transparent and v == key:
                     continue
                 fb[drow + xx] = v
 
@@ -940,36 +996,36 @@ class StripDraw:
     gradients, procedural backgrounds), not static art. Mirrors the firmware type."""
 
     def __init__(self, callback, x=0, y=0, width=0, height=0, *, always_dirty=True):
-        self.callback = callback
+        self._callback = callback
         self.x = x
         self.y = y
-        self.w = width
-        self.h = height
+        self._w = width
+        self._h = height
         self.always_dirty = always_dirty   # device-only effect (the sim has no dirty-rect; it full-repaints)
-        self.pending = True
+        self._pending = True
         self._view = Canvas(1, 1)        # reused; data/w/h repointed per strip
 
     def invalidate(self, x=0, y=0, w=0, h=0):
         # firmware L2 accepts a sub-rect for partial repaint; the sim has no dirty-rect (it full-
         # repaints), so the rect is accepted for API parity but ignored.
-        self.pending = True
+        self._pending = True
 
     # read/write rect size mirroring the firmware properties (internals use w/h)
     @property
     def width(self):
-        return self.w
+        return self._w
 
     @width.setter
     def width(self, v):
-        self.w = v
+        self._w = v
 
     @property
     def height(self):
-        return self.h
+        return self._h
 
     @height.setter
     def height(self, v):
-        self.h = v
+        self._h = v
 
     def _draw(self, vx, vy, clip):
         fb = _host.fb
@@ -979,30 +1035,30 @@ class StripDraw:
         # So a callback must draw at ABSOLUTE screen coords minus (vx, vy), and fill only its own rect
         # (a `view.clear()` fills the whole region width). Mirrors v->w = region_w in the C blitter.
         ry = self.y + vy
-        y_lo, y_hi = max(ry, cy0, 0), min(ry + self.h, cy1, H)
+        y_lo, y_hi = max(ry, cy0, 0), min(ry + self._h, cy1, _H)
         if cx0 >= cx1 or y_lo >= y_hi:
             return
         rw = cx1 - cx0
         view = self._view
-        view.w = rw
-        view.has_transparent = False
+        view._w = rw
+        view._has_transparent = False
         view.x = view.y = 0
         sy = y_lo
         while sy < y_hi:
             sh = min(_SIM_STRIP_H, y_hi - sy)
-            view.h = sh
+            view._h = sh
             # The strip already holds the background + lower layers (as on device):
             # seed the view from fb, let the callback draw over it, copy back.
             data = [0] * (rw * sh)
             for ly in range(sh):
-                drow = (sy + ly) * W + cx0
+                drow = (sy + ly) * _W + cx0
                 srow = ly * rw
                 for lx in range(rw):
                     data[srow + lx] = fb[drow + lx]
-            view.data = data
-            self.callback(view, cx0, sy, rw, sh)
+            view._data = data
+            self._callback(view, cx0, sy, rw, sh)
             for ly in range(sh):
-                drow = (sy + ly) * W + cx0
+                drow = (sy + ly) * _W + cx0
                 srow = ly * rw
                 for lx in range(rw):
                     fb[drow + lx] = data[srow + lx]
@@ -1017,9 +1073,9 @@ class Triangles:
     how many triangles should draw (marks the layer dirty). Mirrors the firmware type."""
 
     def __init__(self, verts, colors):
-        self.verts = verts
-        self.colors = colors
-        self.cap = min(len(verts) // 6, len(colors))
+        self._verts = verts
+        self._colors = colors
+        self._cap = min(len(verts) // 6, len(colors))
         self._count = 0
         self._view = Canvas(1, 1)          # reused; data/w/h repointed per draw
 
@@ -1029,7 +1085,7 @@ class Triangles:
 
     @count.setter
     def count(self, n):
-        self._count = max(0, min(int(n), self.cap))
+        self._count = max(0, min(int(n), self._cap))
 
     def _draw(self, vx, vy, clip):
         # Screen-space by design (the view offset is not applied) -- one full-region view.
@@ -1038,24 +1094,24 @@ class Triangles:
         fb = _host.fb
         cx0, cy0, cx1, cy1 = clip
         cx0, cy0 = max(cx0, 0), max(cy0, 0)
-        cx1, cy1 = min(cx1, W), min(cy1, H)
+        cx1, cy1 = min(cx1, _W), min(cy1, _H)
         if cx0 >= cx1 or cy0 >= cy1:
             return
         rw, rh = cx1 - cx0, cy1 - cy0
         view = self._view
-        view.w = rw
-        view.h = rh
+        view._w = rw
+        view._h = rh
         view.x = view.y = 0
-        view.has_transparent = False
+        view._has_transparent = False
         data = [0] * (rw * rh)
         for ly in range(rh):
-            drow = (cy0 + ly) * W + cx0
+            drow = (cy0 + ly) * _W + cx0
             srow = ly * rw
             data[srow:srow + rw] = fb[drow:drow + rw]
-        view.data = data
-        view.fill_triangles(self.verts, self.colors, self._count, -cx0, -cy0)
+        view._data = data
+        view.fill_triangles(self._verts, self._colors, self._count, -cx0, -cy0)
         for ly in range(rh):
-            drow = (cy0 + ly) * W + cx0
+            drow = (cy0 + ly) * _W + cx0
             srow = ly * rw
             fb[drow:drow + rw] = data[srow:srow + rw]
 
@@ -1098,29 +1154,29 @@ class Display:
         render(self.display, sprites, buffer_a, x0, y0, x1, y1, background=background)
 
 
-_FULL = (0, 0, W, H)
+_FULL = (0, 0, _W, _H)
 
 
 class Scene:
     def __init__(self, display, buffer_a, buffer_b, *, background=0,
                  top=0, bottom=0, left=0, right=0):
         self.display = display
-        self.background = background
-        self.items = []
-        self.kinds = []
-        self.fixed = []
-        self.ox = 0
-        self.oy = 0
-        # reserved border insets; scene renders only [left, W-right) x [top, H-bottom)
-        self.top = top
-        self.bottom = bottom
-        self.left = left
-        self.right = right
+        self._background = background
+        self._items = []
+        self._kinds = []
+        self._fixed = []
+        self._ox = 0
+        self._oy = 0
+        # reserved border insets; scene renders only [left, _W-right) x [top, _H-bottom)
+        self._top = top
+        self._bottom = bottom
+        self._left = left
+        self._right = right
 
     def add(self, item, *, fixed=False):
-        self.items.append(item)
-        self.kinds.append(_kind(item))
-        self.fixed.append(fixed)
+        self._items.append(item)
+        self._kinds.append(_kind(item))
+        self._fixed.append(fixed)
         return item
 
     def add_all(self, items):
@@ -1132,40 +1188,40 @@ class Scene:
         # the next refresh repaints over where it was (the sim always repaints the
         # play rect, so no ghost by construction). The item itself is untouched and
         # can be add()ed again later. ValueError if not in the scene.
-        for i, it in enumerate(self.items):
+        for i, it in enumerate(self._items):
             if it is item:
-                del self.items[i]
-                del self.kinds[i]
-                del self.fixed[i]
+                del self._items[i]
+                del self._kinds[i]
+                del self._fixed[i]
                 return
         raise ValueError("item not in scene")
 
     def set_view(self, ox, oy):
-        self.ox = ox
-        self.oy = oy
+        self._ox = ox
+        self._oy = oy
 
     @property
     def view(self):
-        return (self.ox, self.oy)
+        return (self._ox, self._oy)
 
     def invalidate(self):
         pass
 
     def refresh(self):
-        bg = self.background
+        bg = self._background
         fb = _host.fb
-        x0 = self.left                      # play rect; the reserved border is left untouched
-        x1 = W - self.right
-        y0 = self.top
-        y1 = H - self.bottom
+        x0 = self._left                      # play rect; the reserved border is left untouched
+        x1 = _W - self._right
+        y0 = self._top
+        y1 = _H - self._bottom
         for y in range(y0, y1):
-            row = y * W
+            row = y * _W
             for x in range(x0, x1):
                 fb[row + x] = bg
         clip = (x0, y0, x1, y1)
-        for item, kind, fx in zip(self.items, self.kinds, self.fixed):
-            vx = 0 if fx else self.ox
-            vy = 0 if fx else self.oy
+        for item, kind, fx in zip(self._items, self._kinds, self._fixed):
+            vx = 0 if fx else self._ox
+            vy = 0 if fx else self._oy
             _draw_item(item, kind, vx, vy, clip)
         _host.present()
         return [x0, y0, x1, y1]
@@ -1175,10 +1231,10 @@ def render(display, items, buffer, x0, y0, x1, y1, *, background=0):
     fb = _host.fb
     cx0 = max(0, x0)
     cy0 = max(0, y0)
-    cx1 = min(W, x1)
-    cy1 = min(H, y1)
+    cx1 = min(_W, x1)
+    cy1 = min(_H, y1)
     for y in range(cy0, cy1):
-        drow = y * W
+        drow = y * _W
         for x in range(cx0, cx1):
             fb[drow + x] = background
     clip = (cx0, cy0, cx1, cy1)
@@ -1290,6 +1346,80 @@ def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc,
 FPU = 1
 
 
+# Q15 sine LUT - the SAME 91-entry table as the firmware (pg_sin_q15_quad), so the sim's
+# road_edges is bit-identical to the C (golden-tested in selftest_road.py).
+_SIN_Q15 = (
+    0, 572, 1144, 1715, 2286, 2856, 3425, 3993, 4560, 5126,
+    5690, 6252, 6813, 7371, 7927, 8481, 9032, 9580, 10126, 10668,
+    11207, 11743, 12275, 12803, 13328, 13848, 14364, 14876, 15383, 15886,
+    16383, 16876, 17364, 17846, 18323, 18794, 19260, 19720, 20173, 20621,
+    21062, 21497, 21925, 22347, 22762, 23170, 23571, 23964, 24351, 24730,
+    25101, 25465, 25821, 26169, 26509, 26841, 27165, 27481, 27788, 28087,
+    28377, 28659, 28932, 29196, 29451, 29697, 29934, 30162, 30381, 30591,
+    30791, 30982, 31163, 31335, 31498, 31650, 31794, 31927, 32051, 32165,
+    32269, 32364, 32448, 32523, 32587, 32642, 32687, 32722, 32747, 32762,
+    32767,
+)
+
+
+def _sin_q15(deg):
+    deg %= 360
+    if deg <= 90:
+        return _SIN_Q15[deg]
+    if deg <= 180:
+        return _SIN_Q15[180 - deg]
+    if deg <= 270:
+        return -_SIN_Q15[deg - 180]
+    return -_SIN_Q15[360 - deg]
+
+
+def _sin_q15_lerp(deg_q16):
+    d0 = deg_q16 >> 16
+    frac = deg_q16 & 0xFFFF
+    a = _sin_q15(d0)
+    return a + (((_sin_q15(d0 + 1) - a) * frac) >> 16)
+
+
+def _i32(v):
+    # int32 wrap - the C accumulators are int32_t and games near the limits must degrade the
+    # SAME way in the sim as on the device (wrong pixels, never a different picture per host).
+    return ((v + 0x80000000) & 0xFFFFFFFF) - 0x80000000
+
+
+def road_edges(rl, rr, hw, n, cx_q16, dist, cfg):
+    """Sim of the native pg.road_edges (C: picogame_road_edges): one racing-road frame's
+    curve accumulator + integer edge tables in a single call. rl/rr = int16 outputs for
+    Canvas.road, hw = int32 Q16 per-row half-widths, cx_q16 = Q16 screen centre (incl.
+    lateral offset), dist = integer world distance, cfg = int32[7] curve/hill config
+    [f1_q20, f2_q20, amp1k_q16, amp2k_q16, world_step, curve_step, d_row_off].
+    Fixed-point port of the C, same LUT sine - golden-tested (selftest_road.py)."""
+    n = min(n, len(rl), len(rr), len(hw))
+    if n <= 0 or len(cfg) < 7:
+        return
+    f1, f2, a1k, a2k = cfg[0], cfg[1], cfg[2], cfg[3]
+    wstep, cstep, drow = cfg[4], cfg[5], cfg[6]
+    cx = cx_q16
+    ddx = 0
+    ck = 0
+    cnt = 0
+    for i in range(n - 1, -1, -1):
+        if cnt == 0:
+            d = _i32(dist + (drow - i) * wstep)
+            ck = _i32(_i32((_sin_q15_lerp((d * f1) >> 4) * a1k) >> 15)
+                      + _i32((_sin_q15_lerp((d * f2) >> 4) * a2k) >> 15))
+            cnt = cstep
+        cnt -= 1
+        ddx = _i32(ddx + ck)
+        cx = _i32(cx + ddx)
+        h = hw[i]
+        vl = _i32(cx - h)
+        vr = _i32(cx + h)
+        v = (vl >> 16) if vl >= 0 else -((-vl) >> 16)      # trunc-toward-zero, as the C int()
+        rl[i] = ((v + 0x8000) & 0xFFFF) - 0x8000           # int16 cast semantics
+        v = (vr >> 16) if vr >= 0 else -((-vr) >> 16)
+        rr[i] = ((v + 0x8000) & 0xFFFF) - 0x8000
+
+
 def project(cam, pts, n, osx, osy):
     """Sim implementation of the native picogame.project batch projector (C on device: float on an
     FPU board, 16.16 fixed on RP2040). Projects `n` world points to screen; a point behind the near
@@ -1326,8 +1456,8 @@ def _nsmooth(t):
 
 
 def value2d(x, y, *, seed=0):
-    xi = int(math.floor(x))
-    yi = int(math.floor(y))
+    xi = int(_math.floor(x))
+    yi = int(_math.floor(y))
     xf = x - xi
     yf = y - yi
     a = _nhash(xi, yi, seed)
@@ -1340,7 +1470,7 @@ def value2d(x, y, *, seed=0):
 
 
 def value1d(x, *, seed=0):
-    xi = int(math.floor(x))
+    xi = int(_math.floor(x))
     xf = x - xi
     a = _nhash(xi, 0, seed)
     b = _nhash(xi + 1, 0, seed)

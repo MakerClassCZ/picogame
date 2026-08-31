@@ -124,7 +124,7 @@ def tilemap_trials(pg, _host, trials=200):
         for cull in (True, False):
             rng = random.Random(t)
             tm = _tilemap_case(rng, pg, _host, transposed=(t % 2 == 0))
-            tm.ox, tm.oy = rng.randint(-20, 20), rng.randint(-20, 20)
+            tm._ox, tm._oy = rng.randint(-20, 20), rng.randint(-20, 20)
             vx, vy = rng.randint(-200, 20), rng.randint(-60, 20)
             for i in range(len(fb)):
                 fb[i] = 0
@@ -145,16 +145,16 @@ def tilemap_trials(pg, _host, trials=200):
 
 def _draw_every_tile(tm, vx, vy, clip, pg):
     """Reference: no culling at all — walk the whole map."""
-    ts = tm.tileset
+    ts = tm._tileset
     tw, th = ts.width, ts.height
-    for ty in range(tm.map_h):
-        for tx in range(tm.map_w):
-            off = ty * tm.map_w + tx
-            v = tm.grid[off]
+    for ty in range(tm._map_h):
+        for tx in range(tm._map_w):
+            off = ty * tm._map_w + tx
+            v = tm._grid[off]
             if v >= ts.frames:
                 continue
-            o = tm.orient[off] if tm.orient is not None else 0
-            pg._blit(ts, tm.ox + tx * tw + vx, tm.oy + ty * th + vy, v,
+            o = tm._orient[off] if tm._orient is not None else 0
+            pg._blit(ts, tm._ox + tx * tw + vx, tm._oy + ty * th + vy, v,
                      bool(o & 1), bool(o & 2), clip, 1.0, False, None, 0, None, bool(o & 4))
 
 if __name__ == "__main__":

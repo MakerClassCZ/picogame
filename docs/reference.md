@@ -163,7 +163,7 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 - `from_mask(mask, color)` — Bitmap from a **list of strings**, one per row (`'#'`, `'X'` or `'1'` = set); sized to the mask. Passing a single string is not an error — each CHARACTER becomes a row, so you get a 1-pixel-wide sprite and no exception.
 - `atlas(frames_data, w, h, color)` — pack w×h buffers into a multi-frame Bitmap.
 - `color_frames(w, h, colors)` — frame i = solid `colors[i]`.
-- `tileset_colors(w, h, colors)` — tileset: frame 0 empty, frames 1..N coloured.
+- `tileset_colors(w, h, colors, gap=0)` — tileset: frame 0 empty, frames 1..N coloured; `gap=N` carves an N-px transparent right+bottom edge into each tile, so touching same-colour tiles read as individual tiles (brick walls show mortar, not stripes).
 - `poly_frames(size, points, nframes, color, fill=True)` — bake `nframes` rotations of a polygon.
 
 ### `picogame_pool` — reusable sprite pool

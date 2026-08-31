@@ -35,15 +35,9 @@ BRICK_Y = 28                                       # wall top (HUD strip above i
 BRICK_COLS = [pg.rgb565(220, 70, 70), pg.rgb565(230, 150, 50),
               pg.rgb565(70, 200, 90), pg.rgb565(80, 150, 230)]
 # One brick type per row ON PURPOSE - genre SS1 lists silver/gold tiers as nice-to-have; a demo ships the MVP.
-tileset = shp.tileset_colors(BW, BH, BRICK_COLS)
-# Readable bricks: bake a 1px mortar edge (transparent -> the dark BG shows through) into each solid
-# tile. Identity is carried by silhouette, not colour alone - touching same-colour fills read as one slab.
-_d, _stride = tileset.data, BW * (len(BRICK_COLS) + 1)
-for _f in range(1, len(BRICK_COLS) + 1):
-    for _x in range(BW):
-        _d[(BH - 1) * _stride + _f * BW + _x] = 0     # bottom mortar line
-    for _y in range(BH):
-        _d[_y * _stride + _f * BW + BW - 1] = 0       # right mortar line
+# gap=1 bakes a 1px transparent mortar edge into each tile (the dark BG shows through), so the wall
+# reads as bricks, not stripes - identity is carried by silhouette, not colour alone.
+tileset = shp.tileset_colors(BW, BH, BRICK_COLS, gap=1)
 pal = [pg.rgb565(0, 0, 0)] + BRICK_COLS
 
 

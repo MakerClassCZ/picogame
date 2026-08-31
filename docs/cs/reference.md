@@ -163,7 +163,7 @@ Kterou textovou cestu použít (`Canvas.text` vs vyrenderovaná Bitmap vs StripD
 - `from_mask(mask, color)` — Bitmap ze **seznamu řetězců**, jeden na řádek (`'#'`, `'X'` nebo `'1'` = nastaveno); rozměr podle masky. Předat jeden řetězec není chyba — každý ZNAK se stane řádkem, takže dostaneš sprite široký 1 pixel a žádnou výjimku.
 - `atlas(frames_data, w, h, color)` — zabalí buffery w×h do vícesnímkové bitmapy.
 - `color_frames(w, h, colors)` — snímek `i` vyplní barvou `colors[i]`.
-- `tileset_colors(w, h, colors)` — tileset: snímek 0 je prázdný, snímky 1..N obarvené.
+- `tileset_colors(w, h, colors, gap=0)` — tileset: snímek 0 je prázdný, snímky 1..N obarvené; `gap=N` vyřízne do každé dlaždice N-px průhledný pravý+spodní okraj, takže sousedící stejnobarevné dlaždice zůstanou rozlišitelné (cihlová zeď má spáry, ne pruhy).
 - `poly_frames(size, points, nframes, color, fill=True)` — předem vygeneruje `nframes` rotací polygonu.
 
 ### `picogame_pool` — znovupoužitelný pool spritů
