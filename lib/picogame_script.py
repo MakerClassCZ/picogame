@@ -91,19 +91,31 @@ class Director:
         self._seq.start(g)
         return True
 
+    def retarget(self, scene):
+        """Point the Director at a NEW scene after a map load. The dialog box
+        and fade are dropped and lazily rebuilt on the new scene; the script
+        registry and events survive - that is the point of a map transition:
+        the story remembers, the world reloads."""
+        self.scene = scene
+        self._box = None
+        self._fade = None
+
     @property
     def active(self):
         return not self._seq.done
 
     def tick(self):
         """Advance the running script by one step. Call once per frame, after
-        buttons.poll(). Returns True while a script is running."""
+        buttons.poll(). Returns True while a script is running - INCLUDING the
+        step on which it finishes. That final True is what stops the A press
+        that dismissed the last dialog from falling through into the same
+        frame's game input and re-triggering the talk zone the player is still
+        standing in."""
         if self._seq.done:
             return False
         if self._seq.tick():                  # finished on this step
             if self._box is not None:
                 self._box.hide()
-            return False
         return True
 
     # -- waiting primitives (use with `yield from`) ---------------------------
