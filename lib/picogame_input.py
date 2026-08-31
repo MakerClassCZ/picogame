@@ -418,7 +418,11 @@ class Buttons:
     def attach(self, source):
         """OR another input source (an object with .read() -> logical mask) into this
         Buttons - e.g. a `picogame_seq.Script` for an attract-mode demo, or a late USB pad.
-        The source's presses merge with the hardware's on the next poll()."""
+        The source's presses merge with the hardware's on the next poll(). NOTE: while any
+        source is attached, just_pressed() reads edges from the combined LEVEL diff instead of
+        the keypad event queue, so a sub-frame HUMAN tap (down and up between two polls) can be
+        missed - for an attract-mode exit that only means pressing again; don't attach sources
+        in a game where sub-frame taps matter."""
         if source not in self._sources:
             self._sources.append(source)
 

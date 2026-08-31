@@ -83,7 +83,9 @@ def masks(mask_list, color):
         spr = pg.Sprite(bm, x, y); spr.frame = 2
     """
     n = len(mask_list)
-    if n and isinstance(mask_list[0], str):
+    if not n:
+        raise ValueError("masks() needs at least one mask")
+    if isinstance(mask_list[0], str):
         # a flat list of strings is ONE mask, not a frame list - it would silently produce
         # 1px-wide frames instead of raising, so say what the caller probably meant
         raise TypeError("masks() takes a LIST of masks (each a list of strings); "
