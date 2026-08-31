@@ -19,6 +19,12 @@ starting point to tune.
   from a 60fps game = 0.25 s; at 30 fps that would be 0.5 s). So either halve
   frame counts from 60fps sources, or — cleaner — convert the value to seconds
   (frames ÷ 60) and work in seconds × `dt` from `picogame_clock` in code.
+  **Watch the unit — only counts convert linearly.** A duration or velocity in
+  *per-frame* units scales by the fps ratio (px/frame → px/s = × fps), but an
+  ACCELERATION is per-frame², so it scales by the SQUARE (px/frame² → px/s² =
+  × fps²). Applying the frame-count rule to a gravity constant is off by a whole
+  factor of fps. Unless a section says otherwise, the per-frame numbers below are
+  **30 fps** (this project's baseline), so e.g. `gravity 0.4 px/frame²` = 360 px/s².
 - **Make the collision area smaller than the drawn art.** A hit across the whole
   sprite rect feels unfair ("that didn't touch me!") — the player perceives only
   the core of the figure; the edges of the art are visual. Shmups take it
@@ -273,6 +279,14 @@ Thorson, Celeste: these exist "to favor player success").
   (Celeste room restarts) keep the death-retry loop tight.
 
 **TUNING (units px and seconds @60fps — convert to your fps, see Cross-genre)**
+
+These are **Celeste's** constants, and Celeste's world is on **8 px tiles** — pixel values do not
+carry across a different tile size (at picogame's usual 16 px the same numbers clear HALF the
+tiles). What carries is the scale-free quantity: **jump height measured in TILES**. Celeste's is
+~3; the shipped `demos/picogame_platformer.py` jumps ~6 (measured) — both play well, they just
+feel different. So pick the height in tiles that your platform spacing wants, then derive `v0`
+and gravity from it (`height ≈ v0² / 2g`), and use the table below for the SHAPE of the feel
+(apex hang, variable jump, terminal velocity) rather than as numbers to copy.
 
 | Constant | Value | Meaning |
 |---|---|---|
@@ -601,7 +615,14 @@ list and re-assign it into the slots (worked example: the billboard section of
 `docs/pages/helpers/pseudo-3d.md`).
 
 **The C road pair (2026-08, device-proven on picobike: 15 → 39 fps):** the per-scanline Python road
-loop is the genre's classic wall — replace it with the engine primitives. **Start with the
+loop is the genre's classic wall — replace it with the engine primitives. **Know the trade first:
+the C pair's curvature is a fixed two-sine FIELD of world distance, not an authored track** — you
+choose four numbers, not corners. It gives you an endless, non-repeating road (which suits a 1–3
+minute handheld run), but you cannot author a specific enter/hold/leave corner, a fork, or a
+memorable circuit. Want those? Accumulate the edges in Python from your own per-segment curvature
+table — and budget for it: that per-row loop is ~8–10 ms/frame on an RP2040 (measured on picobike
+before the C pair), i.e. a quarter of a 30 fps budget. Decide this BEFORE designing the track;
+the TRACK DESIGN paragraph above assumes the authored-segment model. **Start with the
 `picogame_road.Road` wrapper** (human units: curve periods + swing in px, hills via `set_grade`,
 `curve_at()` for centrifugal pull, `row_of()`/`half_of()` for sprites — it owns every fixed-point
 table and the phase-wrap safety below). Drop to the raw pair only for a custom road look. Raw: once per frame

@@ -122,17 +122,29 @@ an "effects setting"; no menu needed.
 ### 1.4 Difficulty, flow & fairness
 Keep the player in the **flow channel** — challenge tracking rising skill. For a 1–3 min handheld run:
 - **Ramp by speed / density / variety, NOT by more HP.** Tetris speeds up; Pac-Man adds pressure.
-- **Give the ramp a shape** — don't climb monotonically (flat = boring by minute two). Use a
-  **sawtooth**: build tension 20–40 s → *release* at a milestone (wave clear, checkpoint) → re-engage
-  ~10–15 % harder. Land the first real spike at **~60–90 s** (after the teach window); every spike
-  earns a moment of relief.
+- **Give the ramp a shape** — don't climb monotonically (flat = boring by minute two). One shape
+  that works: a **sawtooth** — build tension 20–40 s → *release* at a milestone (wave clear,
+  checkpoint) → re-engage ~10–15 % harder, first real spike around **~60–90 s**, every spike
+  earning a moment of relief. Those numbers come from wave-based games; a genre with no waves has
+  its own shape (an endless runner ramps continuously from second one, a puzzle ramps per level).
+  Take the principle — *shaped, not monotone; every rise repaid* — and set the timings from YOUR
+  loop. NOTE the difference between the first **threat** (often immediate: Flappy's first pipe
+  arrives in ~2 s, and that is the baseline challenge) and the first **spike** (a step up from it).
 - **Announce every threat in advance** — a readable wind-up, a flash, a sound (telegraphing); no
   unavoidable damage. The player must always feel
   "my fault." Human reaction floor ≈ **250 ms (~8 frames @30fps)** — give at least that to react.
-- **Generosity mechanics** make games feel fair (frame counts @ 30 fps — the baseline; scale up for 60):
-  **coyote time 3–8 frames** (jump shortly after leaving a ledge), **jump buffer 3–6 frames** (honor
-  a jump pressed just before landing) — both in `picogame_input.Timer`; **i-frames** after a hit
-  (mercy window so one hit can't chain-kill); **hitbox smaller than the sprite** for the player.
+- **Generosity mechanics** make games feel fair: a small window where the game reads what the
+  player MEANT instead of what the input strictly was. **Name your genre's own** — the canonical
+  four are platformer-shaped and are examples, not a checklist: **coyote time 3–8 frames** (jump
+  shortly after leaving a ledge), **jump buffer 3–6 frames** (honor a jump pressed just before
+  landing) — both in `picogame_input.Timer`; **i-frames** after a hit (mercy window so one hit
+  can't chain-kill); **hitbox smaller than the sprite**. What that becomes elsewhere, each derived
+  by a builder who found nothing in the list above: **lock delay** (falling-block: ~0.5 s of grace
+  after a piece lands, re-armed by a move); **turn buffering** (maze: a turn entered just before
+  the junction still takes); **corner assist** (top-down: slide along a wall instead of catching on
+  it); **arming delay** (asteroids: fresh fragments can't kill for a few frames); **held-walk
+  break** (first-person: a held direction doesn't stick you to a wall). Frame counts are @ 30 fps —
+  the baseline; scale up for 60.
 - **Instant restart** (< ~0.5 s, re-init in place) — failure must cost almost nothing.
 - **Keep tuning parameters as named constants at the top of the file** (enemy speed, spawn rate,
   i-frames, shake strength). On CircuitPython the game's source sits on disk, so anyone can edit
