@@ -25,7 +25,7 @@ import picogame_anim
 import picogame_shapes as shp
 import picogame_ui as ui
 
-W, H = 320, 240
+W, H = picogame_game.screen()   # never hardcode: the same game runs at 240x240 and 640x480
 TILE = 16
 SPEED = 2
 MAP = [

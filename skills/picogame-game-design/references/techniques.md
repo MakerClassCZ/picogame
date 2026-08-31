@@ -185,13 +185,18 @@ def move_h(x, y, dx, half_w, hh):                 # resolve X: stop at the wall,
         return x
     return x + dx
 
-def move_v(x, y, vy, half_w):                      # resolve Y: step down 1 px so speed can't tunnel
-    if vy > 0:
-        for _ in range(vy):
-            if block_at(x, y + 1) or block_at(x - half_w + 2, y + 1) or block_at(x + half_w - 2, y + 1):
-                return y, 0, True                 # landed: y unchanged, vy zeroed, grounded
-            y += 1
-    return y + vy, vy, False
+def move_v(x, y, vy, half_w):                      # resolve Y in the DIRECTION OF TRAVEL, 1 px at a
+    step = 1 if vy > 0 else -1                     # time, so speed cannot tunnel through floor OR ceiling
+    probe = 1 if vy > 0 else -15                   # leading edge: the feet falling, the head rising
+    for _ in range(abs(int(vy))):
+        if block_at(x, y + probe) or block_at(x - half_w + 2, y + probe) or block_at(x + half_w - 2, y + probe):
+            return y, 0, vy > 0                    # blocked: y held, vy zeroed; grounded only downward
+        y += step
+    # A small vy moves no whole pixels, so the loop never probed: standing still, gravity is under
+    # 1 px/frame and the grounded flag would flicker every other frame without this.
+    on_ground = vy > 0 and (block_at(x, y + 1) or block_at(x - half_w + 2, y + 1)
+                            or block_at(x + half_w - 2, y + 1))
+    return y, (0 if on_ground else vy), on_ground
 ```
 
 *Field tip:* when `move_h`/`move_v` are called many times per frame (player + enemies + pickups,

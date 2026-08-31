@@ -81,6 +81,7 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
     import io
     base = os.path.basename(game_path)
     warm = min(8, max(1, frames // 3))     # snapshot after warm-up so setup allocs don't count
+    mid = warm + max(1, (frames - warm) // 2)   # a second one halfway, to tell a one-off from a leak
     snap = {}
 
     prev = host._frame_hook            # keep a --keys timeline running under --profile
@@ -90,6 +91,8 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
             prev(fr)
         if fr == warm:
             snap["t"] = tracemalloc.take_snapshot()
+        if fr == mid:
+            snap["mid"] = tracemalloc.take_snapshot()
 
     host.set_frame_hook(hook)
     tracemalloc.start()
@@ -135,7 +138,22 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
         diff = s1.compare_to(s0, "lineno")
         grow = sum(d.size_diff for d in diff)
         print("\n--- RETAINED game/lib allocation, frames %d..%d (engine/profiler excluded) ---" % (warm, end))
-        print("net growth %+d B (%.0f B/frame) — leak / per-frame-retained check (§4)" % (grow, grow / span))
+        # A per-frame RATE is the wrong shape for a one-off cost: a fixed 3 kB of lazy setup reads as
+        # 4 B/frame over 600 frames and 1 B/frame over 2400, and the quality bar calls growth a
+        # blocker - so people chase a phantom. Split the run in half instead: a real leak keeps
+        # allocating at the same pace, a warm-up allocation does not.
+        half = None
+        if "mid" in snap:
+            sm = snap["mid"].filter_traces(filt)
+            first = sum(d.size_diff for d in sm.compare_to(s0, "lineno"))
+            second = sum(d.size_diff for d in s1.compare_to(sm, "lineno"))
+            half = (first, second)
+        print("net growth %+d B over %d frames" % (grow, span))
+        if half:
+            first, second = half
+            verdict = ("LEAK — still allocating in the second half" if second > max(64, first * 0.5)
+                       else "one-off — the second half is flat, this is warm-up, not a leak")
+            print("  first half %+d B, second half %+d B  ->  %s" % (first, second, verdict))
         top = [d for d in diff if d.size_diff > 0][:8]
         if top:
             for d in top:

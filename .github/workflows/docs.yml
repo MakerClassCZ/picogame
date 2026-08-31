@@ -35,6 +35,8 @@ jobs:
             [ -e "$f" ] || { echo "missing asset: $rel"; fail=1; }
           done < <(grep -rhoE '\]\(\.\.?/?(img|audio)/[^)]+\)' docs --include="*.md" | tr -d '])' | sed 's/^(//' | sort -u)
           exit $fail
+      - name: The code the docs hand people parses, and does what it claims
+        run: python3 tools/check_doc_recipes.py
       - name: Cross-doc links point at a file that exists
         run: |
           fail=0

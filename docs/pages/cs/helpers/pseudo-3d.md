@@ -88,24 +88,28 @@ if not rc.solid(int(nx), int(py)):
 Raycaster kreslí jen stěny; nepřátelé a pickupy jsou běžné `Sprite`, které se každý snímek zvětší a umístí podle `project_sprite` a depth-testují proti stěnám, takže se schovají za roh. Přidej sprity do scény **až za** `StripDraw`, ať kreslí navrch, a místo vytváření každý snímek použij [`picogame_pool.Pool`](/cs/helpers/math/).
 
 ```python
-GUYS = [Enemy(3.5, 2.5), Enemy(6.5, 3.5)]        # pozice ve světě (dlaždice)
-for g in GUYS:
-    g.spr = pg.Sprite(DEMON_BMP, -40, -40)       # DEMON_BMP je 8 px vysoký
-    g.spr.anchor = (0.5, 0.5)
-    scene.add(g.spr)                             # AŽ ZA StripDraw -> navrch stěn
+GUYS = [Enemy(3.5, 2.5), Enemy(6.5, 3.5)]        # pozice ve světě (v dlaždicích)
+SLOTS = [pg.Sprite(DEMON_BMP, -40, -40) for _ in GUYS]   # jeden opakovaně použitý sprite na postavu
+for s in SLOTS:
+    s.anchor = (0.5, 0.5)
+    scene.add(s)                                 # AŽ ZA StripDraw -> kreslí se přes stěny
 
 def frame():
-    rc.cast(px, py, ang, W, H)                   # cast stěn (naplní rc.zbuf)
+    rc.cast(px, py, ang, W, H)                   # vrhni stěny (naplní rc.zbuf)
+    # Scene kreslí položky v pořadí, v jakém byly PŘIDÁNY, a přidání proběhlo jednou výše. Řazení
+    # vlastního seznamu tedy nemůže změnit, co co překryje - musíš seřadit a pak seřazené postavy
+    # zapsat do pevných slotů. Nejbližší skončí v POSLEDNÍM slotu, který se kreslí naposledy.
     GUYS.sort(key=lambda g: -((g.x - px) ** 2 + (g.y - py) ** 2))   # od nejvzdálenějšího
-    for g in GUYS:
+    for g, spr in zip(GUYS, SLOTS):
         p = rc.project_sprite(g.x, g.y)
         if p:
             sx, size, _ = p
-            g.spr.move(sx, HORIZON)              # na řádek horizontu
-            g.spr.scale = size / 8.0             # bitmapa je 8 px vysoká
-            g.spr.visible = True
+            spr.bitmap = g.bmp                   # slot ukazuje tu postavu, kterou právě drží
+            spr.move(sx, HORIZON)                # vycentruj na řádek horizontu
+            spr.scale = size / 8.0               # bitmapa je 8 px vysoká
+            spr.visible = True
         else:
-            g.spr.visible = False               # mimo obraz nebo za stěnou
+            spr.visible = False                  # mimo obraz nebo za stěnou
     scene.refresh()
 ```
 

@@ -21,7 +21,7 @@ import picogame_game
 import picogame_clock
 import picogame_shapes as shp
 
-W, H = 320, 240
+W, H = picogame_game.screen()   # never hardcode: the same game runs at 240x240 and 640x480
 TILE = 16
 
 # . grass  : path  ~ water(solid)  # tree(solid)  W wall(solid)  D door  G goal

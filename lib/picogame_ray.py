@@ -13,11 +13,15 @@
 # leaves a per-column wall z-buffer (rc.zbuf); project each sprite with
 # project_sprite(worldx, worldy) and drive a pooled pg.Sprite from the result -
 #   rc.cast(px, py, ang, W, H)
-#   for e in sorted(enemies, key=lambda e: -e.dist2(px, py)):   # far-to-near
+#   # A Scene draws in the order items were ADDED, so iterating your own list in sorted order
+#   # does NOT reorder anything - sort, then write the sorted enemies into a FIXED list of
+#   # sprites added once. The nearest lands in the last slot, which is drawn last, on top.
+#   for e, spr in zip(sorted(enemies, key=lambda e: -e.dist2(px, py)), SLOTS):   # far-to-near
 #       p = rc.project_sprite(e.wx, e.wy)
 #       if p:
 #           sx, size, e.d = p
-#           e.spr.x, e.spr.y = sx, HORIZON_Y        # anchor (0.5, 0.5)
+#           spr.bitmap = e.bmp                      # the slot shows whoever it holds this frame
+#           spr.x, spr.y = sx, HORIZON_Y            # anchor (0.5, 0.5)
 #           e.spr.scale = size / BMP_H              # bitmap is BMP_H px tall
 #           e.spr.visible = True
 #       else:
@@ -196,8 +200,10 @@ class Raycaster:
           screen_x - centre x in screen px
           size     - on-screen height in px, the SAME scale as the walls: set
                      your sprite's scale to size / bitmap_height
-          depth    - perpendicular distance; sort your sprites far-to-near on it
-                     before positioning them, so nearer ones draw on top.
+          depth    - perpendicular distance. Sort far-to-near on it, then write the
+                     sorted entities into a FIXED list of Sprites you added to the
+                     Scene once: draw order is ADD order, so sorting your own list
+                     changes nothing on its own. The nearest goes in the last slot.
         Walls occlude via the per-column z-buffer (`margin` world units of slack
         so a sprite flush against a wall is not culled). The depth test is at the
         sprite's centre column only - right for a single billboard sprite: it is

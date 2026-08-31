@@ -25,7 +25,7 @@ import picogame_ui as ui
 import art_ship                               # <-- generated from angle_rad CC0 PNG
 import art_bullet
 
-W, H = 320, 240
+W, H = picogame_game.screen()   # never hardcode: the same game runs at 240x240 and 640x480
 BACKGROUND = pg.rgb565(0, 0, 8)
 FRAMES = 16
 TITLE, PLAY, GAMEOVER = 0, 1, 2

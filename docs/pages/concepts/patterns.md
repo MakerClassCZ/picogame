@@ -46,7 +46,7 @@ and is the recommended default. Ready-to-run skeleton: [try it in the browser](/
 Reuse a fixed pool for short-lived things such as bullets, coins, blocks, and sparks.
 ```python
 pool = picogame_pool.Pool(scene, BMP, 16, anchor=(0.5, 0.5))
-s = pool.spawn()                 # None if full; .visible is the alive flag
+s = pool.spawn()                 # None if full; spawn() shows it, free() hides it
 if s: s.move(x, y); s.data = ... # pool.free(s) to recycle
 ```
 

@@ -20,7 +20,7 @@ import picogame_input
 import picogame_clock
 import picogame_shapes as shp
 
-W, H = 320, 240
+W, H = picogame_game.screen()   # never hardcode: the same game runs at 240x240 and 640x480
 PADDLE_W, PADDLE_H = 44, 8
 BALL = 6
 

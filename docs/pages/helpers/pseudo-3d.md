@@ -95,23 +95,28 @@ The raycaster draws only walls; enemies and pickups are ordinary `Sprite`s scale
 
 ```python
 GUYS = [Enemy(3.5, 2.5), Enemy(6.5, 3.5)]        # world (tile) positions
-for g in GUYS:
-    g.spr = pg.Sprite(DEMON_BMP, -40, -40)       # DEMON_BMP is 8 px tall
-    g.spr.anchor = (0.5, 0.5)
-    scene.add(g.spr)                             # AFTER the StripDraw -> on top of walls
+SLOTS = [pg.Sprite(DEMON_BMP, -40, -40) for _ in GUYS]   # one reusable sprite per guy
+for s in SLOTS:
+    s.anchor = (0.5, 0.5)
+    scene.add(s)                                 # AFTER the StripDraw -> on top of walls
 
 def frame():
     rc.cast(px, py, ang, W, H)                   # cast walls (fills rc.zbuf)
+    # A Scene draws its items in the order they were ADDED, and adding happened once, above. So
+    # sorting a list of your own objects cannot change what covers what - you have to sort, then
+    # write the sorted guys into the fixed slots. The nearest lands in the LAST slot, which is
+    # drawn last, which is on top.
     GUYS.sort(key=lambda g: -((g.x - px) ** 2 + (g.y - py) ** 2))   # far-to-near
-    for g in GUYS:
+    for g, spr in zip(GUYS, SLOTS):
         p = rc.project_sprite(g.x, g.y)
         if p:
             sx, size, _ = p
-            g.spr.move(sx, HORIZON)              # centre on the horizon row
-            g.spr.scale = size / 8.0             # bitmap is 8 px tall
-            g.spr.visible = True
+            spr.bitmap = g.bmp                   # a slot shows whichever guy it holds this frame
+            spr.move(sx, HORIZON)                # centre on the horizon row
+            spr.scale = size / 8.0               # bitmap is 8 px tall
+            spr.visible = True
         else:
-            g.spr.visible = False               # off-screen or behind a wall
+            spr.visible = False                  # off-screen or behind a wall
     scene.refresh()
 ```
 

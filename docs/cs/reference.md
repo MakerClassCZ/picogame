@@ -168,6 +168,7 @@ Kterou textovou cestu použít (`Canvas.text` vs vyrenderovaná Bitmap vs StripD
 
 ### `picogame_pool` — znovupoužitelný pool spritů
 - `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` · `.spawn() -> sprite | None` · `.free(s)` · `.free_all()` · `.count() -> int`. (`.items` = všechny sprite.)
+- **`visible` znamená jen „kresli"** — pool si drží vlastní bit obsazenosti (`.alive`, bajt na slot), takže blikat pooled spritem přes `.visible` je bezpečné: jeho slot zůstane obsazený. `spawn()` vydaný sprite rozsvítí a `free()` ho zase skryje, takže `if not s.visible: continue` zůstává správná hlídka života. Dokud sprite bliká zhasnutý, hlídka ho přeskočí a ten snímek se nehýbe — když to vadí, hlídej místo toho `pool.alive[i]`.
 
 ### Kolize spritů (nativní metody)
 Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný samostatný modul).

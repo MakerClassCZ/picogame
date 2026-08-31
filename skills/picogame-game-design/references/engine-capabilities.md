@@ -209,7 +209,7 @@ oy = int(max(H - WORLD_H, min(0, H // 2 - hero.y)))
 scene.set_view(ox, oy)                                # changing view repaints the whole screen
 ```
 
-**A Pool spawner** (pre-allocate; `visible` IS the alive flag; `data` holds per-entity state)
+**A Pool spawner** (pre-allocate; the pool owns the in-use bit, `visible` just draws; `data` holds per-entity state)
 ```python
 import picogame_pool
 bullets = picogame_pool.Pool(scene, bullet_bm, 12, anchor=(0.5, 0.5))
@@ -218,7 +218,7 @@ if b: b.move(x, y); b.data = -6           # data = per-entity state: keep it a N
 for b in bullets.items:                   # zero-alloc iteration  (a string-key dict here is the
     if not b.visible: continue            #  exact anti-pattern the hot-loop guide bans: slower
     b.fy += b.data                        #  + typo-prone; pack multiple fields into a tuple)
-    if b.fy < -8: bullets.free(b)         # hide to recycle — never del/create per frame
+    if b.fy < -8: bullets.free(b)         # free to recycle — never del/create per frame
 ```
 
 **Runtime rotation / scale** (about the anchor; `1.0`/`0` = fast blit path)

@@ -19,7 +19,7 @@ import picogame_shapes as shp
 import picogame_pool
 import picogame_ui as ui
 
-W, H = 320, 240
+W, H = picogame_game.screen()   # never hardcode: the same game runs at 240x240 and 640x480
 BACKGROUND = pg.rgb565(0, 0, 8)
 FRAMES = 16
 

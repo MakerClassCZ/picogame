@@ -179,6 +179,7 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 
 ### `picogame_pool` — reusable sprite pool
 - `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` · `.spawn() -> sprite | None` · `.free(s)` · `.free_all()` · `.count() -> int`. (`.items` = all sprites.)
+- **`visible` means only "draw this"** - the pool keeps its own in-use bit (`.alive`, one byte per slot), so blinking a pooled sprite through `.visible` is safe: its slot stays taken. `spawn()` shows the sprite it hands out and `free()` hides it again, so `if not s.visible: continue` stays a correct liveness guard. While a sprite is blinked off that guard skips it, so it doesn't move for those frames - guard on `pool.alive[i]` instead if that matters.
 
 ### Sprite collision (native methods)
 Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware (no separate module).

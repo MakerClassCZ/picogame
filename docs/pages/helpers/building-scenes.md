@@ -144,5 +144,5 @@ for s in bullets.items:                    # zero-alloc iteration
 ```
 
 :::note[Gotchas]
-always skip hidden slots when iterating (`if not s.visible: continue`) - `items` holds every slot, alive or not. `spawn()` returns the first free slot it finds (don't rely on any particular order), so if you `free(s)` and `spawn()` in the same step, read any state off `s.data` BEFORE freeing - the new spawn may overwrite it. A full pool returns None from `spawn()`; check for it. All sprites share one bitmap, so per-entity frame/animation must be set on each sprite after `spawn()`.
+always skip hidden slots when iterating (`if not s.visible: continue`) - `items` holds every slot, alive or not. `spawn()` returns the first free slot it finds (don't rely on any particular order), so if you `free(s)` and `spawn()` in the same step, read any state off `s.data` BEFORE freeing - the new spawn may overwrite it. A full pool returns None from `spawn()`; check for it. All sprites share one bitmap, so per-entity frame/animation must be set on each sprite after `spawn()`. Hiding a pooled sprite is safe - the pool tracks its slots in `pool.alive`, not through `visible` - but your own guard skips it while it's blinked off, so blink-and-move needs `if not pool.alive[i]` instead.
 :::
