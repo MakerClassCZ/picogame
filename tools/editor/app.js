@@ -2193,8 +2193,8 @@ function effectsForm(box, lv, rerender) {
     if (names.length) {
       var sp = frow(box, "hide");
       spriteChips(sp, r, "hide", names, write, rerender);
-      add(sp, mk("label", null, "show"));
-      spriteChips(sp, r, "show", names, write, rerender);
+      var sp2 = frow(box, "show");
+      spriteChips(sp2, r, "show", names, write, rerender);
     }
     box.appendChild(mk("div", "ddsep"));
   });
