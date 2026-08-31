@@ -418,10 +418,7 @@ function inspector(box) {
       s.value = en.anim || ""; s.onchange = function () { snapshot(); en.anim = s.value || null; };
       add(row, s); box.appendChild(row);
     }
-    box.appendChild(mk("div", "hint", "data (JSON, read by the game as sprite.data):"));
-    const ta = mk("textarea"); ta.rows = 2; ta.value = en.data ? JSON.stringify(en.data) : "";
-    ta.onchange = function () { try { en.data = ta.value ? JSON.parse(ta.value) : null; ta.classList.remove("bad"); } catch (e) { ta.classList.add("bad"); toast("data is not valid JSON", "err"); } };
-    box.appendChild(ta);
+    fieldData(box, en, "data (JSON, read by the game as sprite.data):");
     dupDelRow(box, "entity", en, L().entities);
   } else if (sel.hud) {
     const hd = sel.hud;
@@ -438,6 +435,7 @@ function inspector(box) {
     fieldNum(box, "x", z.x, function (v) { z.x = v; }); fieldNum(box, "y", z.y, function (v) { z.y = v; });
     fieldNum(box, "w", z.w, function (v) { z.w = v; }); fieldNum(box, "h", z.h, function (v) { z.h = v; });
     box.appendChild(hint("view.in_zone(x, y, tag) returns this when a point is inside."));
+    fieldData(box, z, 'data (JSON) - {"script": "intro"} names a story script (picogame_script):');
     dupDelRow(box, "zone", z, L().zones);
   } else if (sel.point) {
     const q = sel.point;
@@ -445,6 +443,7 @@ function inspector(box) {
     fieldNum(box, "x", q.x, function (v) { q.x = v; });
     fieldNum(box, "y", q.y, function (v) { q.y = v; });
     box.appendChild(hint("view.point(name) returns (x, y)."));
+    fieldData(box, q, "data (JSON, read by the game as view.pdata[name]):");
     dupDelRow(box, "point", q, L().points);
   } else if (sel.particle) {
     const p = sel.particle;
@@ -782,6 +781,12 @@ function fieldText(box, label, val, set) {
   const inp = mk("input"); inp.type = "text"; inp.value = val;
   inp.onfocus = function () { snapshot(); }; inp.oninput = function () { set(inp.value); updateStatus(); };
   add(row, inp); box.appendChild(row); return inp;
+}
+function fieldData(box, obj, hintText) {
+  box.appendChild(mk("div", "hint", hintText));
+  const ta = mk("textarea"); ta.rows = 2; ta.value = obj.data ? JSON.stringify(obj.data) : "";
+  ta.onchange = function () { try { snapshot(); obj.data = ta.value ? JSON.parse(ta.value) : null; ta.classList.remove("bad"); } catch (e) { ta.classList.add("bad"); toast("data is not valid JSON", "err"); } };
+  box.appendChild(ta);
 }
 function fieldNum(box, label, val, set, step) {
   const row = mk("div", "row"); add(row, mk("label", null, label));
