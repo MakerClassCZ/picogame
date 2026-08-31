@@ -215,8 +215,11 @@ def main():
                     help="scripted input timeline, FRAME:BUTTON[:HELD_FRAMES] items separated by "
                          "commas: --keys \"20:RIGHT,40:X:2,60:-RIGHT\" walks right from frame 20, "
                          "taps X for 2 frames at 40 (a tap is what just_pressed needs) and lets go "
-                         "at 60. FRAME counts polled frames from 1: the button is down on that "
-                         "frame's input read. Headless only (a live window reads the real keyboard).")
+                         "at 60. FRAME counts PRESENTED frames (the same counter as --frames): "
+                         "the button is down from that frame's present onward. A game that presents "
+                         "more than once per loop (e.g. an immediate HudBar.draw() after refresh) "
+                         "advances this counter faster than its game loop - present once per loop, "
+                         "or budget for the drift. Headless only (a live window reads the keyboard).")
     ap.add_argument("--fast", action="store_true",
                     help="headless: run the frame loop at full speed by giving picogame_clock a "
                          "VIRTUAL clock -- the frame sleep is skipped but dt still reads the nominal "

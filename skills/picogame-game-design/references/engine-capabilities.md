@@ -435,7 +435,7 @@ CLI: `game` (positional), `--frames N` (default 150), `--backend pil|pygame`, `-
 `--keys` is `FRAME:BUTTON[:HELD_FRAMES]` items separated by commas — `25:B:3` taps B for 3 frames at
 frame 25, `40:X` presses and holds, `60:-X` releases. This is how you test anything read with
 `just_pressed` (shoot, jump, confirm, place): `--hold` can only express "down the whole run", so a
-tap needs the timeline. Frames count polled frames from 1, so pair it with a `--shot-at` a few frames
+tap needs the timeline. Frames count PRESENTED frames (the --frames counter; a per-loop immediate HUD draw advances it twice per loop), so pair it with a `--shot-at` a few frames
 later to see the result. Headless only (a live window reads the real keyboard); composes with
 `--profile`. Env `PICOGAME_SIM_SIZE=WxH` sets the screen size (e.g. `240x240` for a PicoSystem, `320x240`
 default) — smoke a game at BOTH sizes, since games must read `picogame_game.screen()`, not hardcode.
