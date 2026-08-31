@@ -39,20 +39,21 @@
     <button id="btnLoad" class="mini opt">Load</button>
     <button id="btnTryPlay" class="mini" title="Open this level running in the playground">&#9654; Try in playground</button>
     <details id="storyD" class="dd">
-      <summary class="mini" title="Script bodies + level effects (picogame_script)">Story &#9662;</summary>
-      <div class="ddmenu" style="min-width:380px">
+      <summary class="mini" title="Script bodies for zone stories (picogame_script)">Story &#9662;</summary>
+      <div class="ddmenu" style="min-width:560px">
         <div class="hint">Bodies for named zone scripts (<code>{"script": "name"}</code> in a zone's data) &mdash;
           the inside of <code>def name(d):</code>, handed to the playground on Try. Declarative zones
-          (<code>say</code> / <code>ask</code> / <code>goto</code> data) compile on their own and need nothing here.</div>
+          (<code>say</code> / <code>ask</code> / <code>goto</code> data) compile on their own and need nothing here.
+          Level <b>effects</b> (the gate-opening rules) are edited in the <b>Level panel</b> &mdash; click empty map space.</div>
         <div style="display:flex;gap:6px;margin:4px 0">
           <select id="storySel" style="flex:1"></select>
+          <button id="storyApply" class="mini">Save</button>
           <button id="storyNew" class="mini">New&hellip;</button>
         </div>
-        <textarea id="storyBody" rows="10" spellcheck="false" style="width:100%;box-sizing:border-box;font:12px ui-monospace,Menlo,Consolas,monospace"></textarea>
-        <div class="hint">This level's effects (JSON): world changes replayed from story flags on load and
-          whenever a flag is set, e.g. <code>[{"if":"gate_open","swap":[3,6],"unsolid":[3]}]</code>
-          (also <code>solid</code>, <code>hide</code>/<code>show</code> by sprite name).</div>
-        <textarea id="storyFx" rows="2" spellcheck="false" style="width:100%;box-sizing:border-box;font:12px ui-monospace,Menlo,Consolas,monospace"></textarea>
+        <div id="storyCM"></div>
+        <textarea id="storyBody" rows="16" spellcheck="false" style="width:100%;box-sizing:border-box;resize:vertical;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace"></textarea>
+        <div class="hint">Switching scripts or closing this panel saves; Save does too. Runs with the runner's
+          globals in scope: <code>view</code>, <code>player</code>, <code>goto()</code>, <code>apply_effects()</code>&hellip;</div>
       </div>
     </details>
     <details id="exportD" class="dd">

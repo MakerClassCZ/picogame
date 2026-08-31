@@ -276,6 +276,23 @@ function panelSelect() {
 
   cameraPanel(panel);
 
+  add(panel, h3("Story effects"));
+  panel.appendChild(hint('World changes replayed from story flags - on level load and whenever a flag is set. ' +
+    'E.g. <code>[{"if":"gate_open","swap":[3,6],"unsolid":[3]}]</code>; also <code>solid</code>, ' +
+    '<code>hide</code>/<code>show</code> (sprite names). Flags come from zone <code>say/ask</code> ' +
+    '<code>set</code> or <code>d.ev_set()</code> in scripts (Story \u25be).'));
+  const fxTa = mk("textarea"); fxTa.rows = 2;
+  fxTa.value = L().effects ? JSON.stringify(L().effects) : "";
+  fxTa.onchange = function () {
+    try {
+      snapshot();
+      const v = fxTa.value ? JSON.parse(fxTa.value) : null;
+      if (v) L().effects = v; else delete L().effects;
+      fxTa.classList.remove("bad"); scheduleAutosave();
+    } catch (e) { fxTa.classList.add("bad"); toast("effects is not valid JSON", "err"); }
+  };
+  panel.appendChild(fxTa);
+
   add(panel, h3("Objects"));
   const any = L().entities.length + L().hud.length + L().zones.length + L().points.length + L().particles.length;
   if (!any) { panel.appendChild(hint("Nothing placed yet. Use Paint to make ground, Place to drop sprites.")); return; }
@@ -1084,7 +1101,8 @@ if (minimap) {
 
 // ================================================================ KEYBOARD
 window.addEventListener("keydown", function (ev) {
-  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)
+    || (document.activeElement && document.activeElement.isContentEditable);   // CodeMirror (Story panel)
   if (typing) return;
   if (ev.key === " ") { spacePan = true; canvas.style.cursor = "grab"; ev.preventDefault(); return; }
   const mod = ev.ctrlKey || ev.metaKey;
@@ -1826,9 +1844,34 @@ function storyScriptNames() {
   });
   return Object.keys(names).sort();
 }
+var storyEd = null;    // CodeMirror instance once mounted; textarea until then / offline
+var storyCur = "";     // script name whose body is in the pane
+function storyGet() { return storyEd ? storyEd.getValue() : $("storyBody").value; }
+function storySet(v) { if (storyEd) storyEd.setValue(v); else $("storyBody").value = v; }
+function storyPersist() {
+  if (!storyCur) return;
+  var v = storyGet();
+  project.scripts = project.scripts || {};
+  if (project.scripts[storyCur] !== v) {
+    snapshot(); project.scripts[storyCur] = v; scheduleAutosave();
+  }
+}
+function mountStoryEditor() {
+  // Reuse the playground's CodeMirror bundle (same origin on the site; the hosted URL for the
+  // standalone clone) for highlighting + indentation. Offline: the plain textarea stays.
+  var cmEl = $("storyCM");
+  if (storyEd || !cmEl || cmEl.dataset.tried) return;
+  cmEl.dataset.tried = "1";
+  var base = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";
+  import(base + "vendor/codemirror.js?v=lh7").then(function (cm) {
+    storyEd = cm.mountEditor(cmEl, $("storyBody").value);
+    cmEl.style.display = "block";
+    $("storyBody").style.display = "none";
+  }).catch(function () { /* offline standalone: textarea fallback */ });
+}
 function refreshStory() {
   var selEl = $("storySel"); if (!selEl) return;
-  var cur = selEl.value;
+  var cur = storyCur || selEl.value;
   selEl.innerHTML = "";
   selEl.appendChild(new Option("(pick a script)", ""));
   storyScriptNames().forEach(function (n) {
@@ -1836,37 +1879,37 @@ function refreshStory() {
     selEl.appendChild(new Option(n + mark, n));
   });
   if (cur) selEl.value = cur;
-  $("storyBody").value = (project.scripts && project.scripts[selEl.value]) || "";
-  $("storyFx").value = L().effects ? JSON.stringify(L().effects) : "";
+  storyCur = selEl.value;
+  storySet((project.scripts && project.scripts[storyCur]) || "");
 }
 if ($("storyD")) {
-  $("storyD").addEventListener("toggle", function () { if ($("storyD").open) refreshStory(); });
+  $("storyD").addEventListener("toggle", function () {
+    if ($("storyD").open) { refreshStory(); mountStoryEditor(); }
+    else storyPersist();                                     // closing the panel saves
+  });
   $("storySel").onchange = function () {
-    $("storyBody").value = (project.scripts && project.scripts[$("storySel").value]) || "";
+    storyPersist();                                          // keep edits when switching
+    storyCur = $("storySel").value;
+    storySet((project.scripts && project.scripts[storyCur]) || "");
   };
-  $("storyBody").onchange = function () {
-    var n = $("storySel").value;
-    if (!n) { toast("Pick or create a script first", "err"); return; }
-    snapshot();
-    project.scripts = project.scripts || {};
-    project.scripts[n] = $("storyBody").value;
-    refreshStory(); scheduleAutosave();
-  };
+  $("storyApply").onclick = function () { storyPersist(); refreshStory(); toast("Script saved", "ok"); };
   $("storyNew").onclick = function () {
     var n = window.prompt('Script name (a zone starts it via {"script": "name"}):', "");
     if (!n) return;
+    storyPersist();
     snapshot();
     project.scripts = project.scripts || {};
     if (!(n in project.scripts)) project.scripts[n] = "";
-    refreshStory(); $("storySel").value = n; $("storyBody").value = project.scripts[n];
+    storyCur = n;
+    refreshStory();
   };
-  $("storyFx").onchange = function () {
-    try {
-      snapshot();
-      var v = $("storyFx").value ? JSON.parse($("storyFx").value) : null;
-      if (v) L().effects = v; else delete L().effects;
-      $("storyFx").classList.remove("bad"); scheduleAutosave();
-    } catch (e) { $("storyFx").classList.add("bad"); toast("effects is not valid JSON", "err"); }
+  $("storyBody").onkeydown = function (ev) {               // textarea fallback: Tab indents
+    if (ev.key === "Tab") {
+      ev.preventDefault();
+      var t = ev.target, a = t.selectionStart;
+      t.value = t.value.slice(0, a) + "    " + t.value.slice(t.selectionEnd);
+      t.selectionStart = t.selectionEnd = a + 4;
+    }
   };
 }
 function ejectZoneScript(z) {
@@ -1883,7 +1926,9 @@ function ejectZoneScript(z) {
     project.scripts[name] = body.join("\n");
     z.data = { script: name };
     toast('Converted - the body now lives under Story ▾ as "' + name + '"', "ok");
-    renderPanel(); refreshStory(); scheduleAutosave();
+    storyCur = name;
+    if ($("storyD")) $("storyD").open = true;
+    renderPanel(); refreshStory(); mountStoryEditor(); scheduleAutosave();
   }).catch(function () {
     toast("Convert needs the playground reachable (the compiler lives there)", "err");
   });

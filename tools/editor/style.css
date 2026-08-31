@@ -150,3 +150,8 @@
   .pg-editor #minimap { width: 128px; height: 84px; }
   .pg-editor .opt { display: none; }
 }
+
+/* Story panel: the mounted CodeMirror pane (hidden until the bundle loads; textarea is the fallback) */
+.pg-editor #storyCM { display: none; height: 340px; resize: vertical; overflow: auto;
+  border: 1px solid #445; border-radius: 4px; background: #0d0f17; }
+.pg-editor #storyCM .cm-editor { height: 100%; }
