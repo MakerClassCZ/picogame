@@ -43,8 +43,11 @@ symptom, apply the first-listed fix, only then investigate deeper.
 4. **RAM curve** — print `gc.mem_free()` every few seconds; a downward slope = per-frame allocation.
 5. Only after 1-4: read the engine reference for a cheaper building block.
 
-**Verifying a first-person / projected game headless:** scripted key timelines drift on wall
-slides, so don't choreograph long routes - build an ENV-GATED debug start pose into the game
+**Verifying a game headless when a long route is fragile** (a first-person walker sliding along
+walls, a platformer whose route depends on where you land, anything with a respawn): a scripted
+`--keys` timeline is exact in TIME (frames are the game's own `clock.tick()` iterations), but the
+game's STATE can still diverge - one missed jump and every later key lands in the wrong place.
+Don't choreograph long routes: build an ENV-GATED debug start pose into the game
 (`if os.getenv("DBG_POSE"): px, py, ang = parse(...)`) and give each `--keys` proof a 2-3 step
 route from a pose next to the thing under test. Two probe builds independently invented this;
 budget ~10 lines for it up front. For invisible mechanics (a meter, a graze), print one event

@@ -15,7 +15,8 @@ import picogame as pg
 
 def _bm(data, w, h, color, frames=1, stride=None, transparent=0):
     stride = stride if stride is not None else w * frames
-    pal = array.array("H", [pg.rgb565(0, 0, 0), color])
+    cols = color if isinstance(color, (list, tuple)) else [color]      # index 0 = transparent
+    pal = array.array("H", [pg.rgb565(0, 0, 0)] + list(cols))
     return pg.Bitmap(data, w, h, format=pg.PAL8, palette=pal,
                      frames=frames, stride=stride, transparent=transparent)
 
@@ -51,25 +52,56 @@ def ring(d, color, thickness=2):
     return _bm(data, d, d, color)
 
 
-def _mask_into(mask, buf, w, stride=0, x0=0):
+def _mask_into(mask, buf, w, stride=0, x0=0, index=None):
     # Rasterise one string mask into `buf` at column x0 of a `stride`-wide sheet
     # (stride 0 = the buffer is exactly one w-wide frame). Shared by from_mask/masks.
+    # `index` maps a mask character to its palette index (multi-colour art); without it
+    # the classic one-colour set is used ('#'/'X'/'1' -> 1, everything else transparent).
     if not stride:
         stride = w
     for y, row in enumerate(mask):
         base = y * stride + x0
         for x, ch in enumerate(row):
-            if ch in "#X1":
-                buf[base + x] = 1
+            if index is None:
+                if ch in "#X1":
+                    buf[base + x] = 1
+            else:
+                v = index.get(ch)
+                if v:
+                    buf[base + x] = v
+
+
+def _palette(color):
+    # One colour -> (None, colour): the classic '#' path. A {char: colour} map -> a character
+    # index plus the PAL8 palette, so ONE mask can carry a body, an outline and a highlight -
+    # the "shape AND colour identity" the design bar asks for, without hand-building an atlas.
+    if not isinstance(color, dict):
+        return None, [color]
+    index, pal = {}, []
+    for ch, col in color.items():
+        if len(ch) != 1:
+            raise ValueError("mask palette keys must be single characters, got %r" % (ch,))
+        pal.append(col)
+        index[ch] = len(pal)                 # 0 stays transparent
+    if len(pal) > 255:
+        raise ValueError("a PAL8 mask palette holds at most 255 colours")
+    return index, pal
 
 
 def from_mask(mask, color):
-    """mask: list of strings, '#'/'X'/'1' = set. Returns a bitmap sized to it."""
+    """mask: list of strings, '#'/'X'/'1' = set. Returns a bitmap sized to it.
+
+    `color` may instead be a {character: colour} dict - then EACH character is its own
+    palette entry and any other character (space, '.') is transparent:
+
+        shp.from_mask(["  ##  ", " #oo# ", "#o..o#"], {"#": OUTLINE, "o": BODY, ".": GLINT})
+    """
     h = len(mask)
     w = max(len(r) for r in mask)
     data = bytearray(w * h)
-    _mask_into(mask, data, w)
-    return _bm(data, w, h, color)
+    index, pal = _palette(color)
+    _mask_into(mask, data, w, index=index)
+    return _bm(data, w, h, pal)
 
 
 def masks(mask_list, color):
@@ -94,9 +126,10 @@ def masks(mask_list, color):
     w = max(max(len(r) for r in m) for m in mask_list)
     stride = w * n
     data = bytearray(stride * h)
+    index, pal = _palette(color)             # `color` may be a {char: colour} map, as from_mask
     for f, mask in enumerate(mask_list):
-        _mask_into(mask, data, w, stride, f * w)
-    return _bm(data, w, h, color, frames=n, stride=stride)
+        _mask_into(mask, data, w, stride, f * w, index)
+    return _bm(data, w, h, pal, frames=n, stride=stride)
 
 
 def atlas(frames_data, w, h, color):

@@ -20,6 +20,11 @@
 # `sprite.data` for per-entity state - the pool NEVER reads or writes it, so pre-allocating one
 # dict per slot at start-up and only mutating it keeps a pool allocation-free.
 #
+# A recycled slot comes back in its BASELINE look - the blit effect, scale/angle, frame and
+# flips are restored to how the pool was built, so last life's hit-flash (or a death scale-up)
+# never leaks into the next spawn. Configure the sprites after construction? Call `baseline()`
+# once to re-snapshot; the pool then preserves THAT.
+#
 #   bullets = Pool(scene, bullet_bm, 6, anchor=(0.5, 0.5))
 #   b = bullets.spawn()                  # -> a now-visible sprite, or None if full
 #   if b: b.data = {"vx": 6}; b.move(x, y)
@@ -39,14 +44,42 @@ class Pool:
                 s.anchor = anchor
             s.data = None
             scene.add(s, fixed=fixed)
+        self.baseline()                    # what a fresh slot looks like; re-snap with baseline()
+                                           #  if you configure the sprites AFTER construction
+
+    def baseline(self):
+        """Re-snapshot what a FRESH slot looks like - call after configuring the pool's sprites
+        (scale/angle/frame/a permanent tint). `spawn()` restores this snapshot, so a slot never
+        comes back wearing the last user's hit-flash."""
+        self._base = [(s.flash, s.tint, s.dither, s.shadow, s.scale, s.angle,
+                       s.frame, s.flip_x, s.flip_y) for s in self.items]
+        return self
 
     def spawn(self):
-        """Take the first free slot, show it and return its sprite (or None if full)."""
+        """Take the first free slot, show it and return its sprite (or None if full).
+
+        The slot is handed back in its BASELINE look (see `baseline()`): the blit effect,
+        scale/angle, frame and flips are restored to what they were when the pool was built,
+        so a rock recycled from an exploding one is not still flashing white. Only `.data`
+        and position are the caller's to set."""
         al = self.alive
         for i in range(len(al)):
             if not al[i]:
                 al[i] = 1
                 s = self.items[i]
+                b = self._base[i]
+                if b[0] != s.flash or b[1] != s.tint or b[2] != s.dither or b[3] != s.shadow:
+                    s.flash, s.tint, s.dither, s.shadow = b[0], b[1], b[2], b[3]
+                if b[4] != s.scale:
+                    s.scale = b[4]
+                if b[5] != s.angle:
+                    s.angle = b[5]
+                if b[6] != s.frame:
+                    s.frame = b[6]
+                if b[7] != s.flip_x:
+                    s.flip_x = b[7]
+                if b[8] != s.flip_y:
+                    s.flip_y = b[8]
                 s.visible = True
                 return s
         return None

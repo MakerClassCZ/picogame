@@ -109,7 +109,9 @@ def main():
     A = buttons.A
     refresh = scene.refresh
     tick = clock.tick
-    last_hud = None
+    h_score = h_lives = h_state = None            # HUD shadow copies: SCALARS, not a tuple - a
+                                                  #  `key = (a, b, c)` per frame allocates every
+                                                  #  frame (the MUST in engine-capabilities.md)
     while True:
         poll()                                    # 1. input
         if st.state == PLAY:                      # most-frequent state first
@@ -117,9 +119,8 @@ def main():
         elif pressed(A):                          # TITLE and OVER: A = (re)start
             new_game()                            # INSTANT restart — reset in place, no reload
         refresh()                                 # 3. draw what changed (dirty-rect)
-        key = (st.score, st.lives, st.state)
-        if key != last_hud:                       # only repaint the HUD when it changes
-            last_hud = key
+        if st.score != h_score or st.lives != h_lives or st.state != h_state:
+            h_score, h_lives, h_state = st.score, st.lives, st.state   # repaint on CHANGE only
             draw_hud()                            # safe AFTER refresh() ONLY because the scene never
                                                   # draws into the reserved band (top=BAR); an overlay
                                                   # ON the play area needs picogame_game.overlay()

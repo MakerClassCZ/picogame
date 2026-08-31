@@ -342,8 +342,23 @@ all and clamps against a remembered `ceiling_y` — so shafts, moving into a wal
 closed rooms each want a third case. Resolve **one axis at a time, in the direction of travel**:
 probe the cell the mover would enter this frame, and on a hit snap flush against it and zero that
 velocity. The direction falls out of the sign, so there is nothing to duplicate, and one-way
-collapses into a single condition on the probe (`solid or (one_way and vy > 0)`) instead of a
-parallel code path.
+collapses into a single condition on the probe (`solid or (one_way and vy > 0 and crossed)`) instead of a
+parallel code path. `crossed` is the bit everyone gets wrong: a one-way tile catches you only if
+your FEET CROSSED its top edge this frame - `prev_feet <= tile_top <= new_feet`. Testing `vy > 0`
+alone re-lands you on a platform you are still overlapping after jumping up through it (the
+classic "sticky ceiling-platform" bug), which is why hand-rolled versions end up bolting on
+mid-body-embedding hacks and an extra standing-still probe. Keep the previous frame's foot y and
+the whole special case disappears:
+
+```python
+prev_feet = st.y + PH                       # BEFORE the move
+st.y += st.vy
+feet = st.y + PH
+t = tiles.at(st.x + PW // 2, feet)          # tile under the mover's centre
+if solid(t) or (one_way(t) and st.vy > 0 and prev_feet <= tile_top(feet) <= feet):
+    st.y = tile_top(feet) - PH              # snap flush
+    st.vy = 0; st.on_ground = True
+```
 
 **MVP:** tunable jump with asymmetric rise/fall gravity + variable height · coyote
 time + jump buffer · AABB tile collision with checkpoints.
@@ -472,9 +487,14 @@ strategy). Don't forget the mode-change direction reversal (fairness cue). Don't
 make frightened mode too generous at high levels. Don't omit tunnel slowdown.
 Don't randomize ghost targets — deterministic targeting is what makes it learnable.
 
-**MVP:** single-screen tile maze + dot-clear win + direction-queued movement · four
-ghosts with distinct Blinky/Pinky/Inky/Clyde targeting · power pellets →
-frightened with eat-ghost scoring.
+**MVP:** single-screen tile maze + dot-clear win + direction-queued movement · 2-4 chasers
+whose targeting rules DIFFER from each other (Pac-Man's Blinky/Pinky/Inky/Clyde split is the
+canonical worked example, not a shopping list - copy the *idea* of contrasting hunters, or the
+result is the pacman demo already in the tree) · one pressure-release valve (power pellets are
+Pac-Man's; a hiding spot, a slow field, a one-shot scare all serve the same beat).
+**BRAID THE MAZE:** a "perfect" maze (exactly one path between any two cells) is unplayable as a
+chase board - dead ends are death sentences. Knock out ~10-20% of the walls so every junction has
+a loop, then check that no cell is more than a couple of steps from a loop.
 **NICE TO HAVE:** full scatter/chase timer + mode reversal · tunnel warp with ghost
 slowdown · fruit bonuses + Cruise Elroy speed-up.
 
@@ -487,7 +507,7 @@ personalities. Details in `techniques.md`.
 ---
 
 ## 7. Puzzle (Falling-Block & Match-3)
-*Device-proven: the match-3 example.*
+*Device-proven on the workspace's dev titles (match-3, picotris); the public tree ships no puzzle exemplar yet - the runnable reference is the playground's `?game=match3`.*
 
 *Exemplars: Tetris, Bejeweled/Candy Crush, Dr. Mario, Columns.*
 

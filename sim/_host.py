@@ -19,7 +19,9 @@ pressed_pins = set()        # SW_* pin names currently held down
 _frame = 0
 _max_frames = None          # headless: stop after this many presented frames
 _frame_hook = None          # optional per-frame callback fn(frame_no) — used by --profile
-_clocked = False            # True once the game called clock.tick(): count ITS frames, not presents
+_tick_mode = False          # set by run.py: True = a frame is one clock.tick() (the game's loop
+                            #  boundary), False = one present (games with no picogame_clock)
+_presents = 0               # presents seen in tick mode - only to catch "game never ticks"
 _backend = None             # set by run.py: "pil" or "pygame"
 _pyg = None                 # pygame module + surface, when used
 _last_image = None          # PIL.Image of the last frame (pil backend)
@@ -30,6 +32,12 @@ _shot_at = None             # frame index at which to save a screenshot
 
 class SimStop(Exception):
     """Raised to unwind the game's `while True` loop (frame limit / window close)."""
+
+
+def set_tick_mode(on):
+    """Count frames at clock.tick() instead of at each present (run.py decides, statically)."""
+    global _tick_mode
+    _tick_mode = bool(on)
 
 
 def configure(backend="pil", max_frames=None, shot=None, shot_at=None):
@@ -68,6 +76,21 @@ def _to_image():
     return img
 
 
+_notes = []                 # device-only costs the sim cannot show; printed once at exit
+
+
+def note(text):
+    """Record a device-only hazard the sim cannot reproduce (printed in the run summary)."""
+    if text not in _notes:
+        _notes.append(text)
+
+
+def take_notes():
+    out = list(_notes)
+    del _notes[:]
+    return out
+
+
 def set_frame_hook(fn):
     """Register a callback run once per presented frame as fn(frame_no) (profiling)."""
     global _frame_hook
@@ -87,18 +110,21 @@ def present():
     else:
         if _shot_path is not None and _frame == _shot_at:
             _to_image().save(_shot_path)
-    if not _clocked:
-        _advance()
+    global _presents
+    if _tick_mode:
+        _presents += 1
+        if _presents > 20000:            # safety valve: a "clocked" game that never ticks would
+            raise SimStop()              #  otherwise run forever
+        return
+    _advance()
 
 
 def tick_boundary():
     """Called by the picogame_clock shim (installed by sim/run.py) at each `clock.tick()` -
-    the game's OWN frame boundary. The first call switches counting to this mode for good."""
-    global _clocked, _frame
-    if not _clocked:
-        _clocked = True                  # from now on presents don't count; ticks do
-        _frame = 0                       # and SETUP presents (title art, first HUD draw) were
-                                         #  not frames either - frame 1 ends at the first tick
+    the game's OWN frame boundary. Setup (everything before the first tick) is frame 0, so a
+    `--keys 1:A` tap reaches the game's very first poll."""
+    if not _tick_mode:
+        return
     if _backend != "pygame" and _shot_path is not None and _frame == _shot_at:
         _to_image().save(_shot_path)     # shoot what the frame actually ended up showing
     _advance()

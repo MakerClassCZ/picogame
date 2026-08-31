@@ -56,7 +56,7 @@ Everything visible is a **scene layer** added with `scene.add(item, fixed=False)
 **0 B as a StripDraw**.
 
 Both surfaces share the **C draw primitives** (fast, in-engine): `pixel/line/rect/fill_rect/circle/
-fill_circle/ellipse/fill_ellipse/triangle/fill_triangle/round_rect/fill_round_rect/ring/frame3d/blit`
+fill_circle/ellipse/fill_ellipse/triangle/fill_triangle/fill_round_rect/ring/frame3d/blit`
 and **`text(x, y, str, fg, font)`** — text rendered in C into any surface. Because a StripDraw callback's
 `view` IS a Canvas onto the live strip, `view.text(...)` gives **0-RAM screen/HUD text** (no glyph
 cache, no per-label Bitmap) — the basis of `HudBar`. Use it for custom HUDs and text baked into a
@@ -99,7 +99,7 @@ objects stay cheap; only beyond ~6 scattered changes do they merge toward a full
 | `picogame_game` | `setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, left=0, right=0, rgb444=False) -> (scene, bufA, bufB)` — one-call display takeover + Scene + 2 strip buffers. `strip_h=None` → the board default `pg.STRIP_H` (**8** on fast/DMA boards, 24 portable); `rgb444=True`/`"auto"` = 12-bit colour (~25% less SPI where the panel supports it). Also `overlay(scene, display, items, buffer, x0,y0,x1,y1, *, background=0)` = `pg.render`+`scene.invalidate()` — draw a pause/menu OVER a live scene with no stale fragments. **Framebuffer/DVI board (Fruit Jam): `setup()` returns `(scene, None, None)`** (no strip buffers; `pg.render` ignores its buffer arg there, and HUD helpers accept a bare `picogame_game.display()` — they normalize it). `screen() -> (w, h)` / `display()` give the board's screen wherever it comes from (`supervisor.runtime.display`, the primary display) — lay every game out from `screen()`. `open_framebuffer(width, height, color_depth=None)` **before** `setup()` lets a game pick its own DVI resolution in code (e.g. 320×240 for speed, or 640×480 which needs PSRAM); a no-op on fixed SPI panels | every game's boot; `top/bottom/left/right` reserve a HUD border the scene won't touch |
 | `picogame_input` | `Buttons(..., usb=None)`: `.poll()`, `.is_pressed/.just_pressed/.just_released(mask)`, `.has(mask)`, `.repeat()`, `.clear()` (flush input on a state/menu transition); masks `UP DOWN LEFT RIGHT A B X Y L1 L2 R1 R2 START SELECT ALL`; **backend auto** = CP `keypad` (HW debounce, no missed taps) else digitalio, **or a scanned ROW×COL matrix** (`settings.toml PICOGAME_MATRIX_ROWS/COLS/MAP`); per-board map via `board_id` profile or `PICOGAME_BUTTONS`. **Auto-attaches a USB HID gamepad AND a USB HID keyboard** as extra OR'd sources on USB-host boards (Fruit Jam) — games get pad/keyboard input with ZERO code change (`picogame_usbpad` / `picogame_usbkbd`, wired or 2.4 GHz dongle; not Bluetooth); `usb=False` off / `usb=True` force; remap via `PICOGAME_USBPAD`. Local multiplayer = one `Buttons` per player via `Buttons(sources=[…])` + `find_pads()` | all button input — portable across boards, incl. a USB gamepad/keyboard |
 | `picogame_clock` | `Clock(fps, max_dt=0.1).tick()->dt` (frame cap + dt); `FixedStep(step_fps, max_steps=5).steps()` | `Clock` for smooth/arcade, `FixedStep` for deterministic physics (jumps, stacking) |
-| `picogame_shapes` | generate single-color PAL8 bitmaps: `rect/circle/ring/from_mask/atlas/color_frames/tileset_colors/poly_frames` | stop hand-rolling pixel buffers; `tileset_colors` for solid-tile sheets; `poly_frames` to bake rotation frames |
+| `picogame_shapes` | generate PAL8 bitmaps (one colour, or a {character: colour} mask palette for multi-colour art): `rect/circle/ring/from_mask/atlas/color_frames/tileset_colors/poly_frames` | stop hand-rolling pixel buffers; `tileset_colors` for solid-tile sheets; `poly_frames` to bake rotation frames |
 | `picogame_pool` | `Pool(scene, bitmap, capacity, anchor=None, fixed=False)`: `.spawn()->sprite|None`, `.free(s)`, `.free_all()`, `.count()`, `.items` | many of the **same** bitmap (bullets, sparks, pipes) — pre-allocate, never alloc per frame |
 | `Sprite.overlaps` / `Sprite.near` | zero-alloc collision built into Sprite: `a.overlaps(b, inset=0)` (AABB; `b` = sprite/point/rect; `inset=N` shrinks the caller's box by N px = the **generous smaller-than-sprite hitbox** §1.4 wants), `a.near(b, r)` (circular, no sqrt) | collision without temp rects, anchor/scale aware |
 | `picogame_math` | `clamp/mid/lerp/inv_lerp/remap/sgn/approach/wrap`, turn-trig `sin_t/cos_t/atan2_t`, vectors `length/distance/normalize/angle_rad/from_angle_rad` | game math — scalars, angles (turns), 2D vectors |
@@ -111,7 +111,7 @@ objects stay cheap; only beyond ~6 scattered changes do they merge toward a full
 | `picogame_synth` | synthio SFX/MIDI: `Synth()`, `note(...)`, `sfx(n, priority=0, window=0)` (priority classes + protected windows so hit-spam can't erase a boss boom), `sfx_seq(events)`, `Drone` (held engine/siren note fed per frame), `square(duty)` pulse timbres, `set_levels/mute`, `load_midi(...)`; ~0 RAM. **Imports + runs on ANY build** (audio-less/sim degrade to silent no-ops) and `Synth()` **self-guards a failed init** (tight heap / claimed pin) → check module `AVAILABLE` / instance `.available`, **no `try/except` needed** | a big bank of chiptune SFX or sequenced music |
 | `picogame_sfx` | `Kit(synth)`: a hardware-tuned signature SFX set built once — `.blip/.coin/.powerup/.zap` (your fire) `/.pew` (enemy) `/.jump/.hit(rotate=True)/.hurt/.boom/.explosion` + `.tick()` per frame; priority classes (hit-spam won't erase a boom); safe no-op on audio-less builds | the **default** SFX set — reach for this before hand-rolling `synth` notes |
 | `picogame_music` | PICO-8 tracker music: author in the PICO-8 tracker (or a free web clone), bake with `tools/p8music.py` (only referenced sfx kept, exact RAM printed, `--channels` cap), then `Player(synth, song)` + `.play(0)` + `.tick()` per frame. Effects run in synthio's C side. MEASURED cost (RP2040): 4 channels ≈ 3 ms/frame at 30 fps (~0.75 ms/channel) — tight games bake 2-3 channels. Silent no-op in the sim | background music without building a tracker — menus/title first (music fatigues in frantic play, see §1.7) |
-| `picogame_save` | `Save(key, schema, *, offset=0)`: `.load()->dict`, `.save(dict)`, `.reset()` — NVM-backed (survives reboot + FS wipe) | high scores / progress / settings; per-game `key`; write on game-over, not per frame |
+| `picogame_save` | `Save(key, schema, *, offset=0)`: `.load()->dict`, `.save(dict)`, `.reset()` — NVM-backed (survives reboot + FS wipe). **Unlike `picogame_synth`/`picogame_sfx` it does NOT self-guard: the constructor raises `RuntimeError` on a build without NVM**, so wrap it (`try: sv = Save(...) except Exception: sv = None`) or the game dies at startup on such a board | high scores / progress / settings; per-game `key`; write on game-over, not per frame |
 | `picogame_fx` | `Shake(scene).add(amt)/.tick(camx,camy)`; `Fade(scene,w,h,x=0,y=0,color,cell)` dither fade/dim/flash `.out()/.into()/.dim()/.pulse()/.tick()`; `Tween(v).to(t).tick()`; `Camera(scene, w, h, lerp=0.18, world_w=0, world_h=0).follow(x,y).apply()` (**pass `world_w`/`world_h` by keyword** — positional args after `h` set `lerp` and break the follow); `Sky`, `Scanlines`, `InvertFlash` | JUICE: screenshake, scene transitions / menu dim, value easing, smooth follow camera (composes with Shake), gradient sky, CRT scanlines, full-screen invert flash |
 | `picogame_rand` | `Rand(seed)`: `below/randint/random/chance/choice/shuffle/weighted`; `Bag(items,rng).next()` (7-bag anti-streak) | seeded/deterministic randomness — replays, daily seeds, fair spawns/pieces |
 | `picogame_input.Timer` | `Timer(frames)`: `.feed(cond)`, `.is_active`, `.consume()`, `.charge()` | input leniency — **coyote time** & **jump buffering** (fair platformers) |
@@ -267,7 +267,8 @@ the scene sees no change and skips it. After an in-place pixel edit, mark the sp
 
 **StripDraw callback for a full-frame effect** (0 bytes; view-local `(0,0)` == screen `(vx,vy)`)
 ```python
-def road(view, vx, vy, vw, vh):          # view = a Canvas onto the live strip, clipped to the rect
+def road(view, vx, vy, vw, vh):          # view = a Canvas onto the live strip; vw/vh = the REGION's size,
+                                     #  NOT the layer's (view.clear() wipes the full width)
     for ly in range(vh):
         view.fill_rect(0, ly, vw, 1, shade(vy + ly))   # one C primitive per scanline (keep it light)
 scene.add(pg.StripDraw(road, 0, 0, 320, 240))          # in a SCROLLING scene, add it fixed: add(sd, fixed=True)
@@ -435,7 +436,7 @@ CLI: `game` (positional), `--frames N` (default 150), `--backend pil|pygame`, `-
 `--keys` is `FRAME:BUTTON[:HELD_FRAMES]` items separated by commas — `25:B:3` taps B for 3 frames at
 frame 25, `40:X` presses and holds, `60:-X` releases. This is how you test anything read with
 `just_pressed` (shoot, jump, confirm, place): `--hold` can only express "down the whole run", so a
-tap needs the timeline. Frames count PRESENTED frames (the --frames counter; a per-loop immediate HUD draw advances it twice per loop), so pair it with a `--shot-at` a few frames
+tap needs the timeline. Frames count GAME frames - one per `clock.tick()`, i.e. your loop iteration, no matter how many times it presented (a draw-on-change HUD costs nothing) - so pair it with a `--shot-at` a few frames
 later to see the result. Headless only (a live window reads the real keyboard); composes with
 `--profile`. Env `PICOGAME_SIM_SIZE=WxH` sets the screen size (e.g. `240x240` for a PicoSystem, `320x240`
 default) — smoke a game at BOTH sizes, since games must read `picogame_game.screen()`, not hardcode.
@@ -497,6 +498,10 @@ The shipped games ARE the worked references. Public repo: **https://github.com/M
   up front, dodging a later grow-realloc on a fragmented heap.
 - **Never pass raw `0xRRGGBB` (or naïve RGB565).** All colors are display **wire byte order** —
   build them with `pg.rgb565(r, g, b)`; raw ints render wrong (byte-swapped/wrong layout).
+- **Release init-only builder modules.** A procedural asset module (`mygame_assets.py`) is
+  DEAD CODE after init - its bytecode stays on the heap for the whole session. Once the
+  bitmaps are baked: `art = None; del sys.modules["mygame_assets"]; gc.collect()` - measured
+  +19.5 KB on starcluster (a 27 KB assets .mpy). Only when nothing calls the module later.
 - **RP2040 RAM ceilings.** No full-screen `Canvas` (150 KB); HUD = `SceneLabel`/`HudBar`, not a
   full-width Canvas bar (~13 KB for nothing); `Canvas(320,130)` ~83 KB only stands alone;
   `gc.collect()` between scenes; split big games one-program-per-scene.

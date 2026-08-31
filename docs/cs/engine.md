@@ -241,10 +241,12 @@ strip, který se překrývá s jejím obdélníkem:
 
 ```python
 def draw(view, vx, vy, vw, vh):
-    # `view` je Canvas nad právě vykreslovaným stripem, oříznutý na průnik s vrstvou.
-    # Jeho místní bod (0, 0) odpovídá pixelu obrazovky (vx, vy) a (vw, vh)
-    # udává velikost výřezu. Kresli běžnými metodami Canvas; obsah zůstane
-    # uvnitř obdélníku vrstvy.
+    # `view` je Canvas nad právě vykreslovaným stripem. Jeho místní bod (0, 0) odpovídá
+    # pixelu obrazovky (vx, vy). POZOR: (vw, vh) je velikost CELÉ kreslené oblasti, ne
+    # vrstvy - obdélník vrstvy omezuje jen to, které stripy (řádky) callback zavolají,
+    # NE šířku, do které smíš kreslit. `view.clear()` nebo výplň přes celý view proto
+    # u úzké vrstvy přemaluje celou šířku obrazovky; kresli vlastní obdélník přes
+    # fill_rect(0, ly, MOJE_S, 1, ...).
     for ly in range(vh):
         Y = vy + ly                                  # řádek obrazovky
         view.fill_rect(0, ly, vw, 1, sky_or_road(Y))

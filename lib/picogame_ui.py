@@ -148,8 +148,9 @@ class SceneLabel:
 
     def reserve(self, chars):
         """Pre-build the FIXED-width buffer NOW, on the fresh/contiguous startup heap, for up to `chars`
-        characters - so a long line shown only later can't fail on a fragmented heap, AND every set()
-        after is zero-alloc (composes in place). A later longer string re-fixes once, then stays stable."""
+        characters - so a long line shown only later can't fail on a fragmented heap, AND set() then
+        composes in place (no growth; a few hundred B of short-lived churn per changed update).
+        A later longer string re-fixes once, then stays stable."""
         self._make_fixed(max(1, chars))
         self.sprite.visible = False         # nothing shown yet...
         self._text = None                   # ...and forget the cached text so a later set() re-renders

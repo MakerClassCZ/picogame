@@ -351,6 +351,8 @@ self-contained file** — no sibling imports, inline art — per the playground 
    put it next to the game (`my_game.py.orig`), never in `/tmp` — the user has to find it without you.
    ```sh
    python3 sim/run.py examples/my_game.py --frames 80 --hold RIGHT,A --shot /tmp/shot.png  # headless
+   # --frames/--keys/--shot-at count GAME frames (one per clock.tick()), so a --keys timeline
+   # lines up with your loop iterations no matter how often a frame presents.
    # a BUTTON-driven feature: script the press instead of reasoning about it (FRAME:BTN[:HELD])
    python3 sim/run.py examples/my_game.py --keys "5:RIGHT,25:B:3" --shot-at 30 --shot /tmp/jump.png
    # live window FOR THE USER to actually play (don't run it yourself — you won't see it):

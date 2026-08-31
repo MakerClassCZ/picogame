@@ -165,8 +165,17 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
         print("net growth %+d B over %d frames" % (grow, span))
         if half:
             first, second = half
-            verdict = ("LEAK — still allocating in the second half" if second > max(64, first * 0.5)
-                       else "one-off — the second half is flat, this is warm-up, not a leak")
+            # The halves alone are noisy: CPython frame objects and a GC pass make one half
+            # negative, and `second > first * 0.5` then reads a few hundred bytes of churn as a
+            # LEAK (probe agents saw the same unmodified game flip verdict at 300 / 400 / 800
+            # frames). A leak has to show up in the NET first - only then is the shape worth
+            # reading.
+            if grow <= 1024:
+                verdict = "clean — net retained growth is negligible for the whole run"
+            elif second > max(64, first * 0.5):
+                verdict = "LEAK — still allocating in the second half"
+            else:
+                verdict = "one-off — the second half is flat, this is warm-up, not a leak"
             print("  first half %+d B, second half %+d B  ->  %s" % (first, second, verdict))
         top = [d for d in diff if d.size_diff > 0][:8]
         if top:
@@ -196,6 +205,37 @@ def _install_virtual_clock():
     picogame_clock._ms = lambda: now[0]
     picogame_clock._sleep = lambda seconds: now.__setitem__(
         0, (now[0] + int(seconds * 1000 + 0.5)) & picogame_clock._MASK)
+
+
+def _uses_clock(game_path):
+    """Does this game (or any sibling module it imports, recursively) use picogame_clock?
+
+    Decided BEFORE the game runs, because the two frame counters must not switch mid-run: a
+    game's setup presents would otherwise consume the first scripted key events.
+    """
+    import ast
+    gdir = os.path.dirname(os.path.abspath(game_path))
+    seen, todo = set(), [game_path]
+    while todo:
+        f = todo.pop()
+        try:
+            tree = ast.parse(open(f).read())
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            for n in names:
+                if n == "picogame_clock":
+                    return True
+                sib = os.path.join(gdir, n + ".py")
+                if n not in seen and os.path.isfile(sib):
+                    seen.add(n)
+                    todo.append(sib)
+    return False
 
 
 def _install_frame_boundary(host):
@@ -284,6 +324,7 @@ def main():
         _host.setup_keymap()
         print("[sim] controls: arrows / WASD = move,  F / Ctrl = A,  G / Space = B,  "
               "R / Q = X,  T / E = Y,  close the window to quit")
+    _host.set_tick_mode(_uses_clock(game_path))   # decided statically, see _uses_clock
     _install_frame_boundary(_host)
     if args.fast:
         if args.backend == "pygame":
@@ -311,12 +352,17 @@ def main():
     code = compile(src, game_path, "exec")
     g = {"__name__": "__main__", "__file__": game_path}
     if args.profile:
+        if args.frames > 600:
+            print("[sim] --profile traces every allocation: expect ~10x the wall time of a plain "
+                  "run (900 frames ~ 2 min). Profile a few hundred frames; soak WITHOUT --profile.")
         _run_profiled(_host, code, g, game_path, game_dir, root, args.frames)
         return
     try:
         exec(code, g)
     except _host.SimStop:
         print("[sim] stopped after %d frames OK: %s" % (_host._frame, os.path.basename(game_path)))
+        for n in _host.take_notes():
+            print("[sim] DEVICE-ONLY WARNING: %s" % n)
     except Exception:
         print("[sim] EXCEPTION in %s:" % os.path.basename(game_path))
         traceback.print_exc()

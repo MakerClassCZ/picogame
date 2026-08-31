@@ -1002,6 +1002,17 @@ class StripDraw:
         self._w = width
         self._h = height
         self.always_dirty = always_dirty   # device-only effect (the sim has no dirty-rect; it full-repaints)
+        if always_dirty and width * height >= (_W * _H) // 2:
+            # The sim can't SHOW this cost (it repaints everything anyway), so at least name it:
+            # a big always_dirty layer marks its whole rect dirty every frame, which on device
+            # drags every other layer's strips into the repaint - the measured 14 fps trap.
+            _host.note("full-screen StripDraw, always_dirty=True (%dx%d). Correct IF its content "
+                       "really changes every frame (a road, a raycaster, a scrolling sky). If it "
+                       "changes only sometimes (HUD, menu, overlay), on DEVICE it repaints every "
+                       "frame and drags the whole scene out of dirty-rect (measured: 14 fps on a "
+                       "static screen) - then pass always_dirty=False and invalidate() on change. "
+                       "The sim cannot tell the two apart: it has no dirty-rect at all."
+                       % (width, height))
         self._pending = True
         self._view = Canvas(1, 1)        # reused; data/w/h repointed per strip
 

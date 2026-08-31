@@ -241,10 +241,11 @@ render strip that overlaps its rect:
 
 ```python
 def draw(view, vx, vy, vw, vh):
-    # `view` is a Canvas pointing straight at the live strip, clipped to the part that
-    # overlaps the layer's rect; its local (0,0) is screen pixel (vx, vy); (vw, vh) is
-    # that view's size. Draw with normal Canvas primitives -- a full-view fill stays
-    # inside the layer's rect (the callback only fires for strips the rect touches).
+    # `view` is a Canvas pointing straight at the live strip. Its local (0,0) is screen
+    # pixel (vx, vy). CAREFUL: (vw, vh) is the RENDER REGION's size, not the layer's -
+    # the rect only limits which strips (rows) fire the callback, NOT the width you can
+    # paint. So `view.clear()` / a full-view fill on a narrow layer paints the whole
+    # screen width; draw your own rectangle with fill_rect(0, ly, MY_W, 1, ...) instead.
     for ly in range(vh):
         Y = vy + ly                                  # screen row
         view.fill_rect(0, ly, vw, 1, sky_or_road(Y))
