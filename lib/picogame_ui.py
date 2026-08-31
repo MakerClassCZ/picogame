@@ -77,7 +77,9 @@ class SceneLabel:
 
     `reserve(chars)` (or a later over-long string) switches the label to FIXED width: the Bitmap +
     palette are built once and `set()` composes glyphs straight into the retained buffer + touch() -
-    ZERO allocation per update (matters for a high-frequency HUD). Without reserve it grows on demand.
+    NO growth and no rebuilds; the compose leaves ~0.3-0.5 KB of short-lived slice churn per CHANGED
+    update on device (freed at the next GC), so update on change, not per frame. Without reserve it
+    grows on demand.
 
     NAMING: scene-layer widgets are `Scene*` (SceneLabel / SceneBox / SceneMenu) - use them OVER a
     live scene (one still calling scene.refresh()). Their immediate twins (Label / TextBox / Menu)
@@ -125,7 +127,7 @@ class SceneLabel:
                 self._make_fixed(len(text))
             picogame_font.compose_into(self.font, text, self._buf, self._w, self._chars)
             self.sprite.visible = True
-            self.sprite.touch()             # pixels changed in place - no new Bitmap, no alloc
+            self.sprite.touch()             # pixels changed in place - no new Bitmap, no growth
         else:
             bmp, _, _, self._buf, self._pal = picogame_font._render_into(
                 self.pg, self.font, text, self.fg, self.bg, self._buf)

@@ -122,22 +122,33 @@ def _render_into(pg, font, text, fg, bg, buf):
     return bmp, w, h, data, palette
 
 
+_COMPOSE_FONT = None          # one-font fast path: HUD text is virtually always terminalio.FONT,
+_COMPOSE_CACHE = None         # so the hot loop looks glyphs up by BARE int cp - no tuple key alloc
+
+
 def compose_into(font, text, buf, w, chars):
     """Compose `text` into an EXISTING `buf` in place (stride `w`, height fh), truncated / blank-padded
-    to `chars` cells - every cell is (re)written so no clear is needed. Reuses the per-glyph flat cache
-    with whole-row memcpy; allocates no Bitmap and no palette, so a widget that pre-built its Bitmap over
-    `buf` (fixed width) can repaint by just calling this + sprite.touch() - zero per-update churn. buf
-    must be >= w*fh; `w` should be fw*chars."""
+    to `chars` cells - every cell is (re)written so no clear is needed. No Bitmap, no palette, no
+    growth: the buffer is repainted in place (+ sprite.touch()). The row copies DO make short-lived
+    slice objects (~0.3-0.5 KB per changed update on device, freed by the next GC) - update on
+    CHANGE, not per frame, and this stays negligible. buf must be >= w*fh; `w` = fw*chars."""
+    global _COMPOSE_FONT, _COMPOSE_CACHE
+    if font is not _COMPOSE_FONT:
+        _COMPOSE_FONT = font
+        _COMPOSE_CACHE = {}
+    cache = _COMPOSE_CACHE
     fw, fh = font.get_bounding_box()[:2]
     n = len(text)
     for i in range(chars):
         cp = ord(text[i]) if i < n else 32          # pad the tail with blanks
-        mv = memoryview(_glyph_flat(font, cp, fw, fh))
+        flat = cache.get(cp)
+        if flat is None:                            # cache MEMORYVIEWS: mv row-slices copy no data
+            flat = cache[cp] = memoryview(_glyph_flat(font, cp, fw, fh))
         d = i * fw
         base = 0
         for _gy in range(fh):
-            buf[d:d + fw] = mv[base:base + fw]      # whole-row memcpy (no per-pixel Python)
-            d += w
+            buf[d:d + fw] = flat[base:base + fw]    # whole-row memcpy (the slice is the one
+            d += w                                  #  remaining short-lived alloc per row)
             base += fw
 
 
