@@ -551,7 +551,7 @@ Details in `techniques.md`.
 ---
 
 ## 8. Racing — Pseudo-3D & Top-Down
-*Device-proven both ways: picobike/ghostrace (pseudo-3D), topracer/microrace/kartracer (top-down/mode7).*
+*Device-proven both ways on the workspace's dev titles; the public tree ships no racing exemplar yet - the runnable references are the road example on `docs/pages/helpers/pseudo-3d.md` (8A) and `picogame_mode7`'s docs (8B).*
 
 *Exemplars: Pole Position, OutRun, Super Sprint, Micro Machines, Mario Kart.*
 
@@ -611,8 +611,10 @@ SEGMENT projector, `sprite.scale = F/(F+z)`; with the C road pair the rows are L
 space, so scale by the row's half-width instead (`scale = hw[row] / hw[N-1] * FULL`), or cars read
 mis-sized against the road at their own row. Draw order: the engine draws in add order (no
 z-sort), so use the fixed-slots pattern — pre-add N sprites once, each frame sort your entity
-list and re-assign it into the slots (worked example: the billboard section of
-`docs/pages/helpers/pseudo-3d.md`).
+list and re-assign it into the slots (worked example: the pseudo-3d page's billboard section -
+NOTE it demonstrates the RAYCASTER's `project_sprite`; on the road, position sprites from
+`road.row_of(z)` / `edges_of(row)` and scale by `half_of(row)` instead - only the fixed-slots
+draw-order idiom carries over).
 
 **The road renderer — `picogame_road.Road` (device-proven on picobike: 15 → 39 fps over the
 Python loop):** the per-scanline Python road is the genre's classic wall; the wrapper drives the

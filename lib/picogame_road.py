@@ -69,6 +69,7 @@ class Road:
         self._hw = array("i", bytes(4 * n))
         self._tab = array("h", bytes(2 * 5 * n))
         nrow = height - horizon                  # nominal (flat) row count for perspective
+        self._nrow = nrow
         hw_max = width * half_width
         for i in range(n):
             t = (i + 1) / nrow                   # 0 at horizon, 1 at bottom (>1 in headroom)
@@ -149,9 +150,14 @@ class Road:
         return math.sin(d * self._w1) * self._a1 + math.sin(d * self._w2) * self._a2
 
     def row_of(self, z):
-        """Table row for a point z world units ahead (row rows-1 = at the car). None when
-        beyond the horizon. Screen y = horizon + pitch + row (minus hill headroom rows<0)."""
-        i = self.rows - 1 - int(z // self._world_step)
+        """Table row for a point z world units ahead. Row `nrow - 1` (the NOMINAL bottom -
+        the same row the curve sampling anchors `dist` at) is the car; hill-headroom rows
+        lie PAST it. None when beyond the horizon. Screen y = horizon_now + row.
+        NOTE the depth scale: rows step `world_step` wu apiece here (matching the drawn
+        EDGES/curves), while the surface stripes scroll on the `depth`-model (~depth/rows
+        wu per row) - picobike's historical split. For stripe-consistent sprite motion set
+        world_step ~= depth / (height - horizon) at construction."""
+        i = self._nrow - 1 - int(z // self._world_step)
         return i if 0 <= i < self.rows else None
 
     def half_of(self, row):
