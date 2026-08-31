@@ -601,10 +601,26 @@ accumulator in C (cfg = int32×7: two Q20 curve frequencies, two Q16 amp×gain t
 curve step, row offset); per strip `view.road(vy - horizon, tab, rl, rr, d05_q8, d07_q8, colors)`
 draws sky/road/rumbles/dashes as spans (tab = static int16×5 per row: edge width, dash half-width,
 two Q8 stripe phases, flags; colors = uint16×6). Keep in Python only: grass fill (1 rect/strip), the
-finish-line chequer (a few rows near the lap line), hills/pitch, and gameplay. The simulator
+finish-line chequer (a few rows near the lap line), **hills** (below), and gameplay. The simulator
 implements the pair bit-identically to the firmware (golden-tested), so build and screenshot the
-road in the sim like any other game. Guard with `hasattr(pg, "road_edges")` only for OLD firmware —
-the integration pattern is `picobike_bench_c.py` in the workspace.
+road in the sim like any other game. Guard with `hasattr(pg, "road_edges")` only for OLD firmware.
+Contract + worked argument derivation: `docs/pages/helpers/pseudo-3d.md` and `docs/reference.md`
+(`road_edges`, `Canvas.road`).
+
+**HILLS are not in `road_edges`** — it emits only left/right edges, so `cfg` is curvature-only.
+Hills come from **moving the horizon per frame**, i.e. from the `ri0` you pass to `view.road()`.
+The recipe (device-proven on picobike):
+- pick `HILL_AMP` = max horizon shift in px (24 at 320×240) and derive a per-frame `grade` in
+  −1..+1 from the world distance (two *incommensurate* sines read as irregular hills; one plain
+  sine reads as a washboard). `pitch = -int(grade * HILL_AMP)`, then `base = HORIZON + pitch`
+  and each strip draws `view.road(vy - base, …)`. Positive grade (downhill) lifts the horizon,
+  so MORE road rows are visible.
+- **Two setup consequences**, both easy to miss: the `StripDraw` region must start `HILL_AMP` px
+  ABOVE the nominal horizon (headroom for the road to rise), and the per-row tables (`hw`, `tab`)
+  must be sized `rows + HILL_AMP` so a downhill frame never indexes past their end.
+- Feed `grade` back into the sim (`speed += grade * PULL`) — a hill you can only see is scenery;
+  a hill you can feel in the throttle is a mechanic. Ramp `grade` to zero near the start/finish
+  so the results screen sits on level ground.
 
 ### 8B. Top-Down (Super Sprint / Micro Machines / Mario Kart)
 

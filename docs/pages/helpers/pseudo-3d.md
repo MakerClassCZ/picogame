@@ -164,6 +164,77 @@ crossings - a full-screen road holds **30 fps on the RP2040** with the game logi
 See [/reference/](/reference/) for the exact table formats, and the racing-genre recipe in the
 game-design skill for tuning.
 
+### The calling contract
+
+The reference gives the field formats; these are the decisions it leaves to you, in one place:
+
+- **Row order: index `0` is the horizon row, index `n-1` is the BOTTOM of the screen** (nearest).
+  The curve accumulator runs bottom-up. Per strip you pass `ri0 = vy - horizon` to `view.road()` -
+  rows above the horizon (`ri < 0`) are filled with the sky colour.
+- **You build `hw` (and `tab`) yourself, once at startup.** For a flat road the perspective is
+  simply *linear in the row*: with `t = (i + 1) / n` (0 at the horizon, 1 at the bottom),
+  `hw[i] = int(HALF_WIDTH_AT_BOTTOM * t * 65536)`. Scale the per-row `tab` fields the same way -
+  `edge_w`/`dash_hw` grow with `t`, and the two Q8 stripe phases come from the world depth
+  (`z = 1 / t`), e.g. `wb05 = int(z * 40) & 0x7FF`.
+- **Array typecodes are part of the contract** - the C binding takes raw buffers:
+  `rl`, `rr`, `tab` = `array("h")` · `hw`, `cfg` = `array("i")` · `colors` = `array("H")`.
+  A wrong typecode is silently wrong geometry, not an error.
+- **`Canvas.road` paints sky rows and the road span only - grass is yours.** In a Scene the
+  strip is cleared to the scene background first, so `setup(background=GRASS)` is enough (the
+  example below does exactly that); outside a Scene, or for textured ground, fill the strip
+  yourself (one `view.fill_rect` per strip) *before* calling `view.road()`.
+- **`tab` `flags` bit 0 = "this row may draw the centre dash"**; other bits are reserved.
+- **Hills are not in `road_edges`** (its `cfg` is curvature-only): move the horizon per frame and
+  re-derive `ri0`. The recipe, with its two setup consequences, is in the game-design skill's
+  racing section.
+- **`cfg` curve frequencies are Q20 degrees per world unit**: a curve pattern that repeats every
+  `D` world units wants `f1 = 360 * 2**20 // D`. Amplitudes `a1k`/`a2k` are Q16, pre-multiplied
+  by the per-row gain.
+
+A complete minimal road - runs in the simulator as-is (the sim implements the pair
+bit-identically to the firmware):
+
+```python
+from array import array
+import picogame as pg
+import picogame_game, picogame_clock
+
+W, H = picogame_game.screen()
+scene, bufA, bufB = picogame_game.setup(background=pg.rgb565(20, 60, 20))   # grass
+clock = picogame_clock.Clock(30)
+
+HORIZON = H // 3
+N = H - HORIZON                              # road rows: 0 = horizon .. N-1 = bottom
+rl = array("h", [0] * N); rr = array("h", [0] * N)
+hw = array("i", [0] * N); tab = array("h", [0] * (5 * N))
+for i in range(N):                           # perspective tables, built once
+    t = (i + 1) / N
+    hw[i] = int((W * 0.55) * t * 65536)      # Q16 half-width, linear in the row
+    z = 1.0 / t                              # world depth of this row
+    tab[i*5 + 0] = max(2, int(10 * t))       # rumble edge width
+    tab[i*5 + 1] = max(1, int(4 * t))        # dash half-width
+    tab[i*5 + 2] = int(z * 40) & 0x7FF       # stripe phase (Q8)
+    tab[i*5 + 3] = int(z * 80) & 0x7FF
+    tab[i*5 + 4] = 1                         # bit0: dashes allowed on this row
+
+COLORS = array("H", [pg.rgb565(90,140,230),  # sky
+                     pg.rgb565(110,110,110), pg.rgb565(100,100,100),   # road A/B
+                     pg.rgb565(220,60,60),  pg.rgb565(240,240,240),    # rumble A/B
+                     pg.rgb565(240,240,90)])                            # dash
+CFG = array("i", [900, 350, 5200, 2600, 6, 2, N])
+dist = 0
+
+def draw(view, vx, vy, vw, vh):
+    view.road(vy - HORIZON, tab, rl, rr, dist * 3 & 0xFFFF, dist * 5 & 0xFFFF, COLORS)
+
+scene.add(pg.StripDraw(draw, 0, 0, W, H))
+while True:
+    dist += 4
+    pg.road_edges(rl, rr, hw, N, (W // 2) << 16, dist, CFG)
+    scene.refresh()
+    clock.tick()
+```
+
 ## pg.project + Canvas.fill_triangles - real polygon 3D
 
 ![Flat-shaded 3D boxes orbited by a free camera](/img/project3d.gif)
