@@ -142,7 +142,7 @@ everything (no dirty-rect win), so keep screen shakes short — 2–6 frames (§
   proper track, a flying carpet) rather than a strip road. A **tiling** texture wraps forever (use a
   big `height`); a one-shot circuit image needs a small `height` or the distance repeats.
 - **Raycast walls (first-person corridors, native C).** One DDA ray per screen column finds the
-  nearest wall; each column draws as a distance-shaded vertical slice. *picogame:*
+  nearest wall; each column draws as a vertical slice shaded by WHICH AXIS was hit (two-tone; the wall colour has no distance term - the per-column distance is returned for your own fog/falloff). *picogame:*
   `picogame_ray.Raycaster` driving the native `pg.raycast` (integer 16.16) into a `StripDraw` =
   **0 RAM**, **~22-30 fps** full-screen. Add `.attach(sd)` on an `always_dirty=False` StripDraw for
   temporal repaint (standing still costs ~nothing — ideal for a grid-step dungeon crawler), and

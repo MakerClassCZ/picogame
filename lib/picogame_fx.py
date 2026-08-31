@@ -37,15 +37,23 @@ class Shake:
     cam_y)` every frame: it adds a decaying random offset ON TOP of your camera and applies
     the combined view via `scene.set_view`, so shake and a moving camera don't fight.
 
+    STRIP-RENDERED games (road, raycaster, mode-7): `set_view` never moves a StripDraw -
+    the "camera" lives in your renderer's parameters, and so does its shake. Pass
+    `scene=None`: tick() then only updates `self.ox`/`self.oy` (the frame's offset) and you
+    spend them yourself - `road.tick(dist, lateral + sh.ox)`, a horizon jittered by `sh.oy`,
+    a raycaster angle nudged by `sh.ox * 0.002`. Same trauma model, your camera.
+
     trauma is squared before use (Eiserloh) so small events barely shake and big ones slam.
     `max_offset` ~6 px suits 320x240 (>10 hides the action). `decay` is trauma lost per frame
     (~0.03 ≈ 0.8/sec at 30 fps -> a 'kick', not a 'rumble')."""
 
     def __init__(self, scene, max_offset=6, decay=0.03, seed=0x9E37):
-        self.scene = scene
+        self.scene = scene                           # None = offset-only mode (StripDraw games)
         self.max = max_offset
         self.decay = decay
         self.trauma = 0.0
+        self.ox = 0                                  # the frame's applied offset, always readable
+        self.oy = 0
         self._r = seed & 0xFFFF
 
     def _rnd(self):                                  # tiny 16-bit LCG -> -1.0 .. +1.0
@@ -62,12 +70,15 @@ class Shake:
     def tick(self, cam_x=0, cam_y=0):
         """Apply shake on top of (cam_x, cam_y). Returns True while still shaking."""
         if self.trauma <= 0.0:                       # idle: track the camera, but skip the RNG
-            self.scene.set_view(cam_x, cam_y)         # (no per-frame _rnd() calls when not shaking)
+            self.ox = self.oy = 0
+            if self.scene is not None:
+                self.scene.set_view(cam_x, cam_y)     # (no per-frame _rnd() calls when not shaking)
             return False
         sh = self.trauma * self.trauma
-        ox = int(self.max * sh * self._rnd())
-        oy = int(self.max * sh * self._rnd())
-        self.scene.set_view(cam_x + ox, cam_y + oy)
+        self.ox = int(self.max * sh * self._rnd())
+        self.oy = int(self.max * sh * self._rnd())
+        if self.scene is not None:
+            self.scene.set_view(cam_x + self.ox, cam_y + self.oy)
         self.trauma = max(0.0, self.trauma - self.decay)
         return self.trauma > 0.0
 

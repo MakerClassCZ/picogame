@@ -601,7 +601,10 @@ list and re-assign it into the slots (worked example: the billboard section of
 `docs/pages/helpers/pseudo-3d.md`).
 
 **The C road pair (2026-08, device-proven on picobike: 15 → 39 fps):** the per-scanline Python road
-loop is the genre's classic wall — replace it with the engine primitives. Once per frame
+loop is the genre's classic wall — replace it with the engine primitives. **Start with the
+`picogame_road.Road` wrapper** (human units: curve periods + swing in px, hills via `set_grade`,
+`curve_at()` for centrifugal pull, `row_of()`/`half_of()` for sprites — it owns every fixed-point
+table and the phase-wrap safety below). Drop to the raw pair only for a custom road look. Raw: once per frame
 `pg.road_edges(rl, rr, hw_q16, n, cx0_q16, int(dist), cfg)` runs the whole bottom-up curve
 accumulator in C (cfg = int32×7: two Q20 curve frequencies, two Q16 amp×gain terms, world step,
 curve step, row offset); per strip `view.road(vy - horizon, tab, rl, rr, d05_q8, d07_q8, colors)`
@@ -889,7 +892,7 @@ it at a performance cost.
 
 **MVP:** map from strings + `Raycaster` + `.attach()` · movement with a `solid()`
 test · 1 billboard enemy type that walks toward the player · exit tile = win.
-**NICE TO HAVE:** keys/doors (a wall type that disappears) · minimap (a small
+**NICE TO HAVE:** keys/doors — `Raycaster.set_cell(x, y, 0)` opens one cell at runtime (grid, `solid()` and `.map` stay consistent; works with a standing camera) · minimap (a small
 `Tilemap` in a corner) · collectibles (billboard + `near`) · `mode7` textured
 floor under the walls · step-based menu combat (§11).
 

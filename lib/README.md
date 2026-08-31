@@ -13,7 +13,7 @@ firmware; everything here is plain Python on top of it, and you only pay for wha
 | make art without an art pipeline | `picogame_shapes` (shapes → bitmaps) · `picogame_palette` (recolour, cycle, fade) |
 | make a hit feel like a hit — shake, flash, tween, fades | `picogame_fx` |
 | spawn many things; animate; read tile properties; script a sequence | `picogame_pool` · `picogame_anim` · `picogame_tiles` · `picogame_seq` |
-| do pseudo-3D — a Mode-7 floor, corridors, isometric | `picogame_mode7` · `picogame_ray` · `picogame_iso` |
+| do pseudo-3D — a Mode-7 floor, corridors, an OutRun road, isometric | `picogame_mode7` · `picogame_ray` · `picogame_road` · `picogame_iso` |
 | make sound and music | `picogame_sfx` (ready-made kit) · `picogame_synth` · `picogame_audio` · `picogame_music` |
 | save progress, stream big data, run a cutscene | `picogame_save` · `picogame_stream` · `picogame_cutscene` |
 | use a USB gamepad, a keyboard or an I2C pad | `picogame_usbpad` · `picogame_usbkbd` · `picogame_i2cpad` |

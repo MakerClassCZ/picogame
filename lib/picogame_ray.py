@@ -51,7 +51,7 @@ import picogame as _pg
 class Raycaster:
     def __init__(self, world, wall_colors, sky, floor, fov=0.66, stride=2):
         # world: list of strings; wall_colors: {type_int: (near_color, side_color)}
-        self.map = world
+        self.map = list(world)               # a copy set_cell() can rewrite rows of
         self.mw = len(world[0])
         self.mh = len(world)
         # flat int grid for the hot DDA loop: flat[y*mw+x] = wall type (0 = empty).
@@ -109,8 +109,23 @@ class Raycaster:
 
     def solid(self, x, y):
         if 0 <= x < self.mw and 0 <= y < self.mh:
-            return self.map[y][x] != "0"
+            return self._flat[y * self.mw + x] != 0    # _flat is the truth (set_cell mutates it)
         return True                          # out of bounds = wall
+
+    def set_cell(self, x, y, v):
+        """Change ONE world cell at runtime - a door opening, a wall dropping, a secret
+        revealed. v = wall type 0-9 (0 = empty; string maps are single-digit by design).
+        Keeps everything consistent: the C caster's grid, solid(), and .map (minimaps),
+        and drops the pose cache so a STANDING camera still sees the change next frame.
+        For EVENTS, not animation - each call forces one full re-cast; swapping dozens of
+        cells per frame throws away the standing-still optimisation every frame."""
+        if not (0 <= x < self.mw and 0 <= y < self.mh):
+            return
+        v = int(v)
+        self._flat[y * self.mw + x] = v
+        row = self.map[y]
+        self.map[y] = row[:x] + str(v) + row[x + 1:]   # rare event -> the tiny alloc is fine
+        self._cang = None                    # invalidate the pose cache (see cast())
 
     def cast(self, px, py, ang, sw, sh):
         """DDA one ray per `stride` screen columns; cache wall top/bottom/colour.

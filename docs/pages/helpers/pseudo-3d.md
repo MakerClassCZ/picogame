@@ -57,7 +57,7 @@ Draw into a **`StripDraw` view**, not a full-screen `Canvas` - a 320×240 `Canva
 
 ![A first-person raycaster - a dungeon corridor with depth-shaded walls](/img/raycaster.gif)
 
-A **Wolfenstein-style raycaster**: one DDA ray per screen column finds the nearest wall, and each column is drawn as a distance-shaded vertical bar. The render path is fully native: the engine caster `pg.raycast` (integer 16.16 C on device, a Python version in the sim) runs the per-column DDA AND emits the RLE-merged wall runs in the same pass; the lib does the once-per-frame trig and paints the runs with one `Canvas.vspans` batch per strip into a `StripDraw` view.
+A **Wolfenstein-style raycaster**: one DDA ray per screen column finds the nearest wall, and each column is drawn as a vertical bar **shaded by which axis the ray hit** (the classic two-tone Wolfenstein look - N/S faces get the `near` colour, E/W the `side` colour; there is no distance term in the wall colour). The caster DOES hand you the per-column perpendicular distance, so distance effects (fog, sprite falloff) are yours to add on top. The render path is fully native: the engine caster `pg.raycast` (integer 16.16 C on device, a Python version in the sim) runs the per-column DDA AND emits the RLE-merged wall runs in the same pass; the lib does the once-per-frame trig and paints the runs with one `Canvas.vspans` batch per strip into a `StripDraw` view.
 
 `import picogame_ray`
 
@@ -163,6 +163,32 @@ buffer-less `StripDraw` view. What used to be a ~100-row Python loop per frame b
 crossings - a full-screen road holds **30 fps on the RP2040** with the game logic on top.
 See [/reference/](/reference/) for the exact table formats, and the racing-genre recipe in the
 game-design skill for tuning.
+
+### The easy way: `picogame_road.Road`
+
+The wrapper owns everything below — tables, fixed-point units, the phase wrap, hills — and adds
+the two queries gameplay always needs (`curve_at` for physics, `row_of`/`half_of`/`edges_of` for
+sprites). The whole road becomes:
+
+```python
+import picogame_road
+road = picogame_road.Road(pg, W, H, H // 3, dict(
+    sky=pg.rgb565(90, 140, 230), road_a=pg.rgb565(110, 110, 110), road_b=pg.rgb565(100, 100, 100),
+    rumble_a=pg.rgb565(220, 60, 60), rumble_b=pg.rgb565(240, 240, 240), dash=pg.rgb565(240, 240, 90)),
+    curves=((16384, 90.0), (4096, 30.0)), hill_amp=24)
+
+def draw(view, vx, vy, vw, vh):
+    road.draw(view, vy)
+scene.add(pg.StripDraw(draw, 0, H // 3 - 24, W, H - (H // 3 - 24)))   # hill headroom above the horizon
+while True:
+    dist += speed
+    road.set_grade(grade)                      # hills move the horizon
+    road.tick(dist, player_x)                  # the frame's C curve pass
+    steer -= road.curve_at(dist) * grip        # centrifugal pull, same curve model
+    scene.refresh()
+```
+
+The raw contract below is for a custom road look (or for porting the pattern elsewhere).
 
 ### The calling contract
 

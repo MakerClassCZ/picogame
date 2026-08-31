@@ -103,7 +103,9 @@ Polish the *response*, not the simulation. On a handheld you own the whole pipel
 1. **Sound on the key action** — the single highest fun-per-byte feedback (see 1.7).
 2. **Hit-flash** — `sprite.flash = WHITE` for **1–3 frames** on impact; cheapest visual punch.
 3. **Screenshake (trauma model)** — keep a scalar `trauma 0..1`; events *add* (hit +0.3, big +0.6);
-   each frame offset = `max_off * trauma² * rand(-1,1)` via `picogame_fx.Shake`. `max_off ≈ 6 px` on
+   each frame offset = `max_off * trauma² * rand(-1,1)` via `picogame_fx.Shake` (strip-rendered
+   games — road/raycaster/mode-7 — use `Shake(None)` and spend `.ox`/`.oy` in the renderer's own
+   camera params; `set_view` never moves a StripDraw). `max_off ≈ 6 px` on
    320×240 (>10 hides the action); decay ≈ 0.8/s. Square the trauma so small events barely shake.
 4. **Hit-stop** — freeze the sim **2–8 frames** (2–6 typical) on a big impact; makes hits *connect*.
 5. **A particle/pop on the event** — `picogame_fx`/`Particles`; a ring or sparks on catch/score.
