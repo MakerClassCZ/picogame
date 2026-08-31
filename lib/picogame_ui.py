@@ -285,13 +285,19 @@ class HudBar:
         view.clear(self.bg)
         for spr in self._icons:
             if getattr(spr, "visible", True):
-                view.blit(spr.bitmap, spr.x - vx, spr.y - vy, getattr(spr, "frame", 0))
+                view.blit(spr.bitmap, spr.x - vx, spr.y - vy, spr.frame,
+                          spr.flip_x, spr.flip_y)      # Canvas.blit carries frame + flips only
         for lb in self._labels:
             if lb.text:
                 view.text(lb.x - vx, lb.y - vy, lb.text, lb.fg, lb.font)
 
     def add(self, sprite):
-        """An icon Sprite (heart, gauge) blitted into the bar at its own x/y on draw()."""
+        """An icon Sprite (heart, gauge) blitted into the bar at its own x/y on draw().
+
+        The band is composited with `Canvas.blit`, which carries only frame + flips: an icon's
+        `scale`, `angle`, `transpose` and blit effects (flash/tint/dither/shadow) are IGNORED
+        here (a probe agent lost a transposed HUD compass to this, silently). Bake the rotated
+        or scaled look as frames instead - `shapes.poly_frames` / `masks` - and step `frame`."""
         self._icons.append(sprite)
         return sprite
 

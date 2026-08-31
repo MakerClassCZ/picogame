@@ -239,7 +239,7 @@ frames** (`shapes.poly_frames` or art) for many or always-rotating sprites and j
 For a **crisp quarter-turn** (no shimmer, stays on the fast blit path) use `transpose` + a flip instead
 of `angle`: 90° CW = `transpose + flip_y`, 270° CW = `transpose + flip_x` (the footprint swaps w/h).
 
-**Per-sprite blit effects** (cheap juice, no extra bitmaps; one at a time — last set wins):
+**Per-sprite blit effects** (cheap juice, no extra bitmaps; one at a time — a TRUTHY write wins and clears the other three, a FALSY write clears only ITS OWN effect, so turn off the one you turned on: `spr.dither = 0` leaves an active `flash` painting):
 ```python
 spr.shadow = True                 # opaque pixels darken the destination (drop shadow / dim)
 spr.flash  = pg.rgb565(255,255,255)  # opaque pixels drawn SOLID in this colour -> hit-flash (flat); 0/False = off
@@ -531,7 +531,9 @@ The shipped games ARE the worked references. Public repo: **https://github.com/M
   when you're only writing/testing in the sim. (Exception:
   args declared kw-only in the binding — e.g. the `Particles(cap, size=…, gravity=…, fade=…)`,
   `Canvas(…, transparent=…, buffer=…)`, `scene.add(item, fixed=True)` constructors/flags — DO require
-  keywords on both. So: constructor kw-only = keyword; everything else native = positional.)
+  keywords on both, and a few methods are explicitly declared kw-capable - `sprite.overlaps(other,
+  inset=N)` is one, which is why the examples use it. So: constructor kw-only = keyword; a signature
+  the reference writes WITH a keyword = keyword; everything else native = positional.)
 - **The firmware must contain the feature.** `AttributeError`/`can't set attribute` usually means
   the flashed firmware predates the API you call (e.g. old build had `Sprite.scale` read-only).
   Verify without flashing: `arm-none-eabi-nm build-…/firmware.elf | grep sprite_set_scale`. In-game,

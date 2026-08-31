@@ -40,7 +40,7 @@ A positioned, animatable instance of a Bitmap.
   - `angle` — rotation in degrees; `0` = none (fast path). Combines with `scale`.
   - `transpose` — bool; swaps X/Y axes. On its own that is a **diagonal mirror**, not a rotation; combine with a flip for a crisp, shimmer-free quarter-turn. With `flip_x`/`flip_y` it reaches all 8 orientations. Fast path only (scale 1, angle 0); footprint swaps w/h. Recipes (screen y-down): **90° CW** = `transpose+flip_y` · **180°** = `flip_x+flip_y` · **270° CW** = `transpose+flip_x`.
   - `anchor` = `(fx, fy)` — pivot as fractions of the bitmap (0..1): `(0.5, 0.5)` = centre, `(0.5, 1.0)` = bottom-centre. `x`/`y` and rotation are about this point.
-- Blit-effect props (one at a time; setting one clears the others; cheap, no extra bitmaps):
+- Blit-effect props (one at a time - a TRUTHY write to any of them clears the other three; a FALSY write (`spr.flash = 0`) clears ONLY that effect, so `spr.dither = 0` will NOT switch off an active flash - clear the effect you actually set; cheap, no extra bitmaps):
   - `shadow` — bool; opaque pixels darken the destination (drop-shadow / dim overlay).
   - `flash` — wire-RGB565 colour (or `0`/`None` = off); opaque pixels drawn as that flat colour (hit-flash). Pulse 1–3 frames.
   - `tint` — wire-RGB565 colour (or `0` = off); opaque pixels *multiplied* by it, colouring the sprite while **keeping its shading** (damage-red, freeze-blue, glow).

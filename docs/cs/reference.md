@@ -31,7 +31,7 @@ Umístěná, animovatelná instance Bitmap.
   - `angle` — rotace ve stupních; `0` = žádná (rychlá cesta). Kombinuje se se `scale`.
   - `transpose` — bool; prohodí osy X/Y. Samotné znamená zrcadlení přes diagonálu, ne rotaci. Pro rotaci o čtvrtotáčku ho spoj s flipem. S `flip_x` a `flip_y` vytvoří všech 8 orientací. Funguje na rychlé cestě se scale 1 a angle 0; vykreslený obdélník prohodí w/h. Na obrazovce s osou y dolů: **90° CW** = `transpose+flip_y` · **180°** = `flip_x+flip_y` · **270° CW** = `transpose+flip_x`.
   - `anchor` = `(fx, fy)` — kotevní bod jako zlomky bitmapy (0..1): `(0.5, 0.5)` = střed, `(0.5, 1.0)` = dole uprostřed. `x`/`y` a rotace se vztahují k tomuto bodu.
-- Efekty vykreslení (vždy jen jeden; nastavení jednoho zruší ostatní; bez dalších bitmap):
+- Efekty vykreslení (vždy jen jeden; PRAVDIVÝ zápis do kteréhokoli zruší ostatní tři, ale NEPRAVDIVÝ zápis (`spr.flash = 0`) zruší JEN svůj vlastní efekt - `spr.dither = 0` tedy nevypne aktivní flash, vypínej ten, který jsi zapnul; bez dalších bitmap):
   - `shadow` — bool; neprůhledné pixely ztmaví cíl, například pro vržený stín nebo tmavý překryv.
   - `flash` — barva RGB565 ve wire order (nebo `0`/`None` = vypnuto); neprůhledné pixely vykreslí touto plnou barvou. Záblesk trvá obvykle 1–3 snímky.
   - `tint` — barva RGB565 ve wire order (nebo `0` = vypnuto); vynásobí jí neprůhledné pixely, takže sprite obarví a **zachová jeho stínování**.
