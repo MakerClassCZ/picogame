@@ -63,6 +63,7 @@ btn = picogame_input.Buttons()
 # --- HUD + screen labels (text-mode cards; fixed-width terminalio for alignment) ---
 L = terminalio.FONT
 top_lbl = ui.SceneLabel(scene, pg, L, 4, 3, INK, CREAM)
+top_lbl.reserve(44)             # re-set on every state change: fix the width NOW (startup heap),
 # the 3 active Acts shown as PixelLab icons (the bill), with their text below
 ACT_ICONS = (art.knife(pg), art.strongman(pg), art.harlequin(pg))   # Grinder / Steady / Harlequin
 HARL_DIM = 8                            # Harlequin's ghosted dither while its variety bonus is inactive
@@ -88,6 +89,7 @@ _SCORE_LBLS = (result_lbl, banked_lbl, mult_lbl)
 def _set_score(i, text):                                         # kept so all the call sites stay unchanged
     _SCORE_LBLS[i].set(text)
 help_lbl = ui.SceneLabel(scene, pg, L, 4, 226, INK, CREAM)
+help_lbl.reserve(48)            #  not on the churned mid-game heap (grow-realloc = the OOM class)
 
 parts = pg.Particles(64, size=2, gravity=0.05, fade=True)    # slam pop + win/finale confetti fountains
 scene.add(parts)
@@ -447,6 +449,7 @@ card_slots = [Card(i) for i in range(MAX_HAND)]   # NB: NOT 'cards' - play/disca
 # "GAME OVER" sits in the (hidden) card zone under the banner on the OVER screen; created AFTER the card
 # slots so it draws ON TOP of them (the card StripDraws erase their region to cream first).
 over_lbl = ui.SceneLabel(scene, pg, L, (W - 9 * _BFW) // 2, 162, INK, CREAM)
+over_lbl.reserve(len("RUN COMPLETE"))   # longest _over_txt; first set() is LATE-session
 
 
 def invalidate_cards():
