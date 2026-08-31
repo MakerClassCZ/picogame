@@ -155,3 +155,25 @@
 .pg-editor #storyCM { display: none; height: 340px; resize: vertical; overflow: auto;
   border: 1px solid #445; border-radius: 4px; background: #0d0f17; }
 .pg-editor #storyCM .cm-editor { height: 100%; }
+
+/* Story effects: numbered tile legend + decoded rule preview */
+.pg-editor .tcell { display: inline-block; text-align: center; margin: 0 2px; }
+.pg-editor .tnum { font-size: 10px; color: #9ab; line-height: 1.1; }
+.pg-editor .fxrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+.pg-editor .fxchip { display: inline-flex; align-items: center; gap: 3px; background: #232a44;
+  border: 1px solid #37406a; border-radius: 4px; padding: 2px 6px; font-size: 11px; color: #cdd; }
+.pg-editor .fxchip canvas { image-rendering: pixelated; }
+
+/* data (JSON) fields: readable multi-line editing */
+.pg-editor textarea.json { font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+  resize: vertical; white-space: pre; }
+
+/* Zone story modal: the structured form gets real room */
+.pg-editor .storycard { max-width: 680px; }
+.pg-editor .storycard textarea { width: 100%; box-sizing: border-box; }
+.pg-editor .storycard .row { margin: 8px 0; }
+.pg-editor .storycard select, .pg-editor .storycard input[type=text] { min-width: 140px; }
+
+.pg-editor .storycard .tcell canvas { cursor: pointer; border: 2px solid transparent; border-radius: 4px; }
+.pg-editor .storycard .tcell canvas:hover { border-color: #5a6a9a; }
+.pg-editor .storycard .tcell canvas.sel { border-color: #7fd4ff; box-shadow: 0 0 6px #7fd4ff66; }

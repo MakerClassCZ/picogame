@@ -278,20 +278,73 @@ function panelSelect() {
 
   add(panel, h3("Story effects"));
   panel.appendChild(hint('World changes replayed from story flags - on level load and whenever a flag is set. ' +
-    'E.g. <code>[{"if":"gate_open","swap":[3,6],"unsolid":[3]}]</code>; also <code>solid</code>, ' +
-    '<code>hide</code>/<code>show</code> (sprite names). Flags come from zone <code>say/ask</code> ' +
-    '<code>set</code> or <code>d.ev_set()</code> in scripts (Story \u25be).'));
+    'E.g. <code>[{"if":"gate_open","swap":[3,6],"unsolid":[3]}]</code>: when <code>gate_open</code> is set, ' +
+    'every tile <b>3</b> becomes tile <b>6</b> (the look) and tile 3 stops being solid (the collision). ' +
+    'Also <code>solid</code>, <code>hide</code>/<code>show</code> (sprite names). Flags come from zone ' +
+    '<code>say/ask</code> <b>set</b> or <code>d.ev_set()</code> in scripts (Story \u25be).'));
   const fxTa = mk("textarea"); fxTa.rows = 2;
   fxTa.value = L().effects ? JSON.stringify(L().effects) : "";
+  const fxPrev = mk("div");
+  const fxTm = L().tilemaps[0];
+  function fxThumb(v) {
+    const cv = mk("canvas"); cv.width = 22; cv.height = 22; cv.title = "tile " + v;
+    if (fxTm && v > 0) drawThumb(cv, project.assets[fxTm.asset], fxTm.asset, v);
+    return cv;
+  }
+  function fxChip() {
+    const c = mk("span", "fxchip");
+    for (let i = 0; i < arguments.length; i++)
+      c.appendChild(typeof arguments[i] === "string" ? document.createTextNode(arguments[i]) : arguments[i]);
+    return c;
+  }
+  function renderFxPreview() {
+    fxPrev.innerHTML = "";
+    let rules;
+    try { rules = fxTa.value ? JSON.parse(fxTa.value) : []; } catch (e) { return; }
+    if (!Array.isArray(rules)) return;
+    rules.forEach(function (r) {
+      const row = mk("div", "fxrow");
+      row.appendChild(fxChip("when " + (Array.isArray(r.if) ? r.if.join(" and ") : r.if) + ":"));
+      if (r.swap) row.appendChild(fxChip(fxThumb(+r.swap[0]), " \u2192 ", fxThumb(+r.swap[1])));
+      (r.unsolid || []).forEach(function (t) { row.appendChild(fxChip(fxThumb(+t), " walkable")); });
+      (r.solid || []).forEach(function (t) { row.appendChild(fxChip(fxThumb(+t), " solid")); });
+      (r.hide || []).forEach(function (n) { row.appendChild(fxChip("hide " + n)); });
+      (r.show || []).forEach(function (n) { row.appendChild(fxChip("show " + n)); });
+      fxPrev.appendChild(row);
+    });
+  }
   fxTa.onchange = function () {
     try {
       snapshot();
       const v = fxTa.value ? JSON.parse(fxTa.value) : null;
       if (v) L().effects = v; else delete L().effects;
-      fxTa.classList.remove("bad"); scheduleAutosave();
+      fxTa.classList.remove("bad"); scheduleAutosave(); renderFxPreview();
     } catch (e) { fxTa.classList.add("bad"); toast("effects is not valid JSON", "err"); }
   };
   panel.appendChild(fxTa);
+  const fxBr = mk("div", "row");
+  add(fxBr, btn("Edit effects\u2026", function () { openEffectsModal(L()); }));
+  panel.appendChild(fxBr);
+  panel.appendChild(fxPrev);
+  if (fxTm) {
+    const a = project.assets[fxTm.asset];
+    panel.appendChild(hint("The numbers are THESE tile indices (click one to insert it at the cursor):"));
+    const strip = mk("div", "tiles");
+    for (let v = 1; v < E.tileCount(a); v++) (function (v) {
+      const wrap = mk("span", "tcell");
+      const cv = mk("canvas"); cv.width = 24; cv.height = 24; cv.title = "tile " + v;
+      drawThumb(cv, a, fxTm.asset, v);
+      cv.onclick = function () {
+        const at = fxTa.selectionStart != null ? fxTa.selectionStart : fxTa.value.length;
+        fxTa.value = fxTa.value.slice(0, at) + v + fxTa.value.slice(fxTa.selectionEnd != null ? fxTa.selectionEnd : at);
+        fxTa.focus(); fxTa.selectionStart = fxTa.selectionEnd = at + String(v).length;
+      };
+      add(wrap, cv, mk("div", "tnum", String(v)));
+      strip.appendChild(wrap);
+    })(v);
+    panel.appendChild(strip);
+  }
+  renderFxPreview();
 
   add(panel, h3("Objects"));
   const any = L().entities.length + L().hud.length + L().zones.length + L().points.length + L().particles.length;
@@ -452,13 +505,14 @@ function inspector(box) {
     fieldNum(box, "x", z.x, function (v) { z.x = v; }); fieldNum(box, "y", z.y, function (v) { z.y = v; });
     fieldNum(box, "w", z.w, function (v) { z.w = v; }); fieldNum(box, "h", z.h, function (v) { z.h = v; });
     box.appendChild(hint("view.in_zone(x, y, tag) returns this when a point is inside."));
-    fieldData(box, z, 'data (JSON) - {"script": "intro"} names a story script, or declarative: ' +
-      '{"say": [...]}, {"ask": {...}}, {"goto": ["level", "point"]} (compiled to code on Try):');
-    if (z.data && (z.data.say || z.data.ask || z.data.goto)) {
-      const zr = mk("div", "row");
+    fieldData(box, z, 'data (JSON) - story keys, compiled to code on Try: {"script": "name"} \u00b7 ' +
+      '{"say": [lines or {"if","lines","set"} variants]} \u00b7 {"ask": {"lines","set","yes","no","done"}} \u00b7 ' +
+      '{"goto": ["level", "point"], "if": flag, "denied": [lines]}:');
+    const zr = mk("div", "row");
+    add(zr, btn("Edit story\u2026", function () { openStoryModal(z); }));
+    if (z.data && (z.data.say || z.data.ask || z.data.goto))
       add(zr, btn("Convert to script", function () { ejectZoneScript(z); }));
-      box.appendChild(zr);
-    }
+    box.appendChild(zr);
     dupDelRow(box, "zone", z, L().zones);
   } else if (sel.point) {
     const q = sel.point;
@@ -807,8 +861,18 @@ function fieldText(box, label, val, set) {
 }
 function fieldData(box, obj, hintText) {
   box.appendChild(mk("div", "hint", hintText));
-  const ta = mk("textarea"); ta.rows = 2; ta.value = obj.data ? JSON.stringify(obj.data) : "";
-  ta.onchange = function () { try { snapshot(); obj.data = ta.value ? JSON.parse(ta.value) : null; ta.classList.remove("bad"); } catch (e) { ta.classList.add("bad"); toast("data is not valid JSON", "err"); } };
+  const ta = mk("textarea", "json");
+  const compact = obj.data ? JSON.stringify(obj.data) : "";
+  ta.value = compact.length > 48 ? JSON.stringify(obj.data, null, 2) : compact;   // pretty when non-trivial
+  ta.rows = Math.max(2, Math.min(16, ta.value.split("\n").length + 1));
+  ta.onchange = function () {
+    try {
+      snapshot(); obj.data = ta.value ? JSON.parse(ta.value) : null; ta.classList.remove("bad");
+      const c = obj.data ? JSON.stringify(obj.data) : "";
+      ta.value = c.length > 48 ? JSON.stringify(obj.data, null, 2) : c;           // re-format what was typed
+      ta.rows = Math.max(2, Math.min(16, ta.value.split("\n").length + 1));
+    } catch (e) { ta.classList.add("bad"); toast("data is not valid JSON", "err"); }
+  };
   box.appendChild(ta);
 }
 function fieldNum(box, label, val, set, step) {
@@ -1836,6 +1900,333 @@ function storyCompiler() {
   var base = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";
   return import(base + "vendor/runner_stubs.mjs?v=rs4");
 }
+// ---- Zone story form (opens in a MODAL - room the side panel lacks) --------
+// say / ask / goto edit as FIELDS (flags autocomplete, level+point dropdowns);
+// the JSON in the side panel stays the storage format and the quick view.
+// Compiled to picogame_script code at Try in playground.
+function storyKindOf(data) {
+  if (!data) return "none";
+  if (data.script != null) return "script";
+  if (data.say) return "say";
+  if (data.ask) return "ask";
+  if (data.goto) return "goto";
+  return Object.keys(data).length ? "json" : "none";
+}
+function knownFlags() {
+  var flags = {};
+  function addCond(c) { if (c == null) return; (Array.isArray(c) ? c : [c]).forEach(function (x) { flags[String(x).replace(/^!/, "")] = 1; }); }
+  (project.levels || []).forEach(function (lv) {
+    (lv.zones || []).forEach(function (z) {
+      var d = z.data || {};
+      (Array.isArray(d.say) ? d.say : []).forEach(function (e) { if (e && typeof e === "object") { addCond(e.if); if (e.set) flags[e.set] = 1; } });
+      if (d.ask) { if (d.ask.set) flags[d.ask.set] = 1; }
+      addCond(d.if);
+    });
+    (lv.effects || []).forEach(function (r) { addCond(r.if); });
+  });
+  Object.keys(project.scripts || {}).forEach(function (n) {
+    var re = /d\.ev(?:_set)?\(\s*["']([^"']+)["']/g, m;
+    while ((m = re.exec(project.scripts[n]))) flags[m[1]] = 1;
+  });
+  return Object.keys(flags).sort();
+}
+function flagsDatalist() {
+  var dl = document.getElementById("flagsDL");
+  if (!dl) { dl = document.createElement("datalist"); dl.id = "flagsDL"; document.body.appendChild(dl); }
+  dl.innerHTML = "";
+  knownFlags().forEach(function (f) { dl.appendChild(new Option("", f)); });
+}
+function condToText(c) { return c == null ? "" : (Array.isArray(c) ? c.join(", ") : String(c)); }
+function textToCond(t) {
+  t = (t || "").trim();
+  if (!t) return null;
+  if (t.indexOf(",") >= 0) return t.split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+  return t;
+}
+function flagInput(val, set, placeholder) {
+  var inp = mk("input"); inp.type = "text"; inp.setAttribute("list", "flagsDL");
+  inp.value = val || ""; inp.placeholder = placeholder || "";
+  inp.onfocus = function () { snapshot(); };
+  inp.onchange = function () { set(inp.value.trim()); };
+  return inp;
+}
+function linesArea(box, label, lines, set, rows) {
+  box.appendChild(mk("div", "hint", label));
+  var ta = mk("textarea"); ta.rows = rows || 2; ta.value = (lines || []).join("\n");
+  ta.onfocus = function () { snapshot(); };
+  ta.onchange = function () {
+    var v = ta.value.split("\n").filter(function (l) { return l.length; });
+    set(v.length ? v : null);
+  };
+  box.appendChild(ta);
+  return ta;
+}
+function storySkeleton(kind, old) {
+  var keep = {};
+  for (var k in (old || {})) if (!/^(script|say|ask|goto|if|denied)$/.test(k)) keep[k] = old[k];
+  if (kind === "none") return Object.keys(keep).length ? keep : null;
+  if (kind === "json") return old && Object.keys(old).length ? old : {};
+  if (kind === "script") keep.script = (old && old.script) || "";
+  if (kind === "say") keep.say = (old && old.say) || ["..."];
+  if (kind === "ask") keep.ask = (old && old.ask) || { lines: ["..."], set: "" };
+  if (kind === "goto") keep.goto = (old && old.goto) ||
+    [((project.levels[0] || {}).name) || "level1", "spawn"];
+  return keep;
+}
+function storyForm(box, z, rerender) {
+  flagsDatalist();
+  var kind = storyKindOf(z.data);
+  var kr = mk("div", "row"); add(kr, mk("label", null, "story"));
+  var ks = mk("select");
+  [["none", "(none)"], ["say", "say - show text"], ["ask", "ask - A/B question"],
+   ["goto", "goto - travel to a level"], ["script", "script - named code"],
+   ["json", "custom JSON"]].forEach(function (o) { ks.appendChild(new Option(o[1], o[0])); });
+  ks.value = kind;
+  ks.onchange = function () { snapshot(); z.data = storySkeleton(ks.value, z.data); rerender(); };
+  add(kr, ks); box.appendChild(kr);
+
+  if (kind === "say") {
+    var entries = z.data.say;
+    if (entries.length && entries.every(function (e) { return typeof e === "string"; }))
+      entries = [{ lines: entries.slice() }];
+    entries = entries.map(function (e) { return typeof e === "string" ? { lines: [e] } : e; });
+    var write = function () {
+      var out = (entries.length === 1 && entries[0].if == null && !entries[0].set)
+        ? entries[0].lines.slice() : entries;
+      z.data.say = out;
+    };
+    box.appendChild(hint(entries.length > 1
+      ? "Variants top-down, the FIRST whose condition matches wins; a variant with no condition is the default."
+      : "Text the box shows (one screen line per row). Add a variant to branch on story flags."));
+    entries.forEach(function (e, i) {
+      var row = mk("div", "row");
+      add(row, mk("label", null, "if"));
+      var fi = flagInput(condToText(e.if), function (v) {
+        var c = textToCond(v); if (c == null) delete e.if; else e.if = c; write();
+      }, "always");
+      fi.title = "flag, !flag, or comma list (AND)";
+      add(row, fi, mk("label", null, "set"));
+      add(row, flagInput(e.set || "", function (v) { if (v) e.set = v; else delete e.set; write(); }, "-"));
+      if (entries.length > 1 || e.if != null) {
+        var xb = mk("button", "del", "×"); xb.title = "remove this variant";
+        xb.onclick = function () { snapshot(); entries.splice(i, 1); write(); rerender(); };
+        add(row, xb);
+      }
+      box.appendChild(row);
+      linesArea(box, "", e.lines, function (v) { e.lines = v || [""]; write(); });
+    });
+    var ar = mk("div", "row");
+    add(ar, btn("+ variant", function () { snapshot(); entries.push({ if: "", lines: [""] }); z.data.say = entries; rerender(); }));
+    box.appendChild(ar);
+  } else if (kind === "ask") {
+    var a = z.data.ask;
+    linesArea(box, "Question (one screen line per row):", a.lines, function (v) { a.lines = v || [""]; });
+    var sr = mk("div", "row");
+    add(sr, mk("label", null, "A sets flag"));
+    add(sr, flagInput(a.set || "", function (v) { if (v) a.set = v; else delete a.set; }, "e.g. gate_open"));
+    box.appendChild(sr);
+    linesArea(box, "After A (optional):", a.yes, function (v) { if (v) a.yes = v; else delete a.yes; });
+    linesArea(box, "After B (optional):", a.no, function (v) { if (v) a.no = v; else delete a.no; });
+    linesArea(box, "When the flag is ALREADY set (one-shot switch, optional):", a.done,
+      function (v) { if (v) a.done = v; else delete a.done; });
+  } else if (kind === "goto") {
+    var t = Array.isArray(z.data.goto) ? z.data.goto : [z.data.goto];
+    var lr = mk("div", "row"); add(lr, mk("label", null, "level"));
+    var ls = mk("select");
+    (project.levels || []).forEach(function (lv) { ls.appendChild(new Option(lv.name, lv.name)); });
+    if (t[0] && !Array.prototype.some.call(ls.options, function (o) { return o.value === t[0]; }))
+      ls.appendChild(new Option(t[0] + " (?)", t[0]));
+    ls.value = t[0] || "";
+    add(lr, ls, mk("label", null, "at point"));
+    var ps = mk("select");
+    function fillPoints() {
+      ps.innerHTML = "";
+      var lv = (project.levels || []).filter(function (l) { return l.name === ls.value; })[0];
+      ((lv && lv.points) || []).forEach(function (p) { ps.appendChild(new Option(p.name, p.name)); });
+      if (!ps.options.length) ps.appendChild(new Option("(no points - lands on the player sprite)", ""));
+      if (t[1]) {
+        if (!Array.prototype.some.call(ps.options, function (o) { return o.value === t[1]; }))
+          ps.appendChild(new Option(t[1] + " (?)", t[1]));
+        ps.value = t[1];
+      }
+    }
+    fillPoints();
+    var writeGoto = function () {
+      snapshot();
+      z.data.goto = ps.value ? [ls.value, ps.value] : [ls.value];
+    };
+    ls.onchange = function () { fillPoints(); writeGoto(); };
+    ps.onchange = writeGoto;
+    add(lr, ps); box.appendChild(lr);
+    box.appendChild(hint("Put the arrival point OUTSIDE this level's exit zones, or the story bounces straight back."));
+    var gr = mk("div", "row");
+    add(gr, mk("label", null, "only if"));
+    add(gr, flagInput(condToText(z.data.if), function (v) {
+      snapshot(); var c = textToCond(v); if (c == null) delete z.data.if; else z.data.if = c;
+    }, "always"));
+    box.appendChild(gr);
+    linesArea(box, "Refusal text when the condition fails (optional):", z.data.denied,
+      function (v) { snapshot(); if (v) z.data.denied = v; else delete z.data.denied; });
+  } else if (kind === "script") {
+    var nr = mk("div", "row"); add(nr, mk("label", null, "name"));
+    var ni = mk("input"); ni.type = "text"; ni.value = z.data.script || "";
+    ni.onfocus = function () { snapshot(); };
+    ni.onchange = function () { z.data.script = ni.value.trim(); };
+    add(nr, ni); box.appendChild(nr);
+    box.appendChild(hint("The body is Python edited under <b>Story ▾</b> in the toolbar."));
+  } else if (kind === "json") {
+    fieldData(box, z, "data (JSON) - free-form; script keys: script / say / ask / goto / if / denied:");
+  }
+}
+
+function openStoryModal(z) {
+  var ov = document.getElementById("storyModal");
+  if (ov) ov.remove();
+  ov = mk("div", "overlay"); ov.id = "storyModal";
+  var card = mk("div", "card storycard");
+  var body = mk("div");
+  function rerender() { body.innerHTML = ""; storyForm(body, z, rerender); }
+  function close() {
+    ov.remove();
+    document.removeEventListener("keydown", onEsc, true);
+    renderPanel();                                       // the JSON quick view catches up
+  }
+  function onEsc(e) { if (e.key === "Escape") { e.stopPropagation(); close(); } }
+  document.addEventListener("keydown", onEsc, true);
+  ov.onclick = function (e) { if (e.target === ov) close(); };
+  rerender();
+  add(card, h3("Zone story \u2014 " + (z.tag || "zone")), body);
+  var br = mk("div", "row");
+  add(br, btn("Done", close));
+  card.appendChild(br);
+  ov.appendChild(card);
+  (document.querySelector(".pg-editor") || document.body).appendChild(ov);
+}
+
+// ---- Story effects form (modal): rules edited with real tile thumbnails ----
+function tilePickStrip(parent, a, aid, isSel, onPick, withNone) {
+  var el = mk("div", "tiles");
+  if (withNone) {
+    var w0 = mk("span", "tcell");
+    var c0 = mk("canvas"); c0.width = 36; c0.height = 36; c0.title = "none";
+    var g = c0.getContext("2d"); g.strokeStyle = "#889"; g.lineWidth = 2; g.beginPath(); g.moveTo(8, 8); g.lineTo(28, 28); g.moveTo(28, 8); g.lineTo(8, 28); g.stroke();
+    if (isSel(null)) c0.className = "sel";
+    c0.onclick = function () { onPick(null); };
+    add(w0, c0, mk("div", "tnum", "\u2205"));
+    el.appendChild(w0);
+  }
+  for (var v = 1; v < E.tileCount(a); v++) (function (v) {
+    var wrap = mk("span", "tcell");
+    var cv = mk("canvas"); cv.width = 36; cv.height = 36; cv.title = "tile " + v;
+    drawThumb(cv, a, aid, v);
+    if (isSel(v)) cv.className = "sel";
+    cv.onclick = function () { onPick(v); };
+    add(wrap, cv, mk("div", "tnum", String(v)));
+    el.appendChild(wrap);
+  })(v);
+  parent.appendChild(el);
+}
+function tileToggleRow(box, label, r, key, a, aid, write, rerender) {
+  var row = mk("div", "row"); add(row, mk("label", null, label)); box.appendChild(row);
+  tilePickStrip(box, a, aid,
+    function (v) { return (r[key] || []).indexOf(v) >= 0; },
+    function (v) {
+      snapshot();
+      var list = r[key] || [];
+      var i = list.indexOf(v);
+      if (i >= 0) list.splice(i, 1); else list.push(v);
+      if (list.length) r[key] = list; else delete r[key];
+      write(); rerender();
+    });
+}
+function spriteToggleRow(box, label, r, key, lv, write, rerender) {
+  var names = [];
+  (lv.entities || []).forEach(function (en) { if (en.name && names.indexOf(en.name) < 0) names.push(en.name); });
+  if (!names.length) return;
+  var row = mk("div", "row wrap"); add(row, mk("label", null, label));
+  names.forEach(function (n) {
+    var b = mk("button", "pick" + ((r[key] || []).indexOf(n) >= 0 ? " on" : ""), n);
+    b.onclick = function () {
+      snapshot();
+      var list = r[key] || [];
+      var i = list.indexOf(n);
+      if (i >= 0) list.splice(i, 1); else list.push(n);
+      if (list.length) r[key] = list; else delete r[key];
+      write(); rerender();
+    };
+    add(row, b);
+  });
+  box.appendChild(row);
+}
+function effectsForm(box, lv, rerender) {
+  flagsDatalist();
+  var rules = lv.effects || [];
+  var write = function () { if (rules.length) lv.effects = rules; else delete lv.effects; };
+  var tmA = lv.tilemaps[0];
+  var aid = tmA && tmA.asset, a = aid && project.assets[aid];
+  box.appendChild(hint("Rules replayed on level load and whenever a story flag is set: " +
+    "the world catches up with the story (a pulled lever keeps the gate open after map travel)."));
+  rules.forEach(function (r, i) {
+    var head = mk("div", "row");
+    add(head, mk("label", null, "when flag"));
+    add(head, flagInput(condToText(r.if), function (v) {
+      var c = textToCond(v); if (c == null) delete r.if; else r.if = c; write();
+    }, "e.g. gate_open"));
+    var xb = mk("button", "del", "\u00d7"); xb.title = "remove this rule";
+    xb.onclick = function () { snapshot(); rules.splice(i, 1); write(); rerender(); };
+    add(head, xb);
+    box.appendChild(head);
+    if (a) {
+      var sr = mk("div", "row"); add(sr, mk("label", null, "swap tile")); box.appendChild(sr);
+      tilePickStrip(box, a, aid,
+        function (v) { return r.swap ? r.swap[0] === v : v === null; },
+        function (v) {
+          snapshot();
+          if (v === null) delete r.swap;
+          else r.swap = [v, (r.swap && r.swap[1]) || v];
+          write(); rerender();
+        }, true);
+      if (r.swap) {
+        var tr = mk("div", "row"); add(tr, mk("label", null, "\u2192 for tile")); box.appendChild(tr);
+        tilePickStrip(box, a, aid,
+          function (v) { return r.swap[1] === v; },
+          function (v) { snapshot(); r.swap[1] = v; write(); rerender(); });
+      }
+      tileToggleRow(box, "make walkable", r, "unsolid", a, aid, write, rerender);
+      tileToggleRow(box, "make solid", r, "solid", a, aid, write, rerender);
+    }
+    spriteToggleRow(box, "hide sprite", r, "hide", lv, write, rerender);
+    spriteToggleRow(box, "show sprite", r, "show", lv, write, rerender);
+    box.appendChild(mk("div", "ddsep"));
+  });
+  var ar = mk("div", "row");
+  add(ar, btn("+ rule", function () { snapshot(); rules.push({ if: "" }); lv.effects = rules; rerender(); }));
+  box.appendChild(ar);
+}
+function openEffectsModal(lv) {
+  var ov = document.getElementById("storyModal");
+  if (ov) ov.remove();
+  ov = mk("div", "overlay"); ov.id = "storyModal";
+  var card = mk("div", "card storycard");
+  var body = mk("div");
+  function rerender() { body.innerHTML = ""; effectsForm(body, lv, rerender); }
+  function close() {
+    ov.remove();
+    document.removeEventListener("keydown", onEsc, true);
+    renderPanel();
+  }
+  function onEsc(e) { if (e.key === "Escape") { e.stopPropagation(); close(); } }
+  document.addEventListener("keydown", onEsc, true);
+  ov.onclick = function (e) { if (e.target === ov) close(); };
+  rerender();
+  add(card, h3("Story effects \u2014 " + (lv.name || "level")), body);
+  var br = mk("div", "row");
+  add(br, btn("Done", close));
+  card.appendChild(br);
+  ov.appendChild(card);
+  (document.querySelector(".pg-editor") || document.body).appendChild(ov);
+}
+
 function storyScriptNames() {
   var names = {};
   Object.keys(project.scripts || {}).forEach(function (n) { names[n] = 1; });
