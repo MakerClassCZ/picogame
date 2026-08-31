@@ -39,6 +39,8 @@ anything that needs replay determinism (§9).
 and `if`-ladders, express timed sequences as generators that `yield` once per frame. *picogame:*
 `picogame_seq` — `wait(n)`, `move_over(obj, x, y, n)`, and a `Seq` that advances ONE generator a step
 per `tick()`; compose many with `yield from`. A `picogame_fx.Tween`/`Shake` can itself be yielded.
+Its `Script` turns the same generators into a scripted INPUT source (`btn.attach(script)`), so a
+title screen can PLAY ITSELF as an attract demo - and the same script drives a verification run.
 
 ```python
 def intro(hero):

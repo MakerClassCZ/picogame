@@ -415,6 +415,20 @@ class Buttons:
             b <<= 1
         return self.state
 
+    def attach(self, source):
+        """OR another input source (an object with .read() -> logical mask) into this
+        Buttons - e.g. a `picogame_seq.Script` for an attract-mode demo, or a late USB pad.
+        The source's presses merge with the hardware's on the next poll()."""
+        if source not in self._sources:
+            self._sources.append(source)
+
+    def detach(self, source):
+        """Remove a source attached with attach(). Unknown sources are ignored."""
+        try:
+            self._sources.remove(source)
+        except ValueError:
+            pass
+
     def is_pressed(self, mask=ALL):
         return bool(self.state & mask)
 

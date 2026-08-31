@@ -135,7 +135,7 @@ Most games never call these (`picogame_game.setup` + `Scene` use them internally
 
 ### `picogame_input` — buttons
 - Masks: `UP DOWN LEFT RIGHT A B X Y L1 L2 R1 R2 START SELECT ALL` (a superset; each board maps the subset it has); profile `PICOPAD`.
-- `Buttons(profile=None, pull=None, prefer_keypad=True, debounce_s=0.02, matrix=None, usb=None, sources=None)` · `.poll() -> mask` · `.is_pressed(mask=ALL)` · `.just_pressed(mask=ALL)` · `.just_released(mask=ALL)` · `.has(mask=ALL)` (is the mask present in the profile) · `.repeat(button, delay=15, interval=4)` — PICO-8 `btnp` auto-repeat (menus / grid move) · `.clear()` (drop held state).
+- `Buttons(profile=None, pull=None, prefer_keypad=True, debounce_s=0.02, matrix=None, usb=None, sources=None)` · `.poll() -> mask` · `.is_pressed(mask=ALL)` · `.just_pressed(mask=ALL)` · `.just_released(mask=ALL)` · `.has(mask=ALL)` (is the mask present in the profile) · `.repeat(button, delay=15, interval=4)` — PICO-8 `btnp` auto-repeat (menus / grid move) · `.clear()` (drop held state) · `.attach(source)` / `.detach(source)` — OR another input source in/out at runtime (a `picogame_seq.Script` attract demo, a late USB pad).
   - `matrix=` — a scanned key-matrix source (also configured board-wide via the `PICOGAME_MATRIX_*` settings keys); `usb=` — one or more extra button **sources** (USB pad/keyboard, below). `Buttons` ORs every source together, so a game reads them all with no code change.
 - `Timer(frames)` — input-leniency window (coyote time / jump buffering): `.feed(condition)` (recharge while true, else decay) · `.charge()` · `.is_active` · `.consume()` (true once, then clears).
 
@@ -201,6 +201,7 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 ### `picogame_seq` — generator-driven sequences (coroutine pattern)
 - `wait(frames)` · `over(frames, fn)` (fn(t), t 0..1) · `move_over(sprite, x, y, frames)` — all are generators; compose with `yield from`.
 - `Seq(gen=None)` · `.start(gen)` · `.tick() -> done` — advance one step per frame (cutscenes, "do X over N frames").
+- `Script(play, loop=False)` — **scripted input: a game that plays itself.** `play(s)` is a generator pressing Buttons masks over frames (`yield from s.tap(B.A)` · `s.hold(B.RIGHT | B.UP, n)` · `s.rest(n)`; `tap(..., base=mask)` keeps `base` held throughout). It is a Buttons *source*: `btn.attach(script)`, then `script.tick()` each frame **before** `btn.poll()` — the demo runs through the game's own input path (`just_pressed`/`repeat` all fire), on device and in the sim alike. Attract mode: attach on an idle title, `loop=True` to run forever, and hand the controls back on a human press — `if btn.state & ~script.mask: btn.detach(script); script.stop()`. The same script doubles as a scripted verification run.
 
 ### `picogame_anim` — frame animation over time
 - `FrameAnim(sprite, frames, *, fps=8, loop=True)` · `.configure(frames, fps=8, loop=True)` · `.reset()` · `.tick(dt)`.

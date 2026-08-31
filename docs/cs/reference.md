@@ -124,7 +124,7 @@ Většina her je nikdy nevolá (interně je používá `picogame_game.setup` + `
 
 ### `picogame_input` — tlačítka
 - Masky: `UP DOWN LEFT RIGHT A B X Y L1 L2 R1 R2 START SELECT ALL` (superset; každá deska mapuje jen tu podmnožinu, kterou má); profil `PICOPAD`.
-- `Buttons(profile=None, pull=None, prefer_keypad=True, debounce_s=0.02, matrix=None, usb=None, sources=None)` · `.poll() -> mask` · `.is_pressed(mask=ALL)` · `.just_pressed(mask=ALL)` · `.just_released(mask=ALL)` · `.has(mask=ALL)` (je maska v profilu) · `.repeat(button, delay=15, interval=4)` — PICO-8 `btnp` auto-repeat (menu / pohyb v mřížce) · `.clear()` (zahodí držený stav).
+- `Buttons(profile=None, pull=None, prefer_keypad=True, debounce_s=0.02, matrix=None, usb=None, sources=None)` · `.poll() -> mask` · `.is_pressed(mask=ALL)` · `.just_pressed(mask=ALL)` · `.just_released(mask=ALL)` · `.has(mask=ALL)` (je maska v profilu) · `.repeat(button, delay=15, interval=4)` — PICO-8 `btnp` auto-repeat (menu / pohyb v mřížce) · `.clear()` (zahodí držený stav) · `.attach(source)` / `.detach(source)` — za běhu při-OR-uje/odebere další vstupní zdroj (attract demo přes `picogame_seq.Script`, pozdě připojený USB pad).
   - `matrix=` — zdroj skenované klávesové matice (nastavitelný i přes klíče `PICOGAME_MATRIX_*`); `usb=` — jeden či více dalších **zdrojů** tlačítek (USB pad/klávesnice, níže). `Buttons` všechny zdroje ORuje dohromady, takže hra je čte bez jediné změny kódu.
 - `Timer(frames)` — okno vstupní tolerance (coyote time / jump buffering): `.feed(condition)` (dobíjí, dokud je true, jinak slábne) · `.charge()` · `.is_active` · `.consume()` (true jednou, pak se vymaže).
 
@@ -190,6 +190,7 @@ Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný 
 ### `picogame_seq` — sekvence řízené generátory (coroutine vzor)
 - `wait(frames)` · `over(frames, fn)` (fn(t), t 0..1) · `move_over(sprite, x, y, frames)` — vše jsou generátory; skládej je přes `yield from`.
 - `Seq(gen=None)` · `.start(gen)` · `.tick() -> done` — posune o jeden krok za snímek (meziscény, „udělej X za N snímků“).
+- `Script(play, loop=False)` — **skriptovaný vstup: hra, která hraje sama.** `play(s)` je generátor mačkající masky Buttons po snímcích (`yield from s.tap(B.A)` · `s.hold(B.RIGHT | B.UP, n)` · `s.rest(n)`; `tap(..., base=maska)` drží `base` po celou dobu). Je to *zdroj* pro Buttons: `btn.attach(script)` a pak `script.tick()` každý snímek **před** `btn.poll()` — demo běží vlastní vstupní cestou hry (`just_pressed`/`repeat` normálně fungují), na zařízení i v simu. Attract mód: attach na nečinné titulce, `loop=True` pro věčné přehrávání, a při lidském stisku vrátit ovládání — `if btn.state & ~script.mask: btn.detach(script); script.stop()`. Stejný skript poslouží i jako skriptovaný ověřovací běh.
 
 ### `picogame_anim` — animace snímků v čase
 - `FrameAnim(sprite, frames, *, fps=8, loop=True)` · `.configure(frames, fps=8, loop=True)` · `.reset()` · `.tick(dt)`.
