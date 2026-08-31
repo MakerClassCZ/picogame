@@ -198,11 +198,32 @@ def _install_virtual_clock():
         0, (now[0] + int(seconds * 1000 + 0.5)) & picogame_clock._MASK)
 
 
+def _install_frame_boundary(host):
+    """Count frames at the GAME's loop boundary (`clock.tick()`), not at each present.
+
+    A present is not a frame: a draw-on-change HUD (`HudBar.draw`, an immediate label) pushes a
+    SECOND present on the frames where it repaints, so a present-counted timeline drifts by a
+    content-dependent amount - `--keys 105:A` firing at game frame 96, and a route that survives
+    one death falling apart after the next. `clock.tick()` is the one call every shipped title
+    makes exactly once per iteration, so it is the honest boundary. A game with no Clock keeps
+    the old present counting (nothing else marks its frames).
+    """
+    import picogame_clock
+    _orig = picogame_clock.Clock.tick
+
+    def tick(self, *a, **k):
+        dt = _orig(self, *a, **k)
+        host.tick_boundary()
+        return dt
+
+    picogame_clock.Clock.tick = tick
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("game")
     ap.add_argument("--frames", type=int, default=150,
-                    help="stop after N PRESENTED frames - every scene.refresh() or pg.render() push counts as one. A game that presents once per loop (all shipped titles) runs N game frames; presenting twice per loop halves the game frames AND shifts every --keys/--shot-at target, so present once per iteration (SceneLabel/HudBar draw-on-change, not an immediate label after refresh).")
+                    help="stop after N GAME frames - one per `clock.tick()`, i.e. the game's own loop iteration, however many times it presented inside it (a draw-on-change HUD is free). A game with no picogame_clock falls back to counting presents.")
     ap.add_argument("--backend", choices=("pil", "pygame"), default=None,
                     help="pygame = live window, pil = headless. Default: a live window if pygame is "
                          "installed, else headless (screenshot / CI runs use pil).")
@@ -263,6 +284,7 @@ def main():
         _host.setup_keymap()
         print("[sim] controls: arrows / WASD = move,  F / Ctrl = A,  G / Space = B,  "
               "R / Q = X,  T / E = Y,  close the window to quit")
+    _install_frame_boundary(_host)
     if args.fast:
         if args.backend == "pygame":
             print("[sim] --fast is ignored with a live window (a window has to run in real time).")

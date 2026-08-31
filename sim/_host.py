@@ -19,6 +19,7 @@ pressed_pins = set()        # SW_* pin names currently held down
 _frame = 0
 _max_frames = None          # headless: stop after this many presented frames
 _frame_hook = None          # optional per-frame callback fn(frame_no) — used by --profile
+_clocked = False            # True once the game called clock.tick(): count ITS frames, not presents
 _backend = None             # set by run.py: "pil" or "pygame"
 _pyg = None                 # pygame module + surface, when used
 _last_image = None          # PIL.Image of the last frame (pil backend)
@@ -74,13 +75,37 @@ def set_frame_hook(fn):
 
 
 def present():
-    """Show the current framebuffer; pump input; enforce the frame limit."""
-    global _frame, _last_image
+    """Show the current framebuffer; pump input; enforce the frame limit.
+
+    Counts a frame ONLY while the game has no clock (see `tick_boundary`): a game that calls
+    `clock.tick()` is counted at ITS loop boundary instead, so a second present in the same
+    iteration (a draw-on-change HUD, an overlay) can't drift `--keys`/`--shot-at` off the
+    game's own time base."""
+    global _last_image
     if _backend == "pygame":
         _present_pygame()
     else:
         if _shot_path is not None and _frame == _shot_at:
             _to_image().save(_shot_path)
+    if not _clocked:
+        _advance()
+
+
+def tick_boundary():
+    """Called by the picogame_clock shim (installed by sim/run.py) at each `clock.tick()` -
+    the game's OWN frame boundary. The first call switches counting to this mode for good."""
+    global _clocked, _frame
+    if not _clocked:
+        _clocked = True                  # from now on presents don't count; ticks do
+        _frame = 0                       # and SETUP presents (title art, first HUD draw) were
+                                         #  not frames either - frame 1 ends at the first tick
+    if _backend != "pygame" and _shot_path is not None and _frame == _shot_at:
+        _to_image().save(_shot_path)     # shoot what the frame actually ended up showing
+    _advance()
+
+
+def _advance():
+    global _frame
     _frame += 1
     if _frame_hook is not None:
         _frame_hook(_frame)
