@@ -122,17 +122,33 @@ g_done = [False] * NGHOST                         # reached the end of its lap -
 hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, pg.rgb565(14, 16, 30))
 info = hud.label(terminalio.FONT, 4, 3, pg.rgb565(255, 255, 255), "LAP 1")
 
-banner = ui.SceneLabel(scene, pg, terminalio.FONT, 0, H // 2 - 6,
-                       pg.rgb565(255, 235, 110), pg.rgb565(0, 12, 42))
 FIN_FMT = "FINISH  %02ds   BEST LAP %02ds   B: AGAIN"
-banner.reserve(len(FIN_FMT % (0, 0)))
+_RES = len(FIN_FMT % (0, 0))
+# a reserved label paints its FULL width in bg, so centre the TEXT inside the fixed field
+# (moving the sprite by len(text) left the blank tail hanging to the screen edge)
+banner = ui.SceneLabel(scene, pg, terminalio.FONT, (W - _RES * 6) // 2, H // 2 - 6,
+                       pg.rgb565(255, 235, 110), pg.rgb565(0, 12, 42))
+banner.reserve(_RES)
+banner_big = ui.SceneLabel(scene, pg, terminalio.FONT, (W - 3 * 12) // 2, H // 2 - 12,
+                           pg.rgb565(255, 235, 110), pg.rgb565(0, 12, 42))
+banner_big.reserve(3)
+banner_big.sprite.scale = 2
 
 
 def show_banner(text, big=False):
-    banner.set(text)
-    banner.sprite.scale = 2 if big else 1
-    cw = 12 if big else 6
-    banner.sprite.move(max(2, (W - len(text) * cw) // 2), H // 2 - (12 if big else 6))
+    if big:
+        banner.show(False)
+        banner_big.set(text.center(3))
+        banner_big.show(True)
+    else:
+        banner_big.show(False)
+        banner.set(text.center(_RES))
+        banner.show(True)
+
+
+def hide_banner():
+    banner.show(False)
+    banner_big.show(False)
 
 
 def flash_banner(text, frames, big=False):
@@ -264,7 +280,7 @@ def main():
         if st.banner_t > 0:                            # tick down a flash banner (GO! / lap time)
             st.banner_t -= 1
             if st.banner_t == 0:
-                banner.set("")
+                hide_banner()
         if st.flash_t > 0:                             # best-lap celebration: BLINK the car white
             st.flash_t -= 1
             car.flash = WHITE if (st.flash_t // 3) & 1 else 0
