@@ -4,7 +4,7 @@
 # picogame_shapes; turn-trig + wrap via picogame_math.
 #
 # Copy with picogame_game.py, picogame_input.py, picogame_clock.py,
-# picogame_font.py, picogame_shapes.py, picogame_math.py. Needs the latest firmware.
+# picogame_ui.py, picogame_shapes.py, picogame_math.py. Needs the latest firmware.
 
 
 import terminalio
@@ -12,7 +12,7 @@ import picogame as pg
 import picogame_game
 import picogame_input
 import picogame_clock
-import picogame_font
+import picogame_ui as ui
 import picogame_shapes as shp
 import picogame_synth as snd
 import picogame_sfx
@@ -39,7 +39,7 @@ bullet_bm = shp.circle(4, pg.rgb565(255, 255, 120))
 
 ship = pg.Sprite(ship_bm, W // 2, H // 2)
 ship.anchor = (0.5, 0.5)
-# Sprite pools (picogame_pool): visible = the alive flag, .data = per-shot state.
+# Sprite pools (picogame_pool): the pool tracks live slots itself; .data = per-shot state.
 rocks = picogame_pool.Pool(scene, rock_bm[0], 12, anchor=(0.5, 0.5))
 bullets = picogame_pool.Pool(scene, bullet_bm, 6, anchor=(0.5, 0.5))
 # Pre-seed each pool slot's .data once so spawns MUTATE in place (no per-spawn dict).
@@ -51,7 +51,8 @@ exhaust = pg.Particles(40, size=2, gravity=0.0)   # engine puff out the ship's t
 scene.add(exhaust)
 scene.add(ship)
 
-hud = picogame_font.Label(pg, terminalio.FONT, 4, 4, pg.rgb565(255, 255, 255), BG)
+hud = ui.SceneLabel(scene, pg, terminalio.FONT, 4, 4, pg.rgb565(255, 255, 255), BG)
+hud.reserve(len("SCORE 00000   SHIPS 0"))   # fixed-width buffer -> zero-alloc set() during play
 
 class State:
     def __init__(self):
@@ -107,7 +108,7 @@ def new_game():
 
 new_game()
 kit = picogame_sfx.Kit(snd.Synth())          # signature SFX; silent no-op if no audio
-print("LEFT/RIGHT rotate, UP thrust, B fire. Clear the asteroids.")
+print("LEFT/RIGHT rotate, UP thrust, hold A to fire. Clear the asteroids.")
 
 
 def main():
@@ -149,7 +150,7 @@ def main():
         ship.visible = (st.inv <= 0) or (frame & 1)
 
         # fire
-        if btn.just_pressed(btn.B) and st.fire_cd <= 0:
+        if btn.is_pressed(btn.A) and st.fire_cd <= 0:   # autofire on hold; fire_cd sets the cadence
             b = bullets.spawn()
             if b:
                 d = b.data
@@ -222,7 +223,6 @@ def main():
         if st.score != _shown_score or shown_lives != _shown_lives:
             _shown_score, _shown_lives = st.score, shown_lives
             hud.set("SCORE %05d   SHIPS %d" % (st.score, shown_lives))
-        hud.draw(scene.display, bufA)
         clock.tick()
 
 

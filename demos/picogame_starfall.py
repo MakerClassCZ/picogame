@@ -47,7 +47,7 @@ tray.anchor = (0.5, 0.5)
 scene.add(tray)
 
 # --- a fixed pool of falling items (no per-frame allocation) ---
-# picogame_pool.Pool: sprite.visible IS the alive flag; per-item state on sprite.data.
+# picogame_pool.Pool: spawn() shows a slot, free() hides it; per-item state on sprite.data.
 MAXITEMS = 6
 items = picogame_pool.Pool(scene, GEM, MAXITEMS, anchor=(0.5, 0.5))
 # Pre-seed each pool slot's .data once so spawns MUTATE in place (no per-spawn dict).

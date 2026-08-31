@@ -187,7 +187,8 @@ def _install_virtual_clock():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("game")
-    ap.add_argument("--frames", type=int, default=150)
+    ap.add_argument("--frames", type=int, default=150,
+                    help="stop after N PRESENTED frames - every scene.refresh() or pg.render() push counts as one. A game that presents once per loop (all shipped titles) runs N game frames; presenting twice per loop halves the game frames AND shifts every --keys/--shot-at target, so present once per iteration (SceneLabel/HudBar draw-on-change, not an immediate label after refresh).")
     ap.add_argument("--backend", choices=("pil", "pygame"), default=None,
                     help="pygame = live window, pil = headless. Default: a live window if pygame is "
                          "installed, else headless (screenshot / CI runs use pil).")

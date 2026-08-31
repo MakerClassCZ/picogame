@@ -3,7 +3,7 @@
 # What you learn: pooling. Spawning objects (bullets, enemies, sparks) by creating
 # Sprites at runtime causes memory churn. Instead, pre-allocate a fixed pool ONCE:
 # picogame_pool.Pool makes N hidden sprites in the scene, spawn() reveals the first
-# free one, free() hides it, and sprite.visible IS the alive flag. We keep each
+# free one, free() hides it again (the pool tracks live slots itself). We keep each
 # bullet's velocity + remaining life in sprite.data, and its position in fx/fy.
 # A cooldown limits the fire rate.
 #

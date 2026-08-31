@@ -100,7 +100,7 @@ def spawn():
     m.move(x, 0)
 
 
-print("D-pad aim | B fire blast. Defend the cities!")
+print("D-pad aim | A fire blast. Defend the cities!")
 
 
 def main():
@@ -119,7 +119,7 @@ def main():
             crosshair.move(max(0, min(W - 7, crosshair.x + dx * 5)),
                            max(16, min(GROUND, crosshair.y + dy * 5)))
 
-        if btn.just_pressed(btn.B):
+        if btn.just_pressed(btn.A):    # deliberate single shots (limited ammo), so no autofire here
             ex, ey = crosshair.x + 3, crosshair.y + 3
             beam[0], beam[1], beam[2], beam[3], beam[4] = BATTERY[0], BATTERY[1], ex, ey, 4
             particles.emit(ex, ey, 26, 5, 24, pg.rgb565(255, 200, 60))

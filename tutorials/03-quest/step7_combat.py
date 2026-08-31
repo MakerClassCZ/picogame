@@ -362,6 +362,8 @@ def main():                          # loop in a function -> its names are fast 
                 coin.visible = False
                 st.coins += 1
 
+        # Adjacency is enough here: A's other role (swing) is harmless beside the NPC. A game
+        # where that clashes gates the talk on facing too (st.facing points at the NPC).
         if near(hero, npc.x, npc.y):
             hud.set("HP %d  COINS %d/%d  A:TALK B:SWING" % (st.hp, st.coins, len(coins)))
             if btn.just_pressed(btn.A):

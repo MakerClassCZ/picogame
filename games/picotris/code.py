@@ -48,6 +48,8 @@ try:
     SND_LOCK = _n(41, 0.08, 0.65, 800, rel=0.2, bend=(-2, 70))  # firm low thunk (was tone(170, 60))
     SEQ_CLEAR = (_n(72, 0.04, 0.5, 2200), _n(76, 0.04, 0.5, 2200),      # rising clear arpeggio
                  _n(79, 0.05, 0.55, 2400), _n(84, 0.12, 0.6, 2400, rel=0.2))  # (was tone(880, 130))
+    SEQ_OVER = (_n(60, 0.06, 0.55, 1200), _n(55, 0.06, 0.55, 1000),      # descending = lose (audio contour)
+                _n(48, 0.16, 0.6, 800, rel=0.25))
 
     def sfx(n):
         if n is not None:
@@ -58,7 +60,7 @@ try:
             _seq.append([_frame + i * 2, nn])
 except Exception:
     SND_MOVE = SND_ROT = SND_LOCK = None
-    SEQ_CLEAR = ()
+    SEQ_CLEAR = SEQ_OVER = ()
 
     def sfx(n):
         pass
@@ -134,6 +136,8 @@ next_cells = [pg.Sprite(tileset, 0, 0, visible=False) for _ in range(4)]
 # --- side panels: static chrome the scene never repaints (one redraw; updated only on change) ---
 left_panel = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, SIDE, H, PANEL)
 left_panel.label(terminalio.FONT, 18, 14, VALUE, "PICOTRIS")
+status1 = left_panel.label(terminalio.FONT, 8, 44, VALUE, "A: START")   # TITLE/OVER message lines
+status2 = left_panel.label(terminalio.FONT, 8, 58, LABEL, "")
 left_panel.label(terminalio.FONT, 8, H - 54, LABEL, "< >  move")
 left_panel.label(terminalio.FONT, 8, H - 40, LABEL, "A   rotate")
 left_panel.label(terminalio.FONT, 8, H - 26, LABEL, "v   drop")
@@ -199,7 +203,7 @@ def refresh_hud():
 
 
 def spawn():
-    global nxt, score, lines, level
+    global nxt
     cur["name"] = nxt
     cur["rot"] = 0
     cur["x"] = 3
@@ -207,12 +211,33 @@ def spawn():
     nxt = bag.next()
     set_next(nxt)                                       # reposition the 4 shared-tileset preview cells
     right_panel.draw()
-    if not fits(cur["name"], 0, 3, -1):                 # board full = game over -> fresh game, score reset
-        for r in range(ROWS):
-            for c in range(COLS):
-                grid[r][c] = 0
-        score = lines = level = 0
-        refresh_hud()
+    return fits(cur["name"], 0, 3, -1)                  # False = board full (caller flips to OVER)
+
+
+def next_piece():
+    global state
+    if not spawn():
+        state = "over"                                  # board stays on screen with the final score
+        status1.set("GAME OVER")
+        status2.set("A: AGAIN")
+        left_panel.draw()
+        sfx_seq(SEQ_OVER)
+
+
+def new_game():
+    global state, score, lines, level, flash
+    for r in range(ROWS):
+        row = grid[r]
+        for c in range(COLS):
+            row[c] = 0
+    score = lines = level = 0
+    flash = None
+    refresh_hud()
+    status1.set("")
+    status2.set("")
+    left_panel.draw()
+    spawn()                                             # empty board -> always fits
+    state = "play"
 
 
 def lock_piece():
@@ -231,7 +256,7 @@ def lock_piece():
         flash = [full, 12]                              # blink the full rows (handled in the loop), then clear
         sfx_seq(SEQ_CLEAR)                              # the reward: a rising arpeggio over the flash
     else:
-        spawn()
+        next_piece()
 
 
 def resolve_flash():
@@ -246,7 +271,7 @@ def resolve_flash():
     level = lines // 10
     flash = None
     refresh_hud()
-    spawn()
+    next_piece()
 
 
 def render_board():
@@ -278,17 +303,21 @@ def render_board():
             well.set_tile(x, y, v)
 
 
-spawn()
+state = "title"                                        # -> "play" -> "over" -> "play" ... (SS1.6)
 refresh_hud()
-print("L/R move | A rotate | Down soft-drop")
+print("L/R move (hold = auto-shift) | A rotate | Down soft-drop")
 
 
 def main():
     global _frame
     # --- per-frame loop in a FUNCTION: names become array-indexed locals, not globals-dict
     # lookups (measured on-device win; picogame-game-design hot-loop style guide).
-    changed = True
+    changed = False
     grav = 0
+    LOCK_FRAMES = 15               # Guideline 0.5 s at THIS 30 fps clock (SS7's "30 frames" assumes 60)
+    LOCK_RESETS = 15               # a successful move/rotate on the ground re-arms the delay, capped
+    lockf = 0                      # frames the piece has been sitting on the ground
+    resets = 0
     while True:
         btn.poll()
         _frame += 1
@@ -299,6 +328,17 @@ def main():
                 _seq.pop(_i)
             else:
                 _i += 1
+        if state != "play":                                 # TITLE / GAME OVER: board + panels idle
+            if btn.just_pressed(btn.A):
+                new_game()
+                grav = lockf = resets = 0
+                changed = True
+            if changed:
+                render_board()
+                changed = False
+            scene.refresh()
+            clock.tick()
+            continue
         if flash:                                           # line-clear: blink the full rows, then clear them
             flash[1] -= 1
             white = (flash[1] // 3) % 2 == 1
@@ -306,32 +346,46 @@ def main():
                 for c in range(COLS):
                     well.set_tile(c, r, 8 if white else grid[r][c])
             if flash[1] <= 0:
-                resolve_flash()
+                resolve_flash()                             # spawns the next piece (or flips to OVER)
+                grav = lockf = resets = 0
                 changed = True
         else:
-            if btn.just_pressed(btn.LEFT) and fits(cur["name"], cur["rot"], cur["x"] - 1, cur["y"]):
+            moved = False
+            # DAS/ARR (SS7): hold-to-shift via btn.repeat - true on press, again after 10 f, then every 2 f
+            if btn.repeat(btn.LEFT, delay=10, interval=2) and fits(cur["name"], cur["rot"], cur["x"] - 1, cur["y"]):
                 cur["x"] -= 1
-                changed = True
+                changed = moved = True
                 sfx(SND_MOVE)
-            if btn.just_pressed(btn.RIGHT) and fits(cur["name"], cur["rot"], cur["x"] + 1, cur["y"]):
+            if btn.repeat(btn.RIGHT, delay=10, interval=2) and fits(cur["name"], cur["rot"], cur["x"] + 1, cur["y"]):
                 cur["x"] += 1
-                changed = True
+                changed = moved = True
                 sfx(SND_MOVE)
             if btn.just_pressed(btn.A):
                 nr = (cur["rot"] + 1) % len(SHAPES[cur["name"]][1])
                 if fits(cur["name"], nr, cur["x"], cur["y"]):
                     cur["rot"] = nr
-                    changed = True
+                    changed = moved = True
                     sfx(SND_ROT)
-            grav += 1
-            interval = 1 if btn.is_pressed(btn.DOWN) else INTERVALS[min(level, len(INTERVALS) - 1)]
-            if grav >= interval:
-                grav = 0
-                if fits(cur["name"], cur["rot"], cur["x"], cur["y"] + 1):
-                    cur["y"] += 1
-                else:
-                    lock_piece()
-                changed = True
+            grounded = not fits(cur["name"], cur["rot"], cur["x"], cur["y"] + 1)
+            if grounded:
+                # Lock delay: the piece rests for LOCK_FRAMES before it locks; a successful
+                # move/rotate re-arms the window (this genre's coyote time), up to LOCK_RESETS.
+                if moved and resets < LOCK_RESETS:
+                    lockf = 0
+                    resets += 1
+                lockf += 1
+                if lockf >= LOCK_FRAMES:
+                    lock_piece()                            # spawns next (or flips to OVER)
+                    grav = lockf = resets = 0
+                    changed = True
+            else:
+                lockf = 0
+                grav += 1
+                interval = 1 if btn.is_pressed(btn.DOWN) else INTERVALS[min(level, len(INTERVALS) - 1)]
+                if grav >= interval:
+                    grav = 0
+                    cur["y"] += 1                           # not grounded -> the row below is free
+                    changed = True
         if changed and not flash:
             render_board()
             changed = False

@@ -266,6 +266,8 @@ def can_walk(pixel_x, pixel_y):
 
 
 def near_npc():
+    # Adjacency is enough HERE: one interactable and A has no other role nearby. A game where
+    # A also attacks gates this on facing too (st.facing points at the NPC) - genre rule.
     return abs(hero.x - npc.x) <= TILE and abs(hero.y - npc.y) <= TILE
 
 
