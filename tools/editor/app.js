@@ -111,7 +111,17 @@ function toast(msg, kind) {
 // ---------------------------------------------------------------- thumbnails
 function drawThumb(cv, a, id, frame) {
   const c = cv.getContext("2d"); c.clearRect(0, 0, cv.width, cv.height); c.imageSmoothingEnabled = false;
-  if (isImg(a) && images[id] && images[id].complete) c.drawImage(images[id], frame * a.fw, 0, a.fw, a.fh, 0, 0, cv.width, cv.height);
+  if (isImg(a) && images[id]) {
+    const img = images[id];
+    if (img.complete && img.naturalWidth) {
+      c.drawImage(img, frame * a.fw, 0, a.fw, a.fh, 0, 0, cv.width, cv.height);
+    } else {
+      // dataURL images decode ASYNC - a panel rendered right after project load would show
+      // placeholder squares forever. Paint a stand-in now, redraw this canvas when the art lands.
+      c.fillStyle = "#334"; c.fillRect(2, 2, cv.width - 4, cv.height - 4);
+      img.addEventListener("load", function () { drawThumb(cv, a, id, frame); }, { once: true });
+    }
+  }
   else if (a.type === "tileset_color") { c.fillStyle = rgbCss(a.colors[String(frame)] || a.colors["1"] || [255, 0, 255]); c.fillRect(2, 2, cv.width - 4, cv.height - 4); }
   else if (a.type === "rect") { c.fillStyle = rgbCss(a.color); c.fillRect(2, 2, cv.width - 4, cv.height - 4); }
   else { c.fillStyle = "#0af"; c.fillRect(2, 2, cv.width - 4, cv.height - 4); }
@@ -326,24 +336,6 @@ function panelSelect() {
   add(fxBr, btn("Edit effects\u2026", function () { openEffectsModal(L()); }));
   panel.appendChild(fxBr);
   panel.appendChild(fxPrev);
-  if (fxTm) {
-    const a = project.assets[fxTm.asset];
-    panel.appendChild(hint("The numbers are THESE tile indices (click one to insert it at the cursor):"));
-    const strip = mk("div", "tiles");
-    for (let v = 1; v < E.tileCount(a); v++) (function (v) {
-      const wrap = mk("span", "tcell");
-      const cv = mk("canvas"); cv.width = 24; cv.height = 24; cv.title = "tile " + v;
-      drawThumb(cv, a, fxTm.asset, v);
-      cv.onclick = function () {
-        const at = fxTa.selectionStart != null ? fxTa.selectionStart : fxTa.value.length;
-        fxTa.value = fxTa.value.slice(0, at) + v + fxTa.value.slice(fxTa.selectionEnd != null ? fxTa.selectionEnd : at);
-        fxTa.focus(); fxTa.selectionStart = fxTa.selectionEnd = at + String(v).length;
-      };
-      add(wrap, cv, mk("div", "tnum", String(v)));
-      strip.appendChild(wrap);
-    })(v);
-    panel.appendChild(strip);
-  }
   renderFxPreview();
 
   add(panel, h3("Objects"));
@@ -2104,12 +2096,20 @@ function openStoryModal(z) {
 }
 
 // ---- Story effects form (modal): rules edited with real tile thumbnails ----
-function tilePickStrip(parent, a, aid, isSel, onPick, withNone) {
-  var el = mk("div", "tiles");
+// Compact layout: label + picker share a row, swap from/to sit on one line,
+// sprites are small toggle chips - a rule reads like a sentence.
+function frow(box, label) {
+  var r = mk("div", "frow");
+  if (label != null) add(r, mk("label", null, label));
+  box.appendChild(r);
+  return r;
+}
+function tilePickStrip(row, a, aid, isSel, onPick, withNone) {
+  var el = mk("span", "tiles");
   if (withNone) {
     var w0 = mk("span", "tcell");
-    var c0 = mk("canvas"); c0.width = 36; c0.height = 36; c0.title = "none";
-    var g = c0.getContext("2d"); g.strokeStyle = "#889"; g.lineWidth = 2; g.beginPath(); g.moveTo(8, 8); g.lineTo(28, 28); g.moveTo(28, 8); g.lineTo(8, 28); g.stroke();
+    var c0 = mk("canvas"); c0.width = 30; c0.height = 30; c0.title = "none";
+    var g = c0.getContext("2d"); g.strokeStyle = "#889"; g.lineWidth = 2; g.beginPath(); g.moveTo(7, 7); g.lineTo(23, 23); g.moveTo(23, 7); g.lineTo(7, 23); g.stroke();
     if (isSel(null)) c0.className = "sel";
     c0.onclick = function () { onPick(null); };
     add(w0, c0, mk("div", "tnum", "\u2205"));
@@ -2117,18 +2117,18 @@ function tilePickStrip(parent, a, aid, isSel, onPick, withNone) {
   }
   for (var v = 1; v < E.tileCount(a); v++) (function (v) {
     var wrap = mk("span", "tcell");
-    var cv = mk("canvas"); cv.width = 36; cv.height = 36; cv.title = "tile " + v;
+    var cv = mk("canvas"); cv.width = 30; cv.height = 30; cv.title = "tile " + v;
     drawThumb(cv, a, aid, v);
     if (isSel(v)) cv.className = "sel";
     cv.onclick = function () { onPick(v); };
     add(wrap, cv, mk("div", "tnum", String(v)));
     el.appendChild(wrap);
   })(v);
-  parent.appendChild(el);
+  row.appendChild(el);
 }
 function tileToggleRow(box, label, r, key, a, aid, write, rerender) {
-  var row = mk("div", "row"); add(row, mk("label", null, label)); box.appendChild(row);
-  tilePickStrip(box, a, aid,
+  var row = frow(box, label);
+  tilePickStrip(row, a, aid,
     function (v) { return (r[key] || []).indexOf(v) >= 0; },
     function (v) {
       snapshot();
@@ -2139,13 +2139,9 @@ function tileToggleRow(box, label, r, key, a, aid, write, rerender) {
       write(); rerender();
     });
 }
-function spriteToggleRow(box, label, r, key, lv, write, rerender) {
-  var names = [];
-  (lv.entities || []).forEach(function (en) { if (en.name && names.indexOf(en.name) < 0) names.push(en.name); });
-  if (!names.length) return;
-  var row = mk("div", "row wrap"); add(row, mk("label", null, label));
+function spriteChips(row, r, key, names, write, rerender) {
   names.forEach(function (n) {
-    var b = mk("button", "pick" + ((r[key] || []).indexOf(n) >= 0 ? " on" : ""), n);
+    var b = mk("button", "chipbtn" + ((r[key] || []).indexOf(n) >= 0 ? " on" : ""), n);
     b.onclick = function () {
       snapshot();
       var list = r[key] || [];
@@ -2154,9 +2150,8 @@ function spriteToggleRow(box, label, r, key, lv, write, rerender) {
       if (list.length) r[key] = list; else delete r[key];
       write(); rerender();
     };
-    add(row, b);
+    row.appendChild(b);
   });
-  box.appendChild(row);
 }
 function effectsForm(box, lv, rerender) {
   flagsDatalist();
@@ -2164,21 +2159,21 @@ function effectsForm(box, lv, rerender) {
   var write = function () { if (rules.length) lv.effects = rules; else delete lv.effects; };
   var tmA = lv.tilemaps[0];
   var aid = tmA && tmA.asset, a = aid && project.assets[aid];
-  box.appendChild(hint("Rules replayed on level load and whenever a story flag is set: " +
+  var names = [];
+  (lv.entities || []).forEach(function (en) { if (en.name && names.indexOf(en.name) < 0) names.push(en.name); });
+  box.appendChild(hint("Rules replayed on level load and whenever a story flag is set - " +
     "the world catches up with the story (a pulled lever keeps the gate open after map travel)."));
   rules.forEach(function (r, i) {
-    var head = mk("div", "row");
-    add(head, mk("label", null, "when flag"));
+    var head = frow(box, "when");
     add(head, flagInput(condToText(r.if), function (v) {
       var c = textToCond(v); if (c == null) delete r.if; else r.if = c; write();
     }, "e.g. gate_open"));
     var xb = mk("button", "del", "\u00d7"); xb.title = "remove this rule";
     xb.onclick = function () { snapshot(); rules.splice(i, 1); write(); rerender(); };
     add(head, xb);
-    box.appendChild(head);
     if (a) {
-      var sr = mk("div", "row"); add(sr, mk("label", null, "swap tile")); box.appendChild(sr);
-      tilePickStrip(box, a, aid,
+      var sw = frow(box, "swap");
+      tilePickStrip(sw, a, aid,
         function (v) { return r.swap ? r.swap[0] === v : v === null; },
         function (v) {
           snapshot();
@@ -2187,21 +2182,24 @@ function effectsForm(box, lv, rerender) {
           write(); rerender();
         }, true);
       if (r.swap) {
-        var tr = mk("div", "row"); add(tr, mk("label", null, "\u2192 for tile")); box.appendChild(tr);
-        tilePickStrip(box, a, aid,
+        add(sw, mk("span", "fxarrow", "\u2192"));
+        tilePickStrip(sw, a, aid,
           function (v) { return r.swap[1] === v; },
           function (v) { snapshot(); r.swap[1] = v; write(); rerender(); });
       }
-      tileToggleRow(box, "make walkable", r, "unsolid", a, aid, write, rerender);
-      tileToggleRow(box, "make solid", r, "solid", a, aid, write, rerender);
+      tileToggleRow(box, "walkable", r, "unsolid", a, aid, write, rerender);
+      tileToggleRow(box, "solid", r, "solid", a, aid, write, rerender);
     }
-    spriteToggleRow(box, "hide sprite", r, "hide", lv, write, rerender);
-    spriteToggleRow(box, "show sprite", r, "show", lv, write, rerender);
+    if (names.length) {
+      var sp = frow(box, "hide");
+      spriteChips(sp, r, "hide", names, write, rerender);
+      add(sp, mk("label", null, "show"));
+      spriteChips(sp, r, "show", names, write, rerender);
+    }
     box.appendChild(mk("div", "ddsep"));
   });
-  var ar = mk("div", "row");
+  var ar = frow(box, null);
   add(ar, btn("+ rule", function () { snapshot(); rules.push({ if: "" }); lv.effects = rules; rerender(); }));
-  box.appendChild(ar);
 }
 function openEffectsModal(lv) {
   var ov = document.getElementById("storyModal");

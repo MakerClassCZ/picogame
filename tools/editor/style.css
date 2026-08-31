@@ -169,7 +169,16 @@
   resize: vertical; white-space: pre; }
 
 /* Zone story modal: the structured form gets real room */
-.pg-editor .storycard { max-width: 680px; }
+.pg-editor .overlay .card.storycard { max-width: 720px; }
+.pg-editor .storycard .frow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 5px 0; }
+.pg-editor .storycard .frow > label { flex: 0 0 64px; color: #9ab; font-size: 12px; }
+.pg-editor .storycard .frow .tiles { display: inline-flex; gap: 2px; margin: 0; }
+.pg-editor .storycard .frow input[type=text] { flex: 1; min-width: 120px; }
+.pg-editor .storycard .frow .del { flex: 0 0 auto; width: auto; }
+.pg-editor .storycard .fxarrow { font-size: 16px; color: #9ab; margin: 0 2px; }
+.pg-editor .storycard .chipbtn { width: auto; padding: 3px 10px; font-size: 12px;
+  background: #232a44; border: 1px solid #37406a; border-radius: 10px; }
+.pg-editor .storycard .chipbtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pg-editor .storycard textarea { width: 100%; box-sizing: border-box; }
 .pg-editor .storycard .row { margin: 8px 0; }
 .pg-editor .storycard select, .pg-editor .storycard input[type=text] { min-width: 140px; }
