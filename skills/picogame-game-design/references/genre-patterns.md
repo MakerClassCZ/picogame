@@ -849,7 +849,7 @@ a daily seed.
 ---
 
 ## 12. First-person raycaster / dungeon crawler
-*Device-proven: the raycaster demos (native pg.raycast path).*
+*The public tree ships no raycaster exemplar yet - the runnable reference is the raycaster section of `docs/pages/helpers/pseudo-3d.md` (full wiring: StripDraw, attach, billboards).*
 
 *Exemplars: Wolfenstein 3D, Eye of the Beholder, Legend of Grimrock, DOOM (in
 atmosphere).*
@@ -909,7 +909,7 @@ it at a performance cost.
 **MVP:** map from strings + `Raycaster` + `.attach()` · movement with a `solid()`
 test · 1 billboard enemy type that walks toward the player · exit tile = win.
 **NICE TO HAVE:** keys/doors — `Raycaster.set_cell(x, y, 0)` opens one cell at runtime (grid, `solid()` and `.map` stay consistent; works with a standing camera) · minimap (a small
-`Tilemap` in a corner) · collectibles (billboard + `near`) · `mode7` textured
+`Tilemap` in a corner) · collectibles (billboard + WORLD-space distance: `(ix-px)**2 + (iy-py)**2 < r*r` in map units - `Sprite.near()` is a SCREEN-space test and first person has no player sprite) · `mode7` textured
 floor under the walls · step-based menu combat (§11).
 
 ---
