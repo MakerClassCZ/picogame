@@ -1242,6 +1242,23 @@ def render(display, items, buffer, x0, y0, x1, y1, *, background=0):
     # composited via view.text() is a 0-RAM immediate HUD / text screen (no retained buffer).
     for it in items:
         _draw_item(it, _kind(it), 0, 0, clip)
+    # Firmware parity: the C composites the region into `buffer` strip by strip (strip height =
+    # len(buffer)//2 // region width), so after the call the buffer holds the LAST strip - the WHOLE
+    # region when the buffer covers it. The devtest readback relies on this; keep the copy faithful.
+    rw = cx1 - cx0
+    if buffer is not None and rw > 0:
+        strip_h = (len(buffer) // 2) // rw
+        if strip_h < 1:
+            raise ValueError("render buffer smaller than one row")
+        for sy in range(cy0, cy1, strip_h):
+            k = 0
+            for y in range(sy, min(sy + strip_h, cy1)):
+                drow = y * _W
+                for x in range(cx0, cx1):
+                    v = fb[drow + x]
+                    buffer[k] = v & 0xFF
+                    buffer[k + 1] = (v >> 8) & 0xFF
+                    k += 2
     _host.present()
 
 
