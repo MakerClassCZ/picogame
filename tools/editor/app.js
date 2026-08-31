@@ -435,7 +435,13 @@ function inspector(box) {
     fieldNum(box, "x", z.x, function (v) { z.x = v; }); fieldNum(box, "y", z.y, function (v) { z.y = v; });
     fieldNum(box, "w", z.w, function (v) { z.w = v; }); fieldNum(box, "h", z.h, function (v) { z.h = v; });
     box.appendChild(hint("view.in_zone(x, y, tag) returns this when a point is inside."));
-    fieldData(box, z, 'data (JSON) - {"script": "intro"} names a story script (picogame_script):');
+    fieldData(box, z, 'data (JSON) - {"script": "intro"} names a story script, or declarative: ' +
+      '{"say": [...]}, {"ask": {...}}, {"goto": ["level", "point"]} (compiled to code on Try):');
+    if (z.data && (z.data.say || z.data.ask || z.data.goto)) {
+      const zr = mk("div", "row");
+      add(zr, btn("Convert to script", function () { ejectZoneScript(z); }));
+      box.appendChild(zr);
+    }
     dupDelRow(box, "zone", z, L().zones);
   } else if (sel.point) {
     const q = sel.point;
@@ -1775,12 +1781,12 @@ function substitutePngAssets(scene, pngIds) {
   return subbed;
 }
 
-function handoffScene(scene) {
-  try { localStorage.setItem("pg_editor_level", JSON.stringify(scene)); }
-  catch (e) { toast("Level too large to hand off", "err"); return; }
+function handoffScene(payload) {
+  try { localStorage.setItem("pg_editor_level", JSON.stringify(payload)); }
+  catch (e) { toast("Project too large to hand off", "err"); return; }
   var url = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";  // set in config.js
   window.open(url + (url.indexOf("?") < 0 ? "?" : "&") + "from=editor", "_blank");
-  toast("Opening this level in the playground…", "ok");
+  toast("Opening in the playground…", "ok");
 }
 
 // Bake the editor's loaded PNG assets into inline PAL8 atlases (Canvas -> quantize -> base64) so the
@@ -1803,29 +1809,127 @@ function inlinePngAssets(scene, pngIds) {
   return { inlined: inlined, missing: missing };
 }
 
-if ($("btnTryPlay")) $("btnTryPlay").onclick = function () {
-  var scene;
-  try { scene = E.exportScene(project); } catch (e) { toast("Could not export this level", "err"); return; }
-  var pngIds = Object.keys(scene.assets || {}).filter(function (id) {
-    var t = scene.assets[id].type; return t === "sprite" || t === "tileset" || t === "bitmap";
+// ---- Story: script bodies (project.scripts) + level effects ----------------
+// Zone data {"script": "name"} names a story; the body edited here is the
+// inside of `def name(d):` and rides along on Try in playground. Declarative
+// zones (say/ask/goto) need no body - "Convert to script" ejects one when the
+// story outgrows data. The compiler lives with the playground (one source).
+function storyCompiler() {
+  var base = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";
+  return import(base + "vendor/runner_stubs.mjs?v=rs4");
+}
+function storyScriptNames() {
+  var names = {};
+  Object.keys(project.scripts || {}).forEach(function (n) { names[n] = 1; });
+  (project.levels || []).forEach(function (lv) {
+    (lv.zones || []).forEach(function (z) { if (z.data && z.data.script) names[z.data.script] = 1; });
   });
-  if (!pngIds.length) { handoffScene(scene); return; }     // colour-only level: unchanged flow
-  var res;
-  try { res = inlinePngAssets(scene, pngIds); }
-  catch (e) { toast("Couldn't bake an image asset: " + (e.message || e), "err"); return; }
-  if (res.missing.length) {
-    // image not loaded (e.g. project file without embedded art): offer placeholders for those
-    var ok = window.confirm(
-      "No image data for: " + res.missing.join(", ") + ".\n\n" +
-      "Open the playground with coloured placeholder blocks for those assets?\n\n" +
-      "OK = run with placeholders   ·   Cancel = don't open");
-    if (!ok) { toast("Cancelled", "info"); return; }
-    try { substitutePngAssets(scene, res.missing); }
-    catch (e) { toast("Couldn't substitute an image asset: " + (e.message || e), "err"); return; }
+  return Object.keys(names).sort();
+}
+function refreshStory() {
+  var selEl = $("storySel"); if (!selEl) return;
+  var cur = selEl.value;
+  selEl.innerHTML = "";
+  selEl.appendChild(new Option("(pick a script)", ""));
+  storyScriptNames().forEach(function (n) {
+    var mark = project.scripts && project.scripts[n] && project.scripts[n].trim() ? "" : " (placeholder)";
+    selEl.appendChild(new Option(n + mark, n));
+  });
+  if (cur) selEl.value = cur;
+  $("storyBody").value = (project.scripts && project.scripts[selEl.value]) || "";
+  $("storyFx").value = L().effects ? JSON.stringify(L().effects) : "";
+}
+if ($("storyD")) {
+  $("storyD").addEventListener("toggle", function () { if ($("storyD").open) refreshStory(); });
+  $("storySel").onchange = function () {
+    $("storyBody").value = (project.scripts && project.scripts[$("storySel").value]) || "";
+  };
+  $("storyBody").onchange = function () {
+    var n = $("storySel").value;
+    if (!n) { toast("Pick or create a script first", "err"); return; }
+    snapshot();
+    project.scripts = project.scripts || {};
+    project.scripts[n] = $("storyBody").value;
+    refreshStory(); scheduleAutosave();
+  };
+  $("storyNew").onclick = function () {
+    var n = window.prompt('Script name (a zone starts it via {"script": "name"}):', "");
+    if (!n) return;
+    snapshot();
+    project.scripts = project.scripts || {};
+    if (!(n in project.scripts)) project.scripts[n] = "";
+    refreshStory(); $("storySel").value = n; $("storyBody").value = project.scripts[n];
+  };
+  $("storyFx").onchange = function () {
+    try {
+      snapshot();
+      var v = $("storyFx").value ? JSON.parse($("storyFx").value) : null;
+      if (v) L().effects = v; else delete L().effects;
+      $("storyFx").classList.remove("bad"); scheduleAutosave();
+    } catch (e) { $("storyFx").classList.add("bad"); toast("effects is not valid JSON", "err"); }
+  };
+}
+function ejectZoneScript(z) {
+  storyCompiler().then(function (mod) {
+    var body = mod.compileZoneBody(z.data, { tests: [], sets: [] });
+    if (!body) { toast("Nothing declarative in this zone (needs say / ask / goto data)", "err"); return; }
+    var goto_ = z.data.goto;
+    var def = goto_ ? "to_" + (Array.isArray(goto_) ? goto_[0] : goto_)
+                    : (z.data.say ? "say_" : "ask_") + (z.tag || "zone");
+    var name = window.prompt("Script name:", def);
+    if (!name) return;
+    snapshot();
+    project.scripts = project.scripts || {};
+    project.scripts[name] = body.join("\n");
+    z.data = { script: name };
+    toast('Converted - the body now lives under Story ▾ as "' + name + '"', "ok");
+    renderPanel(); refreshStory(); scheduleAutosave();
+  }).catch(function () {
+    toast("Convert needs the playground reachable (the compiler lives there)", "err");
+  });
+}
+
+if ($("btnTryPlay")) $("btnTryPlay").onclick = function () {
+  // Hand over the WHOLE project - every level + script bodies - so the playground
+  // program is a complete game (goto() travels between the levels), not one map.
+  var levels = {}, scenes = [], handoffNames = [], pngIds = null, missing = null, inlined = 0;
+  for (var i = 0; i < project.levels.length; i++) {
+    var scene;
+    try { scene = E.exportScene(project, i); }
+    catch (e) { toast("Could not export level " + (project.levels[i].name || i + 1), "err"); return; }
+    if (project.levels[i].effects) scene.effects = project.levels[i].effects;   // story world-changes
+    if (pngIds === null) pngIds = Object.keys(scene.assets || {}).filter(function (id) {
+      var t = scene.assets[id].type; return t === "sprite" || t === "tileset" || t === "bitmap";
+    });
+    if (pngIds.length) {
+      var res;
+      try { res = inlinePngAssets(scene, pngIds); }
+      catch (e) { toast("Couldn't bake an image asset: " + (e.message || e), "err"); return; }
+      inlined = res.inlined.length;
+      if (missing === null) missing = res.missing;         // assets are project-wide: ask ONCE
+    }
+    scenes.push(scene);
+    var lname = project.levels[i].name || ("level" + (i + 1));
+    while (levels[lname]) lname += "_2";                   // names must be unique keys
+    levels[lname] = scene;
+    handoffNames.push(lname);
   }
-  handoffScene(scene);
-  if (res.inlined.length) toast("Baked " + res.inlined.length + " image asset(s) to PAL8 for the playground", "ok");
-  if (res.missing.length) toast("Substituted " + res.missing.length + " asset(s) with placeholder blocks", "info");
+  if (missing && missing.length) {
+    var ok = window.confirm(
+      "No image data for: " + missing.join(", ") + ".\n\n" +
+      "Open the playground with coloured placeholder blocks for those assets?\n\n" +
+      "OK = run with placeholders   \u00b7   Cancel = don't open");
+    if (!ok) { toast("Cancelled", "info"); return; }
+    for (var j = 0; j < scenes.length; j++) {
+      try { substitutePngAssets(scenes[j], missing); }
+      catch (e) { toast("Couldn't substitute an image asset: " + (e.message || e), "err"); return; }
+    }
+  }
+  handoffScene({ format: "picogame-project-handoff",
+                 start: handoffNames[project.current],
+                 levels: levels, scripts: project.scripts || {} });
+  if (inlined) toast("Baked " + inlined + " image asset(s) to PAL8 for the playground", "ok");
+  if (missing && missing.length) toast("Substituted " + missing.length + " asset(s) with placeholder blocks", "info");
 };
 
 // nav buttons in top bar (if present)

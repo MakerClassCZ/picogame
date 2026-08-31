@@ -38,6 +38,23 @@
     <button id="btnSave" class="mini opt">Save</button>
     <button id="btnLoad" class="mini opt">Load</button>
     <button id="btnTryPlay" class="mini" title="Open this level running in the playground">&#9654; Try in playground</button>
+    <details id="storyD" class="dd">
+      <summary class="mini" title="Script bodies + level effects (picogame_script)">Story &#9662;</summary>
+      <div class="ddmenu" style="min-width:380px">
+        <div class="hint">Bodies for named zone scripts (<code>{"script": "name"}</code> in a zone's data) &mdash;
+          the inside of <code>def name(d):</code>, handed to the playground on Try. Declarative zones
+          (<code>say</code> / <code>ask</code> / <code>goto</code> data) compile on their own and need nothing here.</div>
+        <div style="display:flex;gap:6px;margin:4px 0">
+          <select id="storySel" style="flex:1"></select>
+          <button id="storyNew" class="mini">New&hellip;</button>
+        </div>
+        <textarea id="storyBody" rows="10" spellcheck="false" style="width:100%;box-sizing:border-box;font:12px ui-monospace,Menlo,Consolas,monospace"></textarea>
+        <div class="hint">This level's effects (JSON): world changes replayed from story flags on load and
+          whenever a flag is set, e.g. <code>[{"if":"gate_open","swap":[3,6],"unsolid":[3]}]</code>
+          (also <code>solid</code>, <code>hide</code>/<code>show</code> by sprite name).</div>
+        <textarea id="storyFx" rows="2" spellcheck="false" style="width:100%;box-sizing:border-box;font:12px ui-monospace,Menlo,Consolas,monospace"></textarea>
+      </div>
+    </details>
     <details id="exportD" class="dd">
       <summary class="mini">Export ▾</summary>
       <div class="ddmenu">
