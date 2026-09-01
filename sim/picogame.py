@@ -29,7 +29,7 @@ _strict_dirty = False       # --strict-dirty: skip an always_dirty=False StripDr
 _fb_prev = None             # previous frame's pixels, for restoring clean layers in strict mode
 
 
-def set_strict_dirty(on):
+def _set_strict_dirty(on):
     global _strict_dirty
     _strict_dirty = bool(on)
 
@@ -325,8 +325,9 @@ class Sprite:
 
     @property
     def flash(self):
-        # flash: opaque pixels drawn as this wire-RGB565 colour
-        return self._fx_val if self._fx_mode == "flash" else None
+        # flash: opaque pixels drawn as this wire-RGB565 colour; 0 when off (firmware parity -
+        # 0 also DISABLES it, so pure black can never be the flash colour)
+        return self._fx_val if self._fx_mode == "flash" else 0
 
     @flash.setter
     def flash(self, v):
@@ -343,8 +344,8 @@ class Sprite:
 
     @property
     def tint(self):
-        # tint: multiply opaque pixels by this colour (keeps shading)
-        return self._fx_val if self._fx_mode == "tint" else None
+        # tint: multiply opaque pixels by this colour (keeps shading); 0 when off (firmware parity)
+        return self._fx_val if self._fx_mode == "tint" else 0
 
     @tint.setter
     def tint(self, v):
@@ -1038,9 +1039,12 @@ class StripDraw:
         self._pending = True
         self._view = Canvas(1, 1)        # reused; data/w/h repointed per strip
 
-    def invalidate(self, x=0, y=0, w=0, h=0):
-        # firmware L2 accepts a sub-rect for partial repaint; the sim has no dirty-rect (it full-
-        # repaints), so the rect is accepted for API parity but ignored.
+    def invalidate(self, x=None, y=None, w=None, h=None):
+        # firmware contract: no args = whole layer, ALL FOUR = a sub-rect; a partial rectangle
+        # raises (it is a bug, not a request for "everything"). The sim has no dirty-rect (it
+        # full-repaints), so a full rect is accepted for API parity but otherwise ignored.
+        if sum(v is not None for v in (x, y, w, h)) not in (0, 4):
+            raise ValueError("invalid rect")
         self._pending = True
 
     # read/write rect size mirroring the firmware properties (internals use w/h)
@@ -1275,9 +1279,10 @@ class Scene:
     def refresh(self):
         bg = self._background
         fb = _host.fb
-        if _strict_dirty:                    # keep last frame's pixels: a StripDraw the game did
-            global _fb_prev                  #  not invalidate() then KEEPS SHOWING what it drew
-            _fb_prev = list(fb)              #  before, exactly as the panel does on device
+        prev = list(fb)                      # last frame's pixels: strict mode restores clean
+        if _strict_dirty:                    #  StripDraws from them (a layer the game did not
+            global _fb_prev                  #  invalidate() KEEPS SHOWING what it drew before,
+            _fb_prev = prev                  #  exactly as the panel does on device)
         x0 = self._left                      # play rect; the reserved border is left untouched
         x1 = _W - self._right
         y0 = self._top
@@ -1292,6 +1297,8 @@ class Scene:
             vy = 0 if fx else self._oy
             _draw_item(item, kind, vx, vy, clip)
         _host.present()
+        if fb == prev:                       # firmware parity: a no-change frame returns None
+            return None
         return [x0, y0, x1, y1]
 
 

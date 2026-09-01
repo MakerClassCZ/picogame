@@ -343,7 +343,7 @@ def main():
         print("[sim] controls: arrows / WASD = move,  F / Ctrl = A,  G / Space = B,  "
               "R / Q = X,  T / E = Y,  close the window to quit")
     import picogame as _pgmod
-    _pgmod.set_strict_dirty(args.strict_dirty)
+    _pgmod._set_strict_dirty(args.strict_dirty)
     if args.seed is not None:
         import random as _random
         import picogame_rand as _prand
