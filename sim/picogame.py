@@ -22,6 +22,28 @@ _KIND_TILEMAP = 1
 _KIND_PARTICLES = 2
 _KIND_CANVAS = 3
 _KIND_STRIPDRAW = 4
+_strict_dirty = False       # --strict-dirty: skip an always_dirty=False StripDraw that was not
+                            #  invalidate()d - the sim otherwise full-repaints and hides the bug
+
+
+_fb_prev = None             # previous frame's pixels, for restoring clean layers in strict mode
+
+
+def set_strict_dirty(on):
+    global _strict_dirty
+    _strict_dirty = bool(on)
+
+
+def _restore_rect(sd):
+    # Put back what this layer drew last frame (it is clean, so the device would not repaint it).
+    if _fb_prev is None:
+        return
+    fb = _host.fb
+    x0 = max(0, sd.x)
+    x1 = min(_W, sd.x + sd._w)
+    for y in range(max(0, sd.y), min(_H, sd.y + sd._h)):
+        row = y * _W
+        fb[row + x0:row + x1] = _fb_prev[row + x0:row + x1]
 _KIND_TRIANGLES = 5
 _SIM_STRIP_H = 8        # emulate the device's banded render so per-strip bugs surface
 
@@ -1151,7 +1173,13 @@ def _draw_item(item, kind, vx, vy, clip):
     elif kind == _KIND_PARTICLES:
         item._draw(vx, vy, clip)
     else:
+        if (_strict_dirty and kind == _KIND_STRIPDRAW
+                and not item.always_dirty and not item._pending):
+            _restore_rect(item)       # clean layer: last frame's pixels stand (device behaviour),
+            return                    #  so a forgotten invalidate() shows as a FROZEN panel
         item._draw(vx, vy, clip)
+        if kind == _KIND_STRIPDRAW:
+            item._pending = False
 
 
 class Display:
@@ -1188,7 +1216,33 @@ class Scene:
         self._items.append(item)
         self._kinds.append(_kind(item))
         self._fixed.append(fixed)
+        self._check_reserved(item)
         return item
+
+    def _check_reserved(self, item):
+        # A layer that lies ENTIRELY inside a setup(top=/bottom=/left=/right=) band never draws -
+        # the scene doesn't touch reserved margins (that space belongs to HudBar / pg.render). It
+        # is dropped in silence on device too, so say it here rather than let a blank HUD look
+        # like a broken callback.
+        if not (self._top or self._bottom or self._left or self._right):
+            return
+        try:
+            if isinstance(item, StripDraw):
+                x1, y1, x2, y2 = item.x, item.y, item.x + item._w, item.y + item._h
+            elif isinstance(item, Sprite):
+                x1, y1, x2, y2 = item._bounds()
+            else:
+                return
+        except Exception:
+            return
+        if (y2 <= self._top or y1 >= _H - self._bottom
+                or x2 <= self._left or x1 >= _W - self._right):
+            _host.note("a %s at (%d,%d)-(%d,%d) lies entirely inside the band reserved by "
+                       "setup(top=%d, bottom=%d, left=%d, right=%d) - the scene never draws "
+                       "there, so this layer is silently dead. Paint the band with HudBar / "
+                       "pg.render, or move the layer into the play area."
+                       % (type(item).__name__, x1, y1, x2, y2,
+                          self._top, self._bottom, self._left, self._right))
 
     def add_all(self, items):
         for it in items:
@@ -1221,6 +1275,9 @@ class Scene:
     def refresh(self):
         bg = self._background
         fb = _host.fb
+        if _strict_dirty:                    # keep last frame's pixels: a StripDraw the game did
+            global _fb_prev                  #  not invalidate() then KEEPS SHOWING what it drew
+            _fb_prev = list(fb)              #  before, exactly as the panel does on device
         x0 = self._left                      # play rect; the reserved border is left untouched
         x1 = _W - self._right
         y0 = self._top

@@ -353,6 +353,14 @@ self-contained file** — no sibling imports, inline art — per the playground 
    python3 sim/run.py examples/my_game.py --frames 80 --hold RIGHT,A --shot /tmp/shot.png  # headless
    # --frames/--keys/--shot-at count GAME frames (one per clock.tick()), so a --keys timeline
    # lines up with your loop iterations no matter how often a frame presents.
+   # --seed N        makes a run REPEAT (fixes picogame_rand + random) - required to compare two
+   #                 screenshots, or to reproduce a difficulty complaint.
+   # --tap A:30      taps a button for the whole run. A soak needs it: --hold A presses ONCE and
+   #                 never releases, so a game whose restart is just_pressed(A) sits on its
+   #                 game-over screen for 94% of the 3600 frames and proves nothing.
+   # --strict-dirty  honours each always_dirty=False StripDraw's dirty bit, so a content change
+   #                 you forgot to invalidate() FREEZES here as it does on device. Run it once
+   #                 before you call a StripDraw-heavy UI done.
    # a BUTTON-driven feature: script the press instead of reasoning about it (FRAME:BTN[:HELD])
    python3 sim/run.py examples/my_game.py --keys "5:RIGHT,25:B:3" --shot-at 30 --shot /tmp/jump.png
    # live window FOR THE USER to actually play (don't run it yourself — you won't see it):
@@ -376,8 +384,11 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
 
 **Machine-verifiable — the agent confirms these (sim run + screenshot + RAM estimate):**
 1. **Runs clean** — N frames in the sim with no exception (`sim/run.py … --frames N`), not just
-   "imports." Then a **`--frames 3600 --fast`** run must also finish clean — it catches per-frame
-   allocations and heap fragmentation a short run hides (`engine-capabilities.md §5`). `--fast` skips
+   "imports." Then a **`--frames 3600 --fast`** run must also finish clean — it catches the crashes
+   a short run hides: an unbounded list, a pool that fills, a state the game only reaches after
+   minutes. It does NOT catch per-frame *churn* (CPython's GC hides same-frame garbage that the
+   device's non-moving heap would fragment — `engine-capabilities.md §5`), so read the hot loop for
+   allocations too; `--profile` reports RETAINED growth only. `--fast` skips
    the frame sleep (`dt` still reads the nominal 1/fps, so the game behaves identically) — without it
    the soak takes two minutes of waiting, which is how it ends up quietly shortened.
 2. It **reads at a glance** in the PNG — *name* the player's shape+colour and each threat's from the

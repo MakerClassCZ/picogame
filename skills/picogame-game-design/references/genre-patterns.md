@@ -120,6 +120,16 @@ multi-hit silver · Catch/sticky + Laser.
 ---
 
 ## 2. Fixed & Vertical Shooters / Shmups
+**POOL SIZING IS A FORMULA, NOT A GUESS.** `capacity >= volley * flight_frames / cooldown_frames`
+(a 3-way every 4 frames with a 17-frame flight needs >= 13). `Pool.spawn()` returning None is
+COMPLETELY SILENT - undersize it and a third of every volley just never appears, with no error and
+no visible cause. Compute it, then add one.
+
+**ONE POOL, SEVERAL ENEMY KINDS.** `Pool` takes ONE bitmap, but a bitmap holds frames: build the
+kinds as `shapes.masks([kind_a_rows, kind_b_rows, ...], {char: colour})` and select with
+`sprite.frame = kind` **after** `spawn()` (spawn restores the baseline frame). The palette is
+shared across all frames, so give each kind its OWN mask characters if they need different colours.
+
 *Device-proven: Starship tutorial, boxshmup, picowing.*
 
 *Exemplars: Space Invaders, Galaga, 1942, Touhou, DoDonPachi, Ikaruga.*
@@ -774,7 +784,7 @@ feedback (sound/flash on tight clears) + screen-edge wrap.
 ## 10. Tower Defense / Grid Placement
 *Recipe only — no shipped exemplar yet; treat the tunings as starting points and validate on device early.*
 
-*Exemplars: SALVO (this project), Kingdom Rush, Bloons.*
+*Exemplars: Kingdom Rush, Bloons. SALVO is this workspace's dev title and is NOT in the public tree - the docs gallery card for it plays in the browser only, so treat §10 as recipe-only and don't go looking for its source.*
 
 **CORE LOOP** — Plan → watch → adapt: place/upgrade towers on a grid, then waves of
 enemies walk a fixed path while towers auto-fire; earn currency per kill to build

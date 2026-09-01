@@ -69,6 +69,24 @@ def wrap(text, width, maxlines=None):
 CANCEL = const(-2)
 
 
+def text_width(font, text):
+    """Pixel width of `text` in `font`. The bundled fonts are FIXED-CELL, so this is
+    len(text) * cell_w - the metric every HUD hand-computed as `len(s) * 6`."""
+    return len(text) * font.get_bounding_box()[0]
+
+
+def centred(text, chars):
+    """`text` padded with spaces to `chars` cells, centred - the SceneLabel.reserve() centring
+    idiom. Use THIS, not `str.center()`: str.center is compiled out of CircuitPython (it needs
+    MICROPY_PY_BUILTINS_STR_CENTER, an EXTRA_FEATURES build), so it works in the sim and raises
+    AttributeError on the device."""
+    n = len(text)
+    if n >= chars:
+        return text[:chars]
+    left = (chars - n) // 2
+    return " " * left + text + " " * (chars - n - left)
+
+
 class SceneLabel:
     """One line of text pinned in the scene as a `fixed` (camera-independent) layer; scene.refresh()
     paints it (no draw call). Text is composed as PAL8 (1 byte/px - HALF the RAM of the old RGB565
@@ -238,9 +256,9 @@ class SceneBox:
         self.scene.remove(self._sd)
 
 
-class _HudLabel:
+class HudLabel:
     """A text field handle returned by HudBar.label(); update with `.set(text)` (same verb as
-    SceneLabel.set), then call the bar's draw()."""
+    SceneLabel.set) or `.color(fg)`, then call the bar's draw()."""
     __slots__ = ("x", "y", "fg", "font", "text")
 
     def __init__(self, x, y, fg, font, text):
@@ -252,6 +270,10 @@ class _HudLabel:
 
     def set(self, text):
         self.text = _txt(text)
+
+    def color(self, fg):
+        """Recolour this field (a gauge that goes red when low) - same verb as SceneLabel.color."""
+        self.fg = fg
 
 
 class HudBar:
@@ -276,7 +298,7 @@ class HudBar:
         self.buffer = buffer
         self.x, self.y, self.w, self.h = x, y, w, h
         self.bg = bg
-        self._labels = []                   # _HudLabel handles
+        self._labels = []                   # HudLabel handles
         self._icons = []                    # icon sprites blitted into the band
         self._sd = pg.StripDraw(self._draw, x, y, w, h)   # buffer-less -> 0 retained RAM
 
@@ -304,7 +326,7 @@ class HudBar:
     def label(self, font, x, y, fg, text=" "):
         """Add a text field; returns a handle - update it with `handle.set(text)` (the same .set as
         SceneLabel), then call `draw()`. The text is composited directly, no per-label sprite."""
-        lb = _HudLabel(x, y, fg, font, text)
+        lb = HudLabel(x, y, fg, font, text)
         self._labels.append(lb)
         return lb
 
@@ -556,20 +578,26 @@ class GridCursor:
     tuple on A (confirm), `ui.CANCEL` on B (the "cross"/back), or None while navigating.
     `wrap=True` wraps at the edges; otherwise the cursor clamps."""
 
-    def __init__(self, cols, rows, tx=0, ty=0, wrap=False):
+    def __init__(self, cols, rows, tx=0, ty=0, wrap=False, delay=15, interval=4):
         self.cols = cols
         self.rows = rows
         self.tx = tx
         self.ty = ty
         self.wrap = wrap
+        # Auto-repeat, in frames. The defaults suit a MENU (deliberate, ~0.5 s to the second
+        # cell); a cursor that IS the game's core verb wants them much lower - on a 15-wide
+        # board the default takes ~2 s to cross. Try delay=6, interval=2.
+        self.delay = delay
+        self.interval = interval
 
     @property
     def index(self):
         return self.ty * self.cols + self.tx
 
     def tick(self, btn):
-        dx = (1 if btn.repeat(btn.RIGHT) else 0) - (1 if btn.repeat(btn.LEFT) else 0)
-        dy = (1 if btn.repeat(btn.DOWN) else 0) - (1 if btn.repeat(btn.UP) else 0)
+        d, i = self.delay, self.interval
+        dx = (1 if btn.repeat(btn.RIGHT, d, i) else 0) - (1 if btn.repeat(btn.LEFT, d, i) else 0)
+        dy = (1 if btn.repeat(btn.DOWN, d, i) else 0) - (1 if btn.repeat(btn.UP, d, i) else 0)
         if dx or dy:
             if self.wrap:
                 self.tx = (self.tx + dx) % self.cols

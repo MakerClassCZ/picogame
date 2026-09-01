@@ -83,6 +83,67 @@ class Shake:
         return self.trauma > 0.0
 
 
+class Flash:
+    """The 1-3 frame hit-flash, without the ordering trap.
+
+    Hand-rolled counters get this wrong: set `n = 2` in the collision pass and decrement it in
+    the entity pass, and the sprite renders flashed for exactly ONE frame - the count is spent
+    before the frame it was meant to cover. `Flash` counts DRAWN frames: `hit()` arms it, `tick()`
+    runs ONCE per frame after the logic and before refresh(), and the sprite stays lit for exactly
+    the frames you asked for.
+
+        fl = fx.Flash(enemy)
+        if hit: fl.hit(WHITE, 2)          # anywhere in the frame, any number of times
+        ...
+        fl.tick(); scene.refresh()
+
+    Mind the shared effect slot: a truthy flash clears an active tint/dither/shadow, so when the
+    flash ends this puts back whatever the sprite wore before it."""
+
+    __slots__ = ("sprite", "t", "_prev_mode", "_prev_val")
+
+    def __init__(self, sprite):
+        self.sprite = sprite
+        self.t = 0
+        self._prev_mode = None
+        self._prev_val = None
+
+    def hit(self, color, frames=2):
+        """Arm (or re-arm) the flash. Safe to call several times in one frame."""
+        s = self.sprite
+        if self.t <= 0:                      # remember what the sprite wore before the flash
+            if s.tint:
+                self._prev_mode, self._prev_val = "tint", s.tint
+            elif s.dither:
+                self._prev_mode, self._prev_val = "dither", s.dither
+            elif s.shadow:
+                self._prev_mode, self._prev_val = "shadow", True
+            else:
+                self._prev_mode = None
+        if frames > self.t:
+            self.t = frames
+        s.flash = color
+
+    def tick(self):
+        """Call once per frame after the logic. True while the flash is still showing."""
+        if self.t <= 0:
+            return False
+        self.t -= 1
+        if self.t <= 0:
+            s = self.sprite
+            s.flash = 0                      # falsy write clears ONLY the flash slot
+            m = self._prev_mode
+            if m == "tint":
+                s.tint = self._prev_val
+            elif m == "dither":
+                s.dither = self._prev_val
+            elif m == "shadow":
+                s.shadow = True
+            self._prev_mode = None
+            return False
+        return True
+
+
 class Fade:
     """Dither screen fade / dim / flash. A StripDraw overlay that stipples `color` over the
     screen with an ordered (Bayer) dither at block size `cell` - no alpha blending needed.

@@ -11,7 +11,7 @@ symptom, apply the first-listed fix, only then investigate deeper.
 | Edited a helper lib but the device ignores the change | **Stale `.mpy` shadows your `.py`** in `CIRCUITPY/lib` — a stale compiled copy (`<name>.mpy`) wins over the edited `<name>.py` at import. Delete the old `.mpy` (or redeploy the whole regenerated bundle). |
 | Drew into a bitmap/canvas buffer but the screen doesn't update | Direct buffer writes are invisible to dirty-rects. Call **`sprite.touch()`** after in-place edits (or `scene.invalidate()` for a full repaint). |
 | Colors are wrong / everything looks byte-swapped | You passed a raw `0xRRGGBB` or hand-built RGB565. All colors must come from **`pg.rgb565(r, g, b)`** (display wire order). |
-| Runs in the sim, `SyntaxError`/`NotImplementedError`/`AttributeError` on device | The sim is CPython; the device is MicroPython. Known gaps: `*unpack` inside a tuple display, `x in array.array` (NotImplementedError), `math.hypot`/`random.shuffle`/other stdlib members missing. **Gate with the firmware-matching `mpy-cross`** (catches syntax; runtime gaps need a device run). |
+| Runs in the sim, `SyntaxError`/`NotImplementedError`/`AttributeError` on device | The sim is CPython; the device is MicroPython. Known gaps found the hard way: `*unpack` inside a tuple display, `x in array.array` (NotImplementedError), `math.hypot`, `random.shuffle`, `struct.iter_unpack`, and **`str.center`** (it needs an EXTRA_FEATURES build - use `picogame_ui.centred()`); other stdlib members likewise. **Gate with the firmware-matching `mpy-cross` if you have one** (catches syntax only; a missing *method* like str.center compiles fine and raises at runtime, so the real gate is a device run). Fastest way to answer "is X device-legal?" without hardware: grep the shipped games for prior art - if none of ~40 titles uses it, assume it is missing. |
 | FPS fine at first, degrades over minutes | Allocation churn → GC pauses/fragmentation. Suspects: creating sprites/lists/dicts per frame (use a `Pool`; in `sprite.data` keep a number, or a dict/list pre-allocated per slot that you only MUTATE — a fresh tuple per change is churn, ~1 KB/frame at 30 entities), f-strings in the loop (`%` is 3.6× faster), text labels regrown per frame (`SceneLabel.reserve()` + set-on-change). |
 | Sudden hitches every few seconds | GC. Confirm with `gc.mem_free()` deltas per frame; hunt the per-frame allocator (same suspects as above). |
 | Bullets/enemies stop spawning | **Pool exhaustion** — `spawn()` returns `None` when full. Size the pool to the real max; free on despawn; check you aren't leaking `visible=True` corpses. |
@@ -32,10 +32,17 @@ symptom, apply the first-listed fix, only then investigate deeper.
 | `rgb444=True` shows a corrupted HUD band | The immediate-render path (reserved-band `HudBar`, `pg.render`) bypasses the 12-bit pack — known limitation; keep the HUD as in-scene StripDraw/labels when using rgb444, or stay RGB565. |
 | Whole screen "flickers" when the game runs below its FPS cap | Not a bug in your code: a sub-cap frame rate beats against the panel's ~60 Hz self-scan (rolling shear). Fix the frame time until the cap holds — the flicker disappears with stable cadence. |
 
+| A StripDraw panel/card never updates on device but is fine in the sim | `always_dirty=False` + a content change you never `invalidate()`d. The sim full-repaints, so it hides this: re-run with **`--strict-dirty`** and the layer freezes there too. |
+| A StripDraw draws NOTHING (blank where the panel should be) | The callback almost certainly forgot `- vx` / `- vy`: items are stored in SCREEN coordinates, the view's local (0,0) is screen `(vx, vy)`, so draw at `self.x - vx, self.y - vy`. Drawing at raw screen coords puts the content outside the strip. |
+| A scene layer inside a `setup(top=/bottom=/left=/right=)` band never appears | By design - the scene never draws in a reserved margin, and the layer is dropped in silence (the sim now warns). Paint the band with `HudBar` / `pg.render`, or move the layer into the play area. Note the band is NOT painted with `background=`; whatever paints it owns it. |
+| Two runs of the same game differ (different maze/deal/waves) | `picogame_rand.Rand()` is time-seeded. Pass **`--seed N`** to repeat a run exactly - required before comparing screenshots or reproducing a balance complaint. |
+
+| A saved best score never comes back in the sim | `sim/microcontroller.py` backs NVM with an in-memory bytearray that RESETS each run, so `picogame_save` round-trips only inside one run. Persistence itself can only be proven on hardware. |
+
 ## When you're stuck: the measurement ladder
 
 1. **Sim first** — `sim/run.py game.py --frames 600` (crashes, obvious logic).
-2. **Device parser** — firmware-matching `mpy-cross -o /dev/null game.py` (MicroPython syntax).
+2. **Device parser** — firmware-matching `mpy-cross -o /dev/null game.py` (MicroPython syntax). **Only if you have one:** mpy-cross is built from a CircuitPython source tree, which the distributed repo does not carry, so from a plain clone this rung is unavailable - fall back to avoiding the known gaps by hand (the table above) plus a hardware run.
 3. **Phase timing on device** — bracket suspect phases with `time.monotonic()` and print every 60
    frames (`build X | draw Y | refresh Z`); optimize the LARGEST number only. Refresh has a
    hardware floor (~24 ms full-screen SPI) — if refresh dominates, send less (dirty-rects, smaller

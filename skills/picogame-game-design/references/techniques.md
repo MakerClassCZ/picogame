@@ -87,7 +87,7 @@ price of one search.
 direction and drop ~8 px at the edge, fire one shot per column from the lowest live alien gated by a
 random roll. *picogame:* a `picogame_pool` of aliens + a single shared "fleet offset" added each
 step; derive each alien's screen pos from `grid_index + offset`. The famous "music speeds up as you
-clear them" falls out of cadence-as-difficulty (§8). See `genre-patterns.md` §2.
+clear them" falls out of cadence-as-difficulty (SKILL.md §1.4's ramp shape). See `genre-patterns.md` §2.
 
 **Target-with-inaccuracy AI.** A simple opponent (Pong paddle, turret) aims at the player but with a
 deliberate error margin tuned to difficulty — beatable, not perfect. *picogame:* lerp the AI toward
@@ -163,6 +163,13 @@ because the RP2040's M0+ has no FPU, so you don't hand-roll fixed-point math you
 ---
 
 ## 5. Collision
+
+**`inset` shrinks a box UNIFORMLY, so it cannot fix a non-rectangular sprite.** On a tapering
+15x46 stalactite the AABB is ~7x too wide at the tip: the player dies in thin air, which is the
+exact failure the "hitbox smaller than the art" rule exists to prevent. For a shape that is not
+roughly boxy, write the predicate yourself - test the few pixels that matter (`a.near(b, r)` for
+round things; an explicit `if abs(dx) < w_at(dy)` taper test; a per-row half-width table). The
+native `overlaps` is the fast path for boxy art, not a universal answer.
 
 **Tile-flag collision (no per-game side tables).** Tag each *tile index* with bits (SOLID/HAZARD/
 LADDER) and test the leading edge before moving — the universal grid-collision idiom. *picogame:*

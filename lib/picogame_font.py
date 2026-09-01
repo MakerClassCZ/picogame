@@ -182,7 +182,7 @@ class Label:
             self.sprite.move(x, y)
 
     def set(self, text):
-        text = "" if text is None else str(text)   # None -> hidden (match ui.SceneLabel/_HudLabel _txt),
+        text = "" if text is None else str(text)   # None -> hidden (match ui.SceneLabel/HudLabel _txt),
         if text == self.text:                       # not the literal "None"
             return False
         self.text = text

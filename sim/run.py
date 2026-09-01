@@ -268,7 +268,11 @@ def main():
                     help="pygame = live window, pil = headless. Default: a live window if pygame is "
                          "installed, else headless (screenshot / CI runs use pil).")
     ap.add_argument("--shot", default=None)
-    ap.add_argument("--shot-at", type=int, default=None)
+    ap.add_argument("--shot-at", type=int, default=None,
+                    help="screenshot after this GAME frame - counted from the very first "
+                         "clock.tick(), so TITLE and menu frames count too: if the game "
+                         "sits on a title until A, add those frames to the play-frame you "
+                         "want. Default: the last frame.")
     ap.add_argument("--hold", default=None,
                     help="buttons held for the whole run, e.g. --hold RIGHT,B "
                          "(logical names UP/DOWN/LEFT/RIGHT/A/B/X/Y) -- for testing input")
@@ -276,11 +280,25 @@ def main():
                     help="scripted input timeline, FRAME:BUTTON[:HELD_FRAMES] items separated by "
                          "commas: --keys \"20:RIGHT,40:X:2,60:-RIGHT\" walks right from frame 20, "
                          "taps X for 2 frames at 40 (a tap is what just_pressed needs) and lets go "
-                         "at 60. FRAME counts PRESENTED frames (the same counter as --frames): "
-                         "the button is down from that frame's present onward. A game that presents "
-                         "more than once per loop (e.g. an immediate HudBar.draw() after refresh) "
-                         "advances this counter faster than its game loop - present once per loop, "
-                         "or budget for the drift. Headless only (a live window reads the keyboard).")
+                         "at 60. FRAME is a GAME frame (the same counter as --frames: one per "
+                         "clock.tick()), so the button is down when the game polls input on that "
+                         "frame no matter how often it presents (a draw-on-change HUD is free). "
+                         "Headless only (a live window reads the keyboard).")
+    ap.add_argument("--tap", default=None,
+                    help="repeat a tap for the whole run: --tap A:30 taps A for 2 frames every 30. "
+                         "A soak needs this: --hold A presses ONCE and never releases, so a game "
+                         "whose restart is just_pressed(A) spends the soak on its game-over screen. "
+                         "Several: --tap A:30,LEFT:12 (BUTTON:PERIOD[:HELD_FRAMES]).")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="fix the RNG so a run REPEATS: seeds picogame_rand's default seed and "
+                         "CPython's random. Without it every run deals a different game, so two "
+                         "screenshots can't be compared and a difficulty complaint can't be "
+                         "reproduced.")
+    ap.add_argument("--strict-dirty", action="store_true",
+                    help="honour each always_dirty=False StripDraw's dirty bit instead of "
+                         "repainting everything: a layer you forgot to invalidate() after a "
+                         "content change then STOPS UPDATING here, the way it does on device "
+                         "(the sim has no dirty-rect otherwise, so that bug is invisible).")
     ap.add_argument("--fast", action="store_true",
                     help="headless: run the frame loop at full speed by giving picogame_clock a "
                          "VIRTUAL clock -- the frame sleep is skipped but dt still reads the nominal "
@@ -324,6 +342,13 @@ def main():
         _host.setup_keymap()
         print("[sim] controls: arrows / WASD = move,  F / Ctrl = A,  G / Space = B,  "
               "R / Q = X,  T / E = Y,  close the window to quit")
+    import picogame as _pgmod
+    _pgmod.set_strict_dirty(args.strict_dirty)
+    if args.seed is not None:
+        import random as _random
+        import picogame_rand as _prand
+        _prand._default_seed = lambda: args.seed    # Rand() with no seed -> this one
+        _random.seed(args.seed)                     # ... and the stdlib RNG some games use
     _host.set_tick_mode(_uses_clock(game_path))   # decided statically, see _uses_clock
     _install_frame_boundary(_host)
     if args.fast:
@@ -335,6 +360,32 @@ def main():
     if args.hold:                      # hold buttons for the whole run (input testing)
         for name in args.hold.split(","):
             _host.pressed_pins.add(_button_pin(name))
+    if args.tap:                       # periodic taps for the whole run (soak restarts)
+        if args.backend == "pygame":
+            print("[sim] --tap is ignored with a live window (it reads the real keyboard).")
+        else:
+            taps = []
+            for item in args.tap.split(","):
+                parts = item.split(":")
+                if len(parts) < 2:
+                    raise SystemExit("[sim] --tap: expected BUTTON:PERIOD[:HELD], got %r" % item)
+                pin = _button_pin(parts[0])
+                period = int(parts[1])
+                held = int(parts[2]) if len(parts) > 2 else 2
+                if period < 1 or held < 1 or held >= period:
+                    raise SystemExit("[sim] --tap: need 1 <= HELD < PERIOD, got %r" % item)
+                taps.append((pin, period, held))
+
+            def apply_taps(fr, _taps=taps):
+                for pin, period, held in _taps:
+                    phase = fr % period
+                    if phase == 0:
+                        _host.pressed_pins.add(pin)
+                    elif phase == held:
+                        _host.pressed_pins.discard(pin)
+
+            prev = _host._frame_hook
+            _host.set_frame_hook(lambda fr: (apply_taps(fr + 1), prev and prev(fr)))
     if args.keys:                      # scripted timeline: press/release at given frames
         if args.backend == "pygame":
             print("[sim] --keys is ignored with a live window (it reads the real keyboard).")
@@ -362,7 +413,7 @@ def main():
     except _host.SimStop:
         print("[sim] stopped after %d frames OK: %s" % (_host._frame, os.path.basename(game_path)))
         for n in _host.take_notes():
-            print("[sim] DEVICE-ONLY WARNING: %s" % n)
+            print("[sim] WARNING: %s" % n)
     except Exception:
         print("[sim] EXCEPTION in %s:" % os.path.basename(game_path))
         traceback.print_exc()
