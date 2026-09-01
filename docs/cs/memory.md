@@ -4,7 +4,7 @@ Nejdřív zjisti dostupnou paměť a cenu největších položek, potom změř s
 konci stránky pomáhá až tehdy, když opakované velké alokace skutečně tříští haldu.
 
 :::note[Opravu jsi nasadil, ale nic se nezměnilo?]
-Zastaralý `.mpy` v `/lib` na desce **zastíní** odpovídající `.py` při importu, takže se úprava v Pythonu nespustí — po každé změně knihovny ho smaž nebo znovu sestav (viz [Spuštění na hardwaru](hardware.md)).
+Zastaralý `.mpy` ležící DŘÍV na sys.path (`['', '/', '.frozen', '/lib']`) **zastíní** upravený `.py` — typicky bundle `.mpy` v kořeni CIRCUITPY porazí `/lib/<jméno>.py`; ve STEJNÉM adresáři vyhrává `.py`. Po každé změně libu bundle smaž nebo přegeneruj (viz [Spuštění na hardwaru](hardware.md)).
 :::
 
 :::tip[Triáž při MemoryError — začni tady]
@@ -16,7 +16,7 @@ Zastaralý `.mpy` v `/lib` na desce **zastíní** odpovídající `.py` při imp
 4. **Fondy pro spawny každého snímku** místo churnu create/destroy — [`picogame_pool`](/cs/helpers/building-scenes/).
 5. **Velké prostředky zmraz nebo čti postupně** místo kopírování na haldu — [zmrazená data vs soubor vs postupné čtení](#umístění-grafiky-zmrazená-data-soubor-v-ram-a-postupné-čtení).
 6. **`gc.collect()` na hranicích scény / úrovně** pro sloučení uvolněných bloků.
-7. **Po opravě to stále padá?** Zastaralý `.mpy` možná **zastiňuje tvůj `.py`** — viz poznámka výše.
+7. **Po opravě to stále padá?** Zastaralý `.mpy` ležící dřív na sys.path možná **zastiňuje tvůj `.py`** — viz poznámka výše.
 :::
 
 ## Rozpočet a jeho hlavní položky

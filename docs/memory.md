@@ -5,7 +5,7 @@ know the budget, know what the big items cost, measure instead of guessing — a
 heap fragmentation. The technique at the end (a pre-allocated **arena**) is broadly reusable.
 
 :::note[Applied the fix but nothing changed?]
-A stale `.mpy` in the board's `/lib` **shadows** the matching `.py` at import, so a Python edit never runs — delete or rebuild it after any lib change (see [Run on hardware](hardware.md)).
+A stale `.mpy` sitting EARLIER on sys.path (`['', '/', '.frozen', '/lib']`) **shadows** your edited `.py` — typically a bundle `.mpy` at the CIRCUITPY root beating `/lib/<name>.py`; in the SAME directory the `.py` wins. Delete or rebuild it after any lib change (see [Run on hardware](hardware.md)).
 :::
 
 :::tip[MemoryError triage — start here]
@@ -17,7 +17,7 @@ A `MemoryError` mid-game almost always means **no contiguous block big enough**,
 4. **Pool per-frame spawns** instead of create/destroy churn — [`picogame_pool`](/helpers/building-scenes/).
 5. **Freeze or stream large assets** rather than copying them onto the heap — [frozen vs file vs streaming](#where-assets-live-frozen-vs-file-in-ram-vs-streaming).
 6. **`gc.collect()` at scene / level boundaries** to merge freed blocks.
-7. **Still failing after a fix?** A stale `.mpy` may be **shadowing your `.py`** — see the note above.
+7. **Still failing after a fix?** A stale `.mpy` earlier on sys.path may be **shadowing your `.py`** — see the note above.
 :::
 
 ## The budget, and what eats it
