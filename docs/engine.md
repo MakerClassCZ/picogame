@@ -89,7 +89,7 @@ while True:
 | `rgb565(r, g, b) -> int` | build a wire-order RGB565 color from 8-bit components |
 | `collide(x1, y1, x2, y2, ax1, ay1, ax2, ay2) -> bool` | AABB box↔box overlap; inclusive bounds, so boxes collide when they touch (pass sprite boxes as `(x, y, x+w, y+h)`; fires on contact). `collide` is inclusive, unlike render's half-open pixel ranges (different domains: hitboxes vs pixels) |
 | `collide(x1, y1, x2, y2, px, py) -> bool` | box↔point (6 args) |
-| `render(display, sprites, buffer, x0, y0, x1, y1, *, background=0)` | immediate draw of a sprite list to a compatible display target |
+| `render(display, layers, buffer, x0, y0, x1, y1, *, background=0)` | immediate draw of a layer list (any scene-layer kind) to a compatible display target |
 | `value2d(x, y, *, seed=0) -> float` | smooth 2-D value noise, 0..1 (fast C) |
 | `value1d(x, *, seed=0) -> float` | smooth 1-D value noise, 0..1 |
 | `fbm2d(x, y, *, octaves=4, seed=0, lacunarity=2.0, gain=0.5) -> float` | fractal (fBm) 2-D noise, 0..1 — terrain/clouds/caves |
@@ -102,12 +102,12 @@ the simulator provides a matching Python implementation.
 
 ### Conditional / build-flag API
 
-Presence depends on the firmware build - feature-test with `hasattr` / `getattr`:
+Presence depends on the firmware build. Do NOT feature-test the TYPES with `hasattr` — a build without the backend still exposes `Display`/`Framebuffer` as stubs whose constructor raises, so `hasattr` is always True. Test the module booleans instead: `pg.FAST_DISPLAY_SUPPORTED` and `pg.FRAMEBUFFER_SUPPORTED`:
 
 | Name | Present when | Purpose |
 |---|---|---|
-| `Display` | `CIRCUITPY_PICOGAME_FAST_DISPLAY` (RP2/ESP ports) | async-DMA render backend; absent on portable ports (pass the plain busdisplay to `Scene` instead) |
-| `Framebuffer` | `CIRCUITPY_PICOGAME_FRAMEBUFFER` (scanout-buffer platforms, e.g. the WASM playground) | RAM render target instead of a panel |
+| `Display` | `pg.FAST_DISPLAY_SUPPORTED` (RP2/ESP builds) | async-DMA render backend; on other builds the type exists but constructing it raises (pass the plain busdisplay to `Scene` instead) |
+| `Framebuffer` | `pg.FRAMEBUFFER_SUPPORTED` (scanout-buffer platforms, e.g. the WASM playground) | RAM render target instead of a panel; the type itself exists everywhere |
 | `RGB444_SUPPORTED` | always (bool) | whether this board's panel can drive 12-bit RGB444 |
 | `STRIP_H` | always (int) | the board's default render-strip height (`picogame_game.setup` uses it) |
 | `API_LEVEL` | newer firmware (use `getattr(pg, "API_LEVEL", 0)`) | engine API generation, for up-front version checks |
@@ -395,14 +395,13 @@ In the project root (copy to `CIRCUITPY/code.py`):
 
 | File | Shows |
 |---|---|
-| `examples/picogame_demo_code.py` | arbitrary-size sprites, fast Display, FPS/timing breakdown |
-| `examples/picogame_scene_demo.py` | retained Scene + dirty-rect (static field + movers) |
-| `examples/picogame_play_demo.py` | D-pad input → Scene (frame-capped movement) |
-| `examples/picogame_hud_demo.py` | HUD text via the bundled font (`picogame_font.py`) |
-| `examples/picogame_tilemap_demo.py` | tilemap background + sprite over it |
-| `examples/picogame_audio_demo.py` | PWM audio: overlapping beeps via the mixer (`picogame_audio.py`) |
-| `examples/picogame_scroll_demo.py` | camera/scrolling: a 640×480 world with the view following the player (`scene.set_view`) |
-| `examples/picogame_particles_demo.py` | particle layer: burst (A) + fountain (B) with gravity (`pg.Particles`) |
+| `examples/picogame_scene_example.py` | retained Scene + dirty-rect (static field + movers) |
+| `examples/picogame_hud_example.py` | HUD text via the bundled font (`picogame_font.py`) |
+| `examples/picogame_tilemap_example.py` | tilemap background + sprite over it |
+| `examples/picogame_scroll_example.py` | camera/scrolling: a bigger world with the view following the player (`scene.set_view`) |
+| `examples/picogame_particles_example.py` | particle layer bursts with gravity (`pg.Particles`; see also `picogame_particles_fade_example.py`) |
+| `examples/picogame_stripdraw_example.py` | 0-RAM full-frame drawing via `StripDraw` |
+| `examples/picogame_canvas_example.py` | retained Canvas panel |
 | `demos/picogame_arkanoid.py` | a full Breakout/Arkanoid game: Tilemap bricks + sprites + collide + particles + HUD |
 | `games/squest/code.py` | a Seaquest-style shooter: pooled sprites via `sprite.data`, projectiles + collide + particles, O2 HUD gauge, tone audio |
 ### Project layout

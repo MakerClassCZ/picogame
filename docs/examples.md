@@ -14,7 +14,7 @@ a window:
 ```bash
 git clone https://github.com/MakerClassCZ/picogame
 cd picogame
-python3 sim/run.py games/snake/code.py      # any game
+python3 sim/run.py demos/picogame_snake.py    # any demo/game
 ```
 
 You need Python 3 (add `pip install pygame` for a live window; without it the run just saves a screenshot).

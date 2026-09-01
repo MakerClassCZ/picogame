@@ -48,7 +48,6 @@ python3 sim/run.py demos/picogame_flappy.py --frames 80 --shot shot.png
 | `--backend pygame` / `pil` | vynutí interaktivní okno / běh bez okna. Ve výchozím nastavení se otevře okno, pokud je pygame nainstalovaný; jinak běží simulátor bez něj. `--shot` a `--profile` také okno neotevírají. |
 | `--frames N` | vykreslí N snímků a skončí (výchozí 150) |
 | `--shot FILE` | uloží PNG posledního snímku |
-| `--shot-at N` | uloží ten PNG na snímku N místo na konci |
 | `--hold RIGHT,A` | drží tyto klávesy po celý běh, takže hru řídíš bez klávesnice |
 | `--keys 20:A:2,40:RIGHT,60:-RIGHT` | skriptovaná časová osa vstupu: `snímek:TLAČÍTKO` stiskne a drží, `snímek:-TLAČÍTKO` pustí, `snímek:TLAČÍTKO:n` ťukne na n snímků (1–2snímkový ťuk je to, co potřebuje `just_pressed`) |
 | `--fast` | přeskočí realtime spánek mezi snímky (dt zůstává nominální) — soak na 3600 snímků doběhne za vteřiny |

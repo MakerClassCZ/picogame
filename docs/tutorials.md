@@ -57,7 +57,7 @@ All the helpers live in `lib/` (pure Python, work on device and in the simulator
 
 ## After the tutorials: move to the scene editor
 
-Once you understand the mechanics, the **editor** (`editor/`) can replace hand-placing every
+Once you understand the mechanics, the **editor** (`tools/editor/`; hosted at /editor/ on this site) can replace hand-placing every
 tile and sprite in Python. It lets you paint maps, place sprites, and assign tile properties,
 then export a **scene** that the `picogame_scene` loader builds. The same data runs on device and in the simulator. See
 `examples/picogame_platformer_scene.py` for a full game whose level (tiles, collisions,

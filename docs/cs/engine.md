@@ -101,12 +101,12 @@ neexistují; `value2d`/`value1d`/`fbm2d`/`fbm1d` jsou kanonické funkce, volané
 
 ### API závislé na buildu
 
-Přítomnost závisí na buildu firmwaru — ověř ji přes `hasattr` nebo `getattr`:
+Přítomnost závisí na buildu firmwaru. NEOVĚŘUJ přes `hasattr` na TYPECH — build bez backendu je stále vystavuje jako stuby, jejichž konstruktor vyhodí výjimku, takže `hasattr` je vždy True. Testuj modulové booleany: `pg.FAST_DISPLAY_SUPPORTED` a `pg.FRAMEBUFFER_SUPPORTED`:
 
 | Název | Přítomné když | Účel |
 |---|---|---|
-| `Display` | `CIRCUITPY_PICOGAME_FAST_DISPLAY` (porty RP2/ESP) | backend s asynchronním DMA; na přenositelných portech chybí (místo ní předej `Scene` běžný busdisplay) |
-| `Framebuffer` | `CIRCUITPY_PICOGAME_FRAMEBUFFER` (platformy s výstupním framebufferem, např. WASM playground) | cíl vykreslování v RAM místo panelu |
+| `Display` | `pg.FAST_DISPLAY_SUPPORTED` (buildy RP2/ESP) | backend s asynchronním DMA; na přenositelných portech chybí (místo ní předej `Scene` běžný busdisplay) |
+| `Framebuffer` | `pg.FRAMEBUFFER_SUPPORTED` (platformy s výstupním framebufferem, např. WASM playground) | cíl vykreslování v RAM místo panelu |
 | `RGB444_SUPPORTED` | vždy (bool) | zda panel této desky umí 12bitové RGB444 |
 | `STRIP_H` | vždy (int) | výchozí výška stripu desky (používá ji `picogame_game.setup`) |
 | `API_LEVEL` | novější firmware (použij `getattr(pg, "API_LEVEL", 0)`) | generace API enginu, pro verzní kontroly předem |
@@ -393,14 +393,13 @@ V kořeni projektu (zkopíruj do `CIRCUITPY/code.py`):
 
 | Soubor | Co ukazuje |
 |---|---|
-| `examples/picogame_demo_code.py` | sprite libovolné velikosti, rychlý Display, rozpis FPS/časování |
-| `examples/picogame_scene_demo.py` | retained Scene + dirty-rect (statické pole + pohyblivé objekty) |
-| `examples/picogame_play_demo.py` | vstup z D-padu → Scene (pohyb omezený snímkovou frekvencí) |
-| `examples/picogame_hud_demo.py` | HUD text přes přibalený font (`picogame_font.py`) |
-| `examples/picogame_tilemap_demo.py` | tilemap pozadí + sprite nad ním |
-| `examples/picogame_audio_demo.py` | PWM audio: překrývající se pípnutí přes mixér (`picogame_audio.py`) |
-| `examples/picogame_scroll_demo.py` | kamera a posouvání: svět 640×480 s pohledem sledujícím hráče (`scene.set_view`) |
-| `examples/picogame_particles_demo.py` | částicová vrstva: výbuch (A) + fontána (B) s gravitací (`pg.Particles`) |
+| `examples/picogame_scene_example.py` | retained Scene + dirty-rect (statické pole + pohyblivé objekty) |
+| `examples/picogame_hud_example.py` | HUD text přes přibalený font (`picogame_font.py`) |
+| `examples/picogame_tilemap_example.py` | tilemap pozadí + sprite nad ním |
+| `examples/picogame_scroll_example.py` | kamera a posouvání: větší svět s pohledem sledujícím hráče (`scene.set_view`) |
+| `examples/picogame_particles_example.py` | částicové výbuchy s gravitací (`pg.Particles`; viz i `picogame_particles_fade_example.py`) |
+| `examples/picogame_stripdraw_example.py` | 0-RAM celoplošné kreslení přes `StripDraw` |
+| `examples/picogame_canvas_example.py` | retained Canvas panel |
 | `demos/picogame_arkanoid.py` | kompletní hra Breakout/Arkanoid: Tilemap cihly + sprite + collide + částice + HUD |
 | `games/squest/code.py` | střílečka ve stylu Seaquest: stav spritů v `sprite.data`, projektily, `collide`, částice, ukazatel kyslíku v HUD a tónový zvuk |
 ### Struktura projektu

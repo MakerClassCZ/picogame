@@ -13,7 +13,7 @@ tlačítko A, **G** = tlačítko B.
 ```bash
 git clone https://github.com/MakerClassCZ/picogame
 cd picogame
-python3 sim/run.py games/snake/code.py      # kterákoli hra
+python3 sim/run.py demos/picogame_snake.py    # kterékoli demo/hra
 ```
 
 Potřebuješ Python 3 (pro živé okno přidej `pip install pygame`; bez něj se běh jen uloží jako screenshot).

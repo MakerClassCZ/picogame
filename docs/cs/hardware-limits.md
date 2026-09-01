@@ -88,7 +88,7 @@ Takt SPI je jediná přenosová hodnota, kterou určuje dělička. Druhou nezáv
 platformu **omezenou přenosem** je **`Display(rgb444=True)`** (12bitové balené pixely, ~25 % méně
 dat SPI na snímek, řízeno `picogame.RGB444_SUPPORTED`). Balení pixelů po pásech stojí část času CPU,
 ale po sběrnici se přenese méně bajtů. Vyplatí se tedy jen tam, kde je úzkým hrdlem panel. Ve firmwaru
-pro PicoPad tato volba není zahrnutá. Viz [Build firmwaru](firmware.md).
+na PicoPadu je schopnost ZAKOMPILOVANÁ (`pg.RGB444_SUPPORTED` je True) — jen se za běhu ve výchozím stavu nezapíná, protože na tomto CPU-vyváženém panelu náklad na per-strip pack sní úsporu SPI. Viz [Build firmwaru](firmware.md).
 
 ---
 

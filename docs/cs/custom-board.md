@@ -111,7 +111,7 @@ je `1`/`0` a hlasitost je **celé číslo v dB**.
 | `PICOGAME_MATRIX_MAP` | tokeny `NÁZEV=řádek,sloupec` | `"UP=1,2 A=3,5 START=0,0"` | Mapuje buňky matice na herní tlačítka. Přijímá i `NÁZEV=číslo_klávesy` (`klávesa = řádek*počet_sloupců+sloupec`). Namapuj jen klávesy, které chceš; zbytek se ignoruje. |
 | `PICOGAME_MATRIX_ANODES` | `"cols"` nebo `"rows"` | `"cols"` | Volitelné; kterou osu řídit. Výchozí `cols`; přepni na `rows`, když je obrácený směr diod. |
 | `PICOGAME_AUDIO_OUT` | `"headphone"` / `"speaker"` / `"both"` | `"headphone"` | Volba výstupu pro I2S DAC (Fruit Jam TLV320). Výchozí `headphone`. |
-| `PICOGAME_HP_VOLUME` | celé číslo v dB, `<= 0` | `-10` | Analogové doladění sluchátek. `0` = linková úroveň (příliš hlasité do sluchátek — drž `<= -3`); `-78` = ticho. Ovladač startuje na tichých `-30`, zvyš směrem k 0. |
+| `PICOGAME_HP_VOLUME` | celé číslo v dB, `<= 0` | `-10` | Analogové doladění sluchátek. `0` = linková úroveň (příliš hlasité do sluchátek — drž `<= -3`); `-78` = ticho. Bez klíče lib nastaví `-10`. |
 | `PICOGAME_DAC_VOLUME` | celé číslo v dB, `<= 0` | `-3` | Hlavní digitální fader. Drž `<= 0`, aby DSP neořezával. |
 | `PICOGAME_SPK_VOLUME` | celé číslo v dB, `<= 0` | `-10` | Analogové doladění reproduktoru (stejná škála jako sluchátka). |
 | `PICOGAME_USB` | `1` / `0` | `PICOGAME_USB = 0` | Na buildu s USB hostem `0` **vypne** automatické připojení USB HID vstupu (gamepad + klávesnice). Výchozí zapnuto. |

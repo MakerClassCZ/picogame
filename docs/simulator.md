@@ -48,7 +48,6 @@ python3 sim/run.py demos/picogame_flappy.py --frames 80 --shot shot.png
 | `--backend pygame` / `pil` | force a live window / headless. Default: a window if pygame is installed, else headless (a `--shot` or `--profile` run stays headless). |
 | `--frames N` | run N frames, then stop (default 150) |
 | `--shot FILE` | save a PNG of the final frame |
-| `--shot-at N` | save that PNG at frame N instead of at the end |
 | `--hold RIGHT,A` | hold these buttons for the whole run, so you can drive it with no keyboard |
 | `--keys 20:A:2,40:RIGHT,60:-RIGHT` | a scripted input timeline: `frame:BTN` presses and holds, `frame:-BTN` releases, `frame:BTN:n` taps for n frames (a 1-2 frame tap is what `just_pressed` needs) |
 | `--fast` | skip the real-time frame sleep (dt stays nominal) — a 3600-frame soak finishes in seconds |

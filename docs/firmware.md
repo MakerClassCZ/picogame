@@ -102,9 +102,9 @@ CircuitPython version and enabled modules.
 |---|---|---|
 | `CIRCUITPY_PICOGAME` | `0` | compile the engine in |
 | `CIRCUITPY_PICOGAME_FAST_DISPLAY` | `0` | use the port's async-DMA `Display` (raspberrypi + espressif); other boards fall back to the portable `bus.send` renderer |
-| `CIRCUITPY_PICOGAME_RGB444` | `0` | board declares its panel supports 12-bit RGB444 (COLMOD), exposed as `picogame.RGB444_SUPPORTED` so a game can enable `Display(rgb444=True)` only where it helps. Off on PicoPad — on this CPU-balanced panel the per-strip pack cost ≥ the SPI saving. |
+| `CIRCUITPY_PICOGAME_RGB444` | `0` | board declares its panel supports 12-bit RGB444 (COLMOD), exposed as `picogame.RGB444_SUPPORTED` so a game can enable `Display(rgb444=True)` only where it helps. Both PicoPad boards set it to `1` (the capability IS compiled in); it stays off at RUNTIME by default because on this CPU-balanced panel the per-strip pack cost ≥ the SPI saving. |
 | `CIRCUITPY_PICOGAME_FRAMEBUFFER` | `0` | full-frame RAM-framebuffer backend for scanout platforms (RP2350 DVI/HSTX, the desktop sim, the WASM playground) instead of an SPI strip bus |
-| `CIRCUITPY_PICOGAME_ROMFS_KB` | `0` | carves a flash asset region (in KB) for 0-copy ROMFS-XIP bitmaps; only the `-romfs` firmware variants set it (e.g. `64`) |
+| `CIRCUITPY_PICOGAME_XIP_MAP` | `0` | maps flash files for 0-copy access (`pg.xip_map`); a fork-only feature branch, not in stock builds |
 
 **Render-strip height.** On an SPI display, the screen is painted in horizontal strips of
 `STRIP_H` rows. `picogame_game.setup()` allocates two `width × STRIP_H × 2`-byte buffers;

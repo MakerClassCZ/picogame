@@ -107,7 +107,7 @@ need a full restart, see the note above). Values are **integers or strings only*
 | `PICOGAME_MATRIX_MAP` | `NAME=row,col` tokens | `"UP=1,2 A=3,5 START=0,0"` | Maps matrix cells to game buttons. Also accepts `NAME=key_number` (`key = row*ncols+col`). Map only the keys you want; the rest are ignored. |
 | `PICOGAME_MATRIX_ANODES` | `"cols"` or `"rows"` | `"cols"` | Optional; which axis is driven. Default `cols`; flip to `rows` if the diode direction is reversed. |
 | `PICOGAME_AUDIO_OUT` | `"headphone"` / `"speaker"` / `"both"` | `"headphone"` | Output select for an I2S DAC (Fruit Jam TLV320). Default `headphone`. |
-| `PICOGAME_HP_VOLUME` | integer dB, `<= 0` | `-10` | Headphone analog trim. `0` = line level (too loud for earbuds — stay `<= -3`); `-78` = silent. Driver default is a quiet `-30`, so raise toward 0. |
+| `PICOGAME_HP_VOLUME` | integer dB, `<= 0` | `-10` | Headphone analog trim. `0` = line level (too loud for earbuds — stay `<= -3`); `-78` = silent. With the key unset the lib applies `-10`. |
 | `PICOGAME_DAC_VOLUME` | integer dB, `<= 0` | `-3` | Main digital fader. Keep `<= 0` to avoid DSP clipping. |
 | `PICOGAME_SPK_VOLUME` | integer dB, `<= 0` | `-10` | Speaker analog trim (same scale as headphone). |
 | `PICOGAME_USB` | `1` / `0` | `PICOGAME_USB = 0` | On a USB-host build, `0` **disables** auto-attach of USB HID input (gamepad + keyboard). Default on. |

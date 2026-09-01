@@ -101,7 +101,7 @@ verzí CircuitPythonu a zapnutými moduly.
 | `CIRCUITPY_PICOGAME_FAST_DISPLAY` | `0` | použije `Display` s asynchronním DMA pro porty raspberrypi a espressif; ostatní desky zůstanou na přenositelném backendu přes `bus.send` |
 | `CIRCUITPY_PICOGAME_RGB444` | `0` | deska oznámí podporu 12bitového RGB444 (COLMOD) přes `picogame.RGB444_SUPPORTED`, aby hra zapnula `Display(rgb444=True)` jen tam, kde to pomáhá. Na PicoPadu je volba vypnutá, protože náklady na balení pixelů po stripech převážily úsporu přenosu SPI. |
 | `CIRCUITPY_PICOGAME_FRAMEBUFFER` | `0` | backend s celoobrazovkovým framebufferem v RAM pro platformy s vlastním obrazovým výstupem (RP2350 DVI/HSTX, desktopový simulátor a WASM playground) místo SPI stripů |
-| `CIRCUITPY_PICOGAME_ROMFS_KB` | `0` | vyčlení oblast assetů ve flashi (v KB) pro 0-copy ROMFS-XIP bitmapy; nastavují ji jen `-romfs` varianty firmwaru (např. `64`) |
+| `CIRCUITPY_PICOGAME_XIP_MAP` | `0` | mapuje soubory z flashe pro 0-copy přístup (`pg.xip_map`); fork-only větev, ve stock buildech není | (`-romfs` varianty firmwaru (např. `64`) |
 
 **Výška stripu.** Na SPI displeji se obrazovka skládá po `STRIP_H` řádcích.
 `picogame_game.setup()` alokuje dva buffery o `šířka × STRIP_H × 2` bajtech. Framebufferový

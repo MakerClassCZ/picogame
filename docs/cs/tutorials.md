@@ -57,7 +57,7 @@ Všechny pomocné moduly jsou v `lib/`. Jsou napsané v Pythonu a fungují na za
 ## Po tutoriálech: přejdi na editor scén
 
 Jakmile rozumíš herním mechanismům, nemusíš každý tile a sprite umisťovat ručně v Pythonu.
-**Editor** (`editor/`) umožňuje kreslit mapu, umisťovat sprity a nastavovat vlastnosti tilů.
+**Editor** (`tools/editor/`; hostovaný na /editor/ na tomto webu) umožňuje kreslit mapu, umisťovat sprity a nastavovat vlastnosti tilů.
 Vyexportovanou scénu načte `picogame_scene` a stejná data fungují na zařízení i v simulátoru.
 Úplný příklad najdeš v `examples/picogame_platformer_scene.py`; Python v něm řeší herní logiku,
 zatímco úroveň, kolize, mince, nepřátelé a kamera pocházejí z dat editoru.
