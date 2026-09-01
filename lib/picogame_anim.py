@@ -75,11 +75,15 @@ class AnimatedSprite:
         self.anim = FrameAnim(sprite, (), fps=8, loop=True)   # one reusable instance (no per-switch alloc)
 
     def play(self, name):
+        """Switch to a named animation (no-op when it is already playing - safe to call
+        every frame). Returns self, so it chains like FrameAnim.configure / Camera.follow:
+        `hero = AnimatedSprite(spr, anims).play("idle")` or `hero.play(state).tick(dt)`."""
         if name == self.current:
-            return
+            return self
         self.current = name
         frames, fps, loop = self.anims[name]
         self.anim.configure(frames, fps, loop)
+        return self
 
     def tick(self, dt):
         if self.anim is not None:
