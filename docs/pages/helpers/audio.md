@@ -96,11 +96,11 @@ Built-in waveform constants (one-cycle, signed 16-bit arrays you share across no
 
 ### `note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08, amplitude=0.6, bend=None, cutoff=None)`
 
-Builds a reusable note/SFX/instrument - the core building block. `midi` is a MIDI note number (60 = middle C, 72 = C5). `waveform` is one of the constants above. `attack`/`decay`/`sustain`/`release` shape the ADSR envelope in seconds (a short decay with `sustain=0.0` gives a percussive blip). `amplitude` is loudness (0.0-1.0). `bend` takes a `pitch_bend` LFO for a pitch sweep (a quick wobble; see `pitch_bend`); `cutoff` adds a low-pass filter at that many Hz to round off harsh tones. Build each note once and replay it.
+Builds a reusable note/SFX/instrument - the core building block. `midi` is a MIDI note number (60 = middle C, 72 = C5). `waveform` is one of the constants above. `attack`/`decay`/`sustain`/`release` shape the ADSR envelope in seconds (a short decay with `sustain=0.0` gives a percussive blip). `amplitude` is loudness (0.0-1.0). `bend` takes a `pitch_bend` LFO for a pitch sweep (a quick wobble by default, a straight glide with `waveform=RAMP`; see `pitch_bend`); `cutoff` adds a low-pass filter at that many Hz to round off harsh tones. Build each note once and replay it.
 
 ### `pitch_bend(semitones, ms, waveform=None, once=True)`
 
-Returns a `synthio.LFO` for a note's `bend`. With `once=True` it is a **one-shot sine sweep**: over `ms` the pitch swings toward `semitones` and back - a *wobble/swoop*, not a clean monotonic glide. Keep `ms` short (about the note's `attack+decay`) so mostly the rise (positive = zap up) or fall (negative = drop) is heard; a long `ms` lets the return swing show and sounds wobbly.
+Returns a `synthio.LFO` for a note's `bend`. With `once=True` and the default sine it is a **one-shot sine sweep**: over `ms` the pitch swings toward `semitones` and back - a *wobble/swoop*. For a **clean monotonic glide** pass `waveform=RAMP`: the two-sample ramp interpolates linearly over `ms`, so the pitch sweeps straight to the target with no return swing. Keep `ms` short (about the note's `attack+decay`) so mostly the rise (positive = zap up) or fall (negative = drop) is heard; a long `ms` lets the return swing show and sounds wobbly.
 
 ### `Synth(pin=None, sample_rate=22050, buffer_size=2048, music_level=0.4, sfx_level=0.7)`
 

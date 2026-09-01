@@ -45,7 +45,7 @@ class Shake:
 
     trauma is squared before use (Eiserloh) so small events barely shake and big ones slam.
     `max_offset` ~6 px suits 320x240 (>10 hides the action). `decay` is trauma lost per frame
-    (~0.03 ≈ 0.8/sec at 30 fps -> a 'kick', not a 'rumble')."""
+    (~0.03 = 0.9/sec at 30 fps -> a 'kick', not a 'rumble')."""
 
     def __init__(self, scene, max_offset=6, decay=0.03, seed=0x9E37):
         self.scene = scene                           # None = offset-only mode (StripDraw games)

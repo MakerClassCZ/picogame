@@ -195,8 +195,10 @@ def tileset_colors(w, h, colors, gap=0):
 
 def poly_frames(size, points, nframes, color, fill=True):
     """Bake `nframes` rotations of a polygon (points around centre, +y down) into a
-    size x size multi-frame atlas - the engine has no runtime rotation, so this is
-    the 'pre-rotated frames' pattern for asteroids/ships/turrets."""
+    size x size multi-frame atlas - the 'pre-rotated frames' pattern for
+    asteroids/ships/turrets. Runtime rotation exists too (`Sprite.angle`,
+    nearest-neighbour), but baked frames trade RAM for crisp pixels and zero
+    per-frame cost."""
     c = size / 2.0
     # Allocate the one contiguous atlas buffer FIRST (on a clean heap) and rasterise
     # each rotation straight into its column. Building a Python list of `nframes`

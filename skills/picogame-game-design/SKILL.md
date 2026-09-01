@@ -106,7 +106,7 @@ Polish the *response*, not the simulation. On a handheld you own the whole pipel
    each frame offset = `max_off * trauma² * rand(-1,1)` via `picogame_fx.Shake` (strip-rendered
    games — road/raycaster/mode-7 — use `Shake(None)` and spend `.ox`/`.oy` in the renderer's own
    camera params; `set_view` never moves a StripDraw). `max_off ≈ 6 px` on
-   320×240 (>10 hides the action); decay ≈ 0.8/s. Square the trauma so small events barely shake.
+   320×240 (>10 hides the action); decay ≈ 0.9/s (the default 0.03/frame). Square the trauma so small events barely shake.
 4. **Hit-stop** — freeze the sim **2–8 frames** (2–6 typical) on a big impact; makes hits *connect*.
 5. **A particle/pop on the event** — `picogame_fx`/`Particles`; a ring or sparks on catch/score.
 6. **Easing/tween** — UI and pickups ease in (`picogame_fx.Tween`, ~0.15–0.35 per frame), don't snap.
