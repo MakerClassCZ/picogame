@@ -38,7 +38,7 @@ anything that needs replay determinism (§9).
 **Cutscenes / "do X over N frames" via coroutine sequences.** Instead of hand-rolled frame counters
 and `if`-ladders, express timed sequences as generators that `yield` once per frame. *picogame:*
 `picogame_seq` — `wait(n)`, `move_over(obj, x, y, n)`, and a `Seq` that advances ONE generator a step
-per `tick()`; compose many with `yield from`. A `picogame_fx.Tween`/`Shake` can itself be yielded.
+per `tick()`; compose many with `yield from`. Drive a `picogame_fx.Tween` from a sequence with `while not tw.tick(): yield` (the fx classes are NOT iterable - `yield from tween` raises TypeError).
 Its `Script` turns the same generators into a scripted INPUT source (`btn.attach(script)`), so a
 title screen can PLAY ITSELF as an attract demo - and the same script drives a verification run.
 
@@ -394,7 +394,7 @@ is one line, so your ceiling (top rows) and their floor (bottom rows) merge with
 edits to the SAME row collide (git then leaves both versions as two readable map rows). So: commit the
 level before a bulk pass, and say which of you is holding the file. Two practical notes —
 the editor resolves art by filename from the folder it saves into, so keep the level's PNGs beside it;
-and a scene has no level name of its own (the file name becomes it). Full schema: `SCENE_FORMAT.md`
+and a scene has no level name of its own (the file name becomes it). Full schema: `docs/scene-format.md`
 (published at `/scene-format/`).
 
 **Difficulty is data + one ramp formula, not branching code.** Keep tuning numbers in module-level
@@ -432,9 +432,11 @@ that rewinds 90 seconds is the whole game.
 
 **Deterministic loop + recorded inputs = attract mode + replay + ghosts, from one mechanism.** With
 `FixedStep` (§1) + seeded `picogame_rand` (§6), a recorded *button stream* replays identically. The
-same recording drives a title-screen demo/attract mode, a tutorial playback, and a translucent ghost
-racing the player (verified: best-lap ghost in `games/picoracer`). *picogame:* record the input bitmask per
-fixed step; store **inputs (+seed), not positions** — a few bytes/sec. Draw the ghost with `spr.dither`.
+same recording drives a title-screen demo/attract mode, a tutorial playback, and a ghost racing the
+player. Two storage shapes: **inputs (+seed)** — a few bytes/sec, but ONLY valid when the whole sim
+step is deterministic (`FixedStep` + seeded rand, no wall-clock reads); or **decimated positions per
+lap** — bigger but replay-safe under any timing, and what `games/picoracer` actually ships (its ghosts
+are SOLID recoloured cars; `spr.dither` is the cheaper translucent look).
 
 **Passwords as a save system (no NVM writes).** Gate level progress with short A–Z passwords via a
 `level→password` lookup table; to continue, the player edits chars with the D-pad and you match the
@@ -480,7 +482,7 @@ A beep on the key action confirms what the eye is doing and is the best fun-per-
   output (`picogame_audioout`: PWM, or the I2S DAC on a Fruit Jam), so **no board-specific audio code**;
   volume/output live in `settings.toml` (`PICOGAME_HP_VOLUME`, `PICOGAME_AUDIO_OUT`).
 - **Crisp, not rich** (hard-won): short DRY **square** beeps read best on a tiny speaker. Use a pitch
-  sweep (`pitch_bend`) ONLY on zaps + death — it's a sine *wobble*, not a clean glide, and long decays
+  sweep (`pitch_bend`) ONLY on zaps + death — the default waveform bends as a sine *wobble*; a clean glide DOES exist - the RAMP waveform (`picogame_synth`) sweeps linearly, and long decays
   with bends everywhere sound mushy. Carry meaning in the **contour**: ascending = win/kill, descending
   = lose/death, two alternating tones = warning/heartbeat, rising pitch = filling/charging.
 - **You can't judge sound yourself — have it listened to**: the simulator is **silent** (no audio

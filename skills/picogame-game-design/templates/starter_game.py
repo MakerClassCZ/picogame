@@ -2,8 +2,8 @@
 # It already has the standard structure the skill teaches (SKILL.md §1.6):
 #   setup -> HUD -> State object -> TITLE / PLAY / OVER state machine -> loop in a function.
 # Replace the marked sections. Validate it headless in the simulator (screenshot = your eyes):
-#   python3 sim/run.py templates/starter_game.py --frames 80 --hold RIGHT --shot /tmp/shot.png
-# (For the human to actually play it: python3 sim/run.py templates/starter_game.py --backend pygame)
+#   python3 sim/run.py <your copy of this file> --frames 80 --hold RIGHT --shot /tmp/shot.png
+# (For the human to actually play it: python3 sim/run.py <your copy of this file> --backend pygame)
 #
 # Deploy: copy this file to CIRCUITPY as code.py plus the picogame_* helpers it imports.
 

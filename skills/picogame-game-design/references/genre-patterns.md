@@ -130,7 +130,7 @@ kinds as `shapes.masks([kind_a_rows, kind_b_rows, ...], {char: colour})` and sel
 `sprite.frame = kind` **after** `spawn()` (spawn restores the baseline frame). The palette is
 shared across all frames, so give each kind its OWN mask characters if they need different colours.
 
-*Device-proven: Starship tutorial, boxshmup, picowing.*
+*Device-proven: Starship tutorial, picowing (public); boxshmup (dev tree only).*
 
 *Exemplars: Space Invaders, Galaga, 1942, Touhou, DoDonPachi, Ikaruga.*
 
@@ -257,7 +257,7 @@ multiplier.
 ---
 
 ## 4. Platformer
-*Device-proven: the platformer example (incl. a scene-format variant).*
+*Device-proven: the platformer example (public; its scene-format variant lives in the dev tree).*
 
 *Exemplars: Super Mario Bros, Celeste, Sonic, Mega Man.*
 
@@ -378,7 +378,7 @@ dash/run-button + momentum/slopes.
 ---
 
 ## 5. Top-Down Adventure / RPG-Lite
-*Device-proven: Quest tutorial, journey.*
+*Device-proven: Quest tutorial (public); journey (dev tree only).*
 
 *Exemplars: Zelda 1, Pokémon, classic JRPGs.*
 
@@ -517,7 +517,7 @@ personalities. Details in `techniques.md`.
 ---
 
 ## 7. Puzzle (Falling-Block & Match-3)
-*Device-proven on the workspace's dev titles (match-3, picotris); the public tree ships no puzzle exemplar yet - the runnable reference is the playground's `?game=match3`.*
+*Device-proven: `games/picotris` (public - a complete falling-block game with 7-bag, ghost piece and level ramp); match-3 runs in the playground (`?game=match3`).*
 
 *Exemplars: Tetris, Bejeweled/Candy Crush, Dr. Mario, Columns.*
 
@@ -581,7 +581,7 @@ Details in `techniques.md`.
 ---
 
 ## 8. Racing — Pseudo-3D & Top-Down
-*Device-proven both ways on the workspace's dev titles; the public tree ships no racing exemplar yet - the runnable references are the road example on `docs/pages/helpers/pseudo-3d.md` (8A) and `picogame_mode7`'s docs (8B).*
+*Device-proven both ways; the public tree ships `games/picoracer` (top-down, §8B family). Pseudo-3D road: the worked example on `docs/pages/helpers/pseudo-3d.md` (8A).*
 
 *Exemplars: Pole Position, OutRun, Super Sprint, Micro Machines, Mario Kart.*
 
@@ -825,7 +825,7 @@ enemy `Pool` on waypoints · currency + ~5 telegraphed waves + lose-on-leak.
 ---
 
 ## 11. Card / Menu-Driven Roguelite (Deckbuilder)
-*Device-proven: picatro, Star Cluster.*
+*Device-proven: picatro (public); Star Cluster (dev tree only).*
 
 *Exemplars: picatro (this project), Slay the Spire, Balatro-likes.*
 
@@ -867,7 +867,7 @@ rebuilding of card lists (reuse). Opaque effects (show the number/outcome).
 **JUICE for a menu game** (screenshake is structurally out - fixed layers ignore `set_view`,
 so SS1.3's list needs a substitute): card LIFT on select (redraw the slot a few px higher),
 a 1-3 frame colour flash on the hit panel (swap the fill colour + `invalidate()`), number
-pop-ups via a short-lived SceneLabel, `Particles` sparks on damage (they ride ABOVE StripDraws),
+pop-ups via a short-lived SceneLabel, `Particles` sparks on damage (draw order is strictly scene-ADD order - add the particle layer after the StripDraw you want it above),
 hit-stop on big resolves, and `sfx.Kit` on every card played. All of it is invalidate-driven -
 none of it needs a moving camera.
 

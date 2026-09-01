@@ -45,7 +45,7 @@ Everything visible is a **scene layer** added with `scene.add(item, fixed=False)
 | **Canvas** | retained shape/HUD surface that changes **rarely** | `width*height*2` bytes (it holds its pixels) | a small framed gauge/panel; **NEVER** full-screen 320×240 (= **150 KB**) on RP2040 |
 | **StripDraw** | anything you can **draw from state** without holding pixels: full-frame animated effects (road, gradient sky, plasma, pseudo-3D), but also **text / HUD / panels** (`picogame_ui` is built on it — `HudBar`, text boxes) | **0 bytes** — no pixel buffer | whenever you want to save RAM and drawing is cheap; `always_dirty=True` (default) repaints every frame (animation), `always_dirty=False` + `.invalidate(x,y,w,h)` repaints only the sub-rect you mark (UI-on-change, temporal rendering) |
 | **Particles** | many cheap non-interactive dots (sparks, dust, explosions) | one pooled layer, ~`capacity` small entries | bursts/trails; **not** for things needing a bitmap, collision, or individual control |
-| **Pseudo-3D** (`Canvas.mode7` floor, `pg.raycast` walls, `pg.road_edges`+`Canvas.road` racing road, `pg.project`+`Canvas.fill_triangles` blocky 3D, `picogame_iso` isometric) | Mode-7 floor (track, flying carpet); first-person walls (dungeon, maze); an OutRun-style road; flat-shaded perspective boxes/low-poly; iso RPG/strategy boards — combinable | **0 bytes** (StripDraw view) except blocky 3D, which draws into a half-res Canvas (~29-38 KB) shown through a 2× Sprite | drive floors/walls via `picogame_mode7`/`picogame_ray`, the road via **`picogame_road.Road`** (human units: curve periods + swing px, hills, `curve_at()` for physics, `row_of()/half_of()` for sprites — it owns the fixed-point tables; device-proven: picobike 15→39 fps, now itself on the wrapper); `pg.project` batch-projects points (fixed 16.16 on RP2040, float on FPU boards — **pack buffers per `pg.FPU`**, mixing formats renders garbage); iso needs no new C at all. On FRAMEBUFFER boards (Fruit Jam) skip the retained canvas: the **`pg.Triangles` layer** rasterises the screen-space batch entirely in C per strip (fill arrays, set `.count` each frame) — full res, 0 retained RAM, no per-strip Python (roadhop-measured: locked 30 fps at 320×240 vs ~20 canvas path; retained-canvas fills there pay PSRAM ~7×). Extras on capable fw: `pg.vblank()` (DVI/RP2350 — tear-free compose start); `pg.core1(True)` (dual-core compose ~1.75×) exists only in bench builds (`make PICOGAME_CORE1_PROBE=1`), NOT in production firmware |
+| **Pseudo-3D** (`Canvas.mode7` floor, `pg.raycast` walls, `pg.road_edges`+`Canvas.road` racing road, `pg.project`+`Canvas.fill_triangles` blocky 3D, `picogame_iso` isometric) | Mode-7 floor (track, flying carpet); first-person walls (dungeon, maze); an OutRun-style road; flat-shaded perspective boxes/low-poly; iso RPG/strategy boards — combinable | **0 bytes** (StripDraw view) except blocky 3D, which draws into a half-res Canvas (~29-38 KB) shown through a 2× Sprite | drive floors/walls via `picogame_mode7`/`picogame_ray`, the road via **`picogame_road.Road`** (human units: curve periods + swing px, hills, `curve_at()` for physics, `row_of()/half_of()` for sprites — it owns the fixed-point tables; device-proven: picobike 15→39 fps, now itself on the wrapper); `pg.project` batch-projects points (fixed 16.16 on RP2040, float on FPU boards — **pack buffers per `pg.FPU`**, mixing formats renders garbage); iso needs no new C at all. On FRAMEBUFFER boards (Fruit Jam) skip the retained canvas: the **`pg.Triangles` layer** rasterises the screen-space batch entirely in C per strip (fill arrays, set `.count` each frame) — full res, 0 retained RAM, no per-strip Python (roadhop-measured: locked 30 fps at 320×240 vs ~20 canvas path; retained-canvas fills there pay PSRAM ~7×). Extras on capable fw: `pg.vblank(fb)` (DVI/RP2350 — tear-free compose start); `pg.core1(True)` (dual-core compose ~1.75×) exists only in bench builds (`make PICOGAME_CORE1_PROBE=1`), NOT in production firmware |
 | **`render(...)`** | a one-off immediate blit outside any Scene | uses your scratch strip buffer | quick HUD draw, reserved-zone bar (`HudBar`), portable fallback path |
 
 **The Canvas-vs-StripDraw rule:** *pick by whether you need to HOLD pixels, not by size.* Art that
@@ -68,7 +68,9 @@ strips-per-frame (measured: it made a raycaster 8× slower). Precompute the shap
 into uint16 arrays and hand the whole batch to C in one call per strip:
 **`vspans(x0s, x1s, tops, bots, colors, n, x_off=0, y_off=0)`** — vertical colour spans (wall
 columns, gradients, dither cells, bar charts) — or `fill_triangles(...)` for triangle batches.
-Both take `x_off=-vx, y_off=-vy` to replay one screen-space batch into each strip view with
+Both take the two trailing offsets to replay one screen-space batch into each strip view - **pass
+them POSITIONALLY** (`cv.vspans(x0s, x1s, tops, bots, cols, n, -vx, -vy)`): the C bindings are
+positional-only and `x_off=`/`y_off=` keywords raise TypeError on device (the sim accepts them). With
 cheap band rejection. `picogame_ray`, `fx.Fade` and `fx.Sky` are the worked examples.
 
 **Invalidate-on-change overlays (the standard idiom).** Any layer whose pixels change only on an
@@ -89,7 +91,9 @@ objects stay cheap; only beyond ~6 scattered changes do they merge toward a full
 
 ## 3. Helper libraries (`lib/picogame_*.py`, pure Python — copy/ship the ones a game imports)
 
-> **This table is the SINGLE SOURCE OF TRUTH for the helper API.** Module names, method names and
+> **This table is the SINGLE SOURCE OF TRUTH for the helper API** (exceptions: `picogame_road`'s
+> full constructor lives in §2 where the road path is explained, and the HW-peripheral modules
+> `picogame_script`/`picogame_i2cpad` are documented in their own lib docstrings). Module names, method names and
 > signatures live here only; everywhere else (SKILL.md, techniques.md, genre-patterns.md) names the
 > module and points back here rather than restating a signature — so a rename is a one-place edit.
 > A maintainer check greps these identifiers against the real `lib/` so a rename can't rot the prose.
@@ -103,7 +107,7 @@ objects stay cheap; only beyond ~6 scattered changes do they merge toward a full
 | `picogame_pool` | `Pool(scene, bitmap, capacity, anchor=None, fixed=False)`: `.spawn()->sprite|None`, `.free(s)`, `.free_all()`, `.count()`, `.items` | many of the **same** bitmap (bullets, sparks, pipes) — pre-allocate, never alloc per frame |
 | `Sprite.overlaps` / `Sprite.near` | zero-alloc collision built into Sprite: `a.overlaps(b, inset=0)` (AABB; `b` = sprite/point/rect; `inset=N` shrinks the caller's box by N px = the **generous smaller-than-sprite hitbox** §1.4 wants), `a.near(b, r)` (circular, no sqrt) | collision without temp rects, anchor/scale aware |
 | `picogame_math` | `clamp/mid/lerp/inv_lerp/remap/sgn/approach/wrap`, turn-trig `sin_t/cos_t/atan2_t`, vectors `length/distance/normalize/angle_rad/from_angle_rad` | game math — scalars, angles (turns), 2D vectors |
-| `picogame_anim` | `FrameAnim(sprite, frames, fps=8, loop=True).tick(dt)`; `AnimatedSprite(sprite, {name:(frames,fps,loop)}).play(name).tick(dt)` | time-based / named-state animation (walk/idle/jump) |
+| `picogame_anim` | `FrameAnim(sprite, frames, fps=8, loop=True).tick(dt)`; `AnimatedSprite(sprite, {name:(frames,fps,loop)})` - `.play(name)` then `.tick(dt)` as TWO statements (`play` returns None, it does not chain) | time-based / named-state animation (walk/idle/jump) |
 | `picogame_ui` | **RAM first, then render context**: `SceneBox`/`SceneMenu`/`HudBar` are buffer-less StripDraws = **0 retained bytes**, while every `SceneLabel.reserve(n)` holds a text bitmap (reserve(34) ~ 2.4 KB, so a 3-label title screen costs ~7 KB = 5% of the RP2040 heap). A screen you only see between runs should be a SceneBox, not a stack of labels. Then: text/box/menu in two render contexts (see the **UI widgets** box below): scene-layer `SceneLabel`/`SceneBox`/`SceneMenu`, immediate `Label`/`TextBox`/`Menu`, plus `HudBar` (reserved-strip) + `GridCursor` (grid logic); `LINE_H=12` | HUD/dialog/menu-driven games (RPG, strategy) |
 | `picogame_font` | `render_text(pg, font, text, fg, bg=None)->(bmp,w,h)`, `render_text_pal(...)`, `Label(pg, font, x, y, fg, bg)` — renders any `fontio` font (e.g. `terminalio.FONT`) to a Bitmap | text with no font assets; `bg=None` → transparent |
 | `picogame_audio` | WAV/PWM: `Audio(pin=None, voices=4, sample_rate=22050, channels=1, bits=16)` (needs `voices>=2`), `.load/.sfx/.music/.stop/.deinit`; `tone(freq, ms)` **builds** a RawSample you play via `.sfx(tone(...))`. Output auto-picked (see `picogame_audioout`) | recorded SFX / music; **each sample is resident RAM** |
@@ -120,7 +124,7 @@ objects stay cheap; only beyond ~6 scattered changes do they merge toward a full
 | `picogame_debug` | `dbg.ram(tag)` (gc.collect + `free/alloc` print on device, tracemalloc on the sim; a **no-op until `dbg.enabled=True`**, never crashes the game); `Watch(scene)` = a corner `FPS/FREE` overlay, alloc-free between changes | hunt `MemoryError` / measure RAM — use instead of a hand-rolled `gc.mem_free` dance |
 | `picogame_scene` | `load(pg, scene, …)->View`; `View`: `.is_solid/.tile_has/.point/.group/.in_zone/.tile_xy/.play/.tick` | data-driven levels baked from the web editor (SCENE_FORMAT.md) |
 | `picogame_mode7` | `Camera(fov=0.66).draw(canvas, texture, x, y, angle, horizon, height, y_off=0)` — drives the C `Canvas.mode7` floor from a camera pose (pos in world/tile units, heading rad, `height`=camera height); texture dims must be pow2, one world unit = one tile | a **Mode-7 perspective floor / ground plane** (racer track, flying floor) into a 0-RAM StripDraw view — the fast pseudo-3D path |
-| `picogame_iso` | `IsoView(ox, oy, tw, th)`: `.to_screen(gx,gy,h=0)`, `.depth(gx,gy,h=0)` (painter's key), `.screen_to_grid(sx,sy)` (picking), `.cube_faces(gx,gy,h)` (3 visible faces of a block), `.emit_blocks(cells, tv, tc)` — the **alloc-free batch builder**: writes flat-shaded cube triangles for many blocks straight into int16/uint16 arrays for ONE `Canvas.fill_triangles()` call (device: 3.9× faster than looping `cube_faces`) | **isometric** boards — iso RPG / strategy / builder / puzzle. Integer add/shift only, no divide. The idiomatic pattern is a STATIC board rendered once + a few moving unit sprites (dirty-rect) → locked 30 fps on RP2040; `emit_blocks` covers boards that must rebuild per frame (~20 fps at 8×8) |
+| `picogame_iso` | `IsoView(ox, oy, tw, th)`: `.to_screen(gx,gy,h=0)`, `.depth(gx,gy,h=0)` (painter's key), `.screen_to_grid(sx,sy)` (picking), `.cube_faces(gx,gy,h)` (3 visible faces of a block), `.emit_blocks(cells, tv, tc)` — the **alloc-free batch builder**: writes flat-shaded cube triangles for many blocks straight into int16/uint16 arrays for ONE `Canvas.fill_triangles()` call (device: ~2.7× faster than the tuple-building `cube_faces` loop on CP 10.3.0; 3.9× on the older fw it was first measured on — `review/3d-benches/iso_build_ratio.py` re-measures it) | **isometric** boards — iso RPG / strategy / builder / puzzle. Integer add/shift only, no divide. The idiomatic pattern is a STATIC board rendered once + a few moving unit sprites (dirty-rect) → locked 30 fps on RP2040; `emit_blocks` covers boards that must rebuild per frame (~20 fps at 8×8) |
 | `picogame_ray` | `Raycaster(world, wall_colors, sky, floor, fov=0.66, stride=2)`: `.cast(px,py,ang,sw,sh)` (once/frame, drives the native `pg.raycast`), `.draw(view,…)` (StripDraw callback), `.solid(x,y)` (wall test), `.attach(stripdraw)` (temporal repaint), `.project_sprite(sx,sy,margin=0.2)` → `(screen_x, size, depth)` or `None` (billboard enemies, depth-tested), `.zbuf` (Q16 wall distance per column) | first-person **walls/corridors** (dungeon, maze). Fully native render path: the per-column DDA is the **C `pg.raycast`** (integer 16.16), the caster also RLE-merges the wall runs in the same native pass, painted with **one `Canvas.vspans` batch per strip** (requires runs+vspans firmware) → **~36 fps uncapped at stride 1 full-screen RP2040, flat across view angles and strip_h, zero per-frame allocs**; fast display adds +39-55 %. Python levers: `.attach(sd)` on an `always_dirty=False` StripDraw repaints only the changed column band and skips the cast entirely when the camera pose is unchanged (a standing/grid-step dungeon is ~30 fps); `stride` (1 sharpest, 3 balanced, 6 fastest) trades wall sharpness for speed. Use `mode7` instead if you only need a floor |
 | `picogame_seq` | `wait(n)`, `over(n,fn)`, `move_over(spr,x,y,n)` generators; `Seq(gen)`: `.tick()->done`; `Script(play, loop=)` = a scripted INPUT source for Buttons (`s.tap/hold/rest` masks) | timed logic (cutscene beats, "do X over N frames", staged AI) AND a game that PLAYS ITSELF: `btn.attach(script)` + `script.tick()` per frame = an attract-mode demo or a scripted verification run through the game's own input path |
 | `picogame_tiles` | `TileFlags(flags, tile_px=8)`: `.get(tile,bit=None)`, `.set(tile,bit,value=True)`, `.at(tm,tx,ty,bit)`, `.at_px(tm,px,py,bit)`. `B_SOLID/B_HAZARD/B_LADDER/…`=bit INDICES (for get/set/at/at_px); `SOLID/HAZARD/…`=masks (only for the `{tile:flags}` table) | gameplay properties per tile (solid/hazard/ladder) without a parallel map |
@@ -167,8 +171,7 @@ When you write or read engine code, expect these rules; they hold across every m
 - **Per-frame advance = `tick()`.** Rendering = `refresh()` (retained scene) or `draw()` (immediate).
   Input sampling = `poll()`. (So: `btn.poll()`, `fade.tick()`, `menu.tick(btn)`, `anim.tick(dt)`,
   `scene.refresh()`, `clock.tick()`.)
-- **Boolean predicates read `is_*`** (`is_pressed`, `is_active`, `is_done`, `is_playing`, `is_solid`,
-  `is_within`); tile-property query is `tile_has(tx,ty,prop)`. Edge events keep the `just_` prefix
+- **Boolean predicates read `is_*`** (`is_pressed`, `is_active`, `is_done`, `is_playing`, `is_solid`); tile-property query is `tile_has(tx,ty,prop)`. Edge events keep the `just_` prefix
   (`just_pressed`, `just_released`).
 - **Geometry order `x, y, w, h`** (and `x0,y0,x1,y1` for segments). `Fade` is the one deliberate
   exception: `Fade(scene, w, h, x=0, y=0, …)` — full-screen is the default, x/y is an optional offset.
@@ -181,7 +184,9 @@ When you write or read engine code, expect these rules; they hold across every m
   `if pick is not None and pick is not ui.CANCEL:` — it works for BOTH return shapes. (`pick >= 0`
   works only for the Menu's int index; on GridCursor's tuple it raises TypeError.)
 - **`render_text(...) → (bmp, w, h)`** is a tuple (not a bare Bitmap) — hence `render_text`, not
-  `*_bitmap`. Optional constructor args are keyword-only.
+  `*_bitmap`. HELPER-LIB optional constructor args are keyword-only by convention; the C types mix
+  positional-or-keyword (`StripDraw(callback, x, y, width, height, ...)`) with kw-only flags -
+  follow each signature as written.
 - Animation: `frames` = count, `fps` = rate, `speed` = per-tick motion.
 
 ---
@@ -252,8 +257,9 @@ white/grey sprite gives that colour, but tinting a *coloured* sprite (e.g. a gre
 it. **To recolour a coloured sprite BRIGHTLY while keeping its shading, don't tint — rebuild the PAL8
 Bitmap with a new `palette` array** (a warm raider from a green one, team colours, day/night) — full
 control, no per-pixel cost; or mutate the palette live via `picogame_palette`. `dither` is **fake
-transparency** without alpha (fading enemies, ghosts, fog). Animating `dither` repaints automatically;
-animating the flash/tint *colour* while it stays on needs `touch()`.
+transparency** without alpha (fading enemies, ghosts, fog). Animating `dither` repaints automatically,
+and so does animating the flash/tint *colour* while it stays on (the dirty-rect snapshot tracks the
+colour) - no `touch()` needed for any blit-effect change.
 
 **`sprite.touch()` after mutating a bitmap in place** — *the dirty-rect won't notice
 pixels you change directly in a Bitmap's backing buffer.* If you write into the buffer you
@@ -378,8 +384,8 @@ spr = pg.Sprite(hero.bitmap(pg), 40, 120)
 tm  = pg.Tilemap(tiles.bitmap(pg), level.WIDTH, level.HEIGHT); level.fill(tm)
 ```
 
-Emits `DATA` (bytes), `PAL` (array 'H'), `W` (frame width), `H`, `FRAMES`, `STRIDE`, `TRANSP`,
-and `bitmap(pg) -> pg.Bitmap`. Frame `i` is columns `i*W .. (i+1)*W`.
+Emits `DATA` (bytes), `PALETTE` (array 'H'), `WIDTH` (frame width), `HEIGHT`, `FRAMES`, `STRIDE`,
+`TRANSPARENT`, `FORMAT` and `bitmap(pg) -> pg.Bitmap`. Frame `i` is columns `i*W .. (i+1)*W`.
 
 **AI art (PixelLab.ai) → PNG → bake with the converter above.** Generate cohesive, optionally animated
 pixel-art via the REST API (`https://api.pixellab.ai/v1`, Bearer key — the workspace key is in memory,
@@ -423,7 +429,9 @@ The simulator (`sim/`, pure-Python `picogame.py` + CircuitPython stubs) has unli
 forgiving API — it's the fastest way to iterate. Build on PC, validate with screenshots, deploy last.
 
 ```bash
-python sim/run.py game.py                                   # default 150 frames, headless PIL
+python sim/run.py game.py             # with pygame installed: LIVE WINDOW, NO frame cap (never
+                                      #  exits on its own!) - automation always passes --frames
+                                      #  or --shot/--keys/--fast, which force headless PIL
 python sim/run.py game.py --shot out.png                    # save final frame to a PNG
 python sim/run.py game.py --frames 300 --shot-at 120 --shot mid.png   # grab frame 120
 python sim/run.py game.py --hold RIGHT,B --shot out.png      # hold buttons (input testing)
@@ -541,8 +549,8 @@ The shipped games ARE the worked references. Public repo: **https://github.com/M
   the sanctioned capability check; the `nm`/elf grep is the offline fallback.
 - **Anchor + rotation/scale interplay.** `scale`/`angle` pivot about the `anchor` (fractions of the
   bitmap, e.g. `(0.5,0.5)` center, `(0.5,1.0)` bottom-center); `x/y` then refer to that pivot, so a
-  centered sprite grows/spins in place. `collide.*` only works cleanly when both sprites share the same
-  anchor (the offset cancels). `scale=1.0, angle=0` is the fast blit path — leave them there when idle.
+  centered sprite grows/spins in place. Native `overlaps`/`near` account for the anchor
+  correctly on both sides (the old `picogame_collide` helper that didn't is deleted). `scale=1.0, angle=0` is the fast blit path — leave them there when idle.
 - **Camera repaints everything.** `set_view` changes repaint the whole screen (no dirty-rect win
   while scrolling). StripDraw is screen-space → add it `fixed=True` in a scrolling scene or it smears.
 - **`fast=` rarely matters.** The DMA `Display` only beats portable `bus.send` when a repaint spans

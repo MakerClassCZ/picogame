@@ -235,7 +235,7 @@ A beep on the key action confirms what the eye is doing and is the best fun-per-
   etc. on events, `kit.tick()` once per frame. Reach for it FIRST; on audioless builds it degrades
   to a no-op, no guards needed.
 - **Same-frame** as the event; **never audio alone** — always pair with a visual.
-- **You can't judge sound yourself**: the sim is silent and so are you. The Kit is pre-tuned; any
+- **You can't judge sound yourself**: a headless run is silent (the live pygame window does play synthio). The Kit is pre-tuned; any
   bespoke `picogame_synth` design must be rendered to WAV (`tools/synth_preview.py`) and approved by
   the USER before shipping.
 - Full recipes (chiptune palette, contour semantics, the crisp-not-rich lesson, music guidance):
@@ -336,7 +336,7 @@ self-contained file** — no sibling imports, inline art — per the playground 
    editor's int grid (identical after baking) and `techniques.md §8` does the same for a plain Tilemap.
    Then the geometry is visible to both of you: the user answers "that column, not that one" instead of
    re-describing, and the diff of a level change is a picture. For a big scrolling world the user can
-   paint it in the **scene editor** (`editor/`) and hand you the exported `scene.json` — which the editor
+   paint it in the **scene editor** (`tools/editor/` in the public repo; hosted at /editor/ on the docs site) and hand you the exported `scene.json` — which the editor
    can also re-open, so a level can go back and forth. It is turn-taking, not merging: say who is
    holding the file (see `techniques.md §8`).
 5. **Plan assets cheap** (§1.10): generated shapes first.
