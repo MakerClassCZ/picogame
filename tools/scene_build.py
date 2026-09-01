@@ -358,6 +358,9 @@ def validate(scene):
                     if o > 7:
                         errs.append("%s.legend[%r]: bad orientation bits %d (value %d; bits 8-10 only)"
                                     % (p, ch, o, v))
+                    elif o and t == 0:
+                        errs.append("%s.legend[%r]: orientation bits on an empty cell (value %d)"
+                                    % (p, ch, v))
                     if f is not None and t >= f:
                         errs.append("%s.legend[%r]: tile index %d >= tileset frames (%d)"
                                     % (p, ch, t, f))

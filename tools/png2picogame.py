@@ -136,8 +136,10 @@ def dedup_tiles(atlas, tw, ntiles):
     """Fold tiles that are identical UP TO ORIENTATION (all 8: 4 rotations x mirror) into a smaller
     atlas -> less tileset RAM (CircuitPython holds the Bitmap in the scarce heap, unlike a native
     flash-resident const). Returns (new_atlas, remap, n_unique); remap[i] = (unique_idx, flip_x,
-    flip_y, transpose) -- rewrite a tilemap with: new = REMAP[old]; tm.set_tile(x, y, *new). Rotations
-    are only folded for SQUARE tiles (transpose swaps w/h)."""
+    flip_y, transpose) -- rewrite a tilemap with: i, fx, fy, tp = REMAP[old]; tm.set_tile(x, y, i,
+    flip_x=fx, flip_y=fy, transpose=tp) (the orientation flags are KEYWORD-ONLY on the firmware -
+    a starred *REMAP[old] call raises TypeError). Rotations are only folded for SQUARE tiles
+    (transpose swaps w/h)."""
     th = atlas.height
     combos = [(0, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1)]
     if tw == th:                                   # square -> add the transpose (rotation) variants
@@ -355,7 +357,7 @@ def main():
             "TRANSPARENT = %s" % (str(transparent) if transparent is not None else "None"),
             "PALETTE = %s" % palette_repr,
             "BIN = %r" % bin_name,
-        ] + (["REMAP = %r  # per old tile: (idx, flip_x, flip_y, transpose); tm.set_tile(x, y, *REMAP[old])"
+        ] + (["REMAP = %r  # per old tile: (idx, flip_x, flip_y, transpose); i, fx, fy, tp = REMAP[old]; tm.set_tile(x, y, i, flip_x=fx, flip_y=fy, transpose=tp)  (flags are keyword-only)"
               % (remap,)] if remap is not None else []) + [
             "",
             "",
@@ -392,7 +394,7 @@ def main():
         "TRANSPARENT = %s" % (str(transparent) if transparent is not None else "None"),
         "PALETTE = %s" % palette_repr,
         "DATA = %s" % repr(data),
-    ] + (["REMAP = %r  # per old tile: (idx, flip_x, flip_y, transpose); tm.set_tile(x, y, *REMAP[old])"
+    ] + (["REMAP = %r  # per old tile: (idx, flip_x, flip_y, transpose); i, fx, fy, tp = REMAP[old]; tm.set_tile(x, y, i, flip_x=fx, flip_y=fy, transpose=tp)  (flags are keyword-only)"
           % (remap,)] if remap is not None else []) + [
         "",
         "",
