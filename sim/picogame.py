@@ -1071,7 +1071,9 @@ class StripDraw:
         # origin (not the layer's x). The layer's rect only gates which ROWS are drawn (its y-range).
         # So a callback must draw at ABSOLUTE screen coords minus (vx, vy), and fill only its own rect
         # (a `view.clear()` fills the whole region width). Mirrors v->w = region_w in the C blitter.
-        ry = self.y + vy
+        # Screen-space by design (like Triangles): the scene view offset is NOT applied - the C
+        # compositor keeps a StripDraw's rows at self.y whether or not the layer is fixed.
+        ry = self.y
         y_lo, y_hi = max(ry, cy0, 0), min(ry + self._h, cy1, _H)
         if cx0 >= cx1 or y_lo >= y_hi:
             return
