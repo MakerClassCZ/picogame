@@ -23,7 +23,10 @@ per-screen functions either (a `while` of its own inside `title()` etc.) — tho
 frame end (`refresh()` + `tick()` in one place) and instant restart. *picogame:* `mode` drives what
 you update and draw, but **build the `Scene` ONCE and keep it across states** — toggle `visible`/overlays, and
 rebuild only on a true level change (then `gc.collect()`). The non-moving GC fragments if you churn
-scenes, so don't tear down and rebuild per state. No engine machinery needed.
+scenes, so don't tear down and rebuild per state. No engine machinery needed. **Two widgets live on
+the same frame** (a dialog box and the NPC-talk prompt, a menu and a pause overlay): poll them in
+PRIORITY order and stop after the first that consumed the input (`elif`/`return`) — a same-frame
+X+A double-press otherwise feeds both, and the second one acts on a state the first just changed.
 
 **Per-entity state = a small enum in `sprite.data`.** Ghosts carry SCATTER/CHASE/FRIGHTEN/EATEN; a
 ball carries SERVE/IN-PLAY. State lives *per actor*, not centrally. *picogame:* stash an int (or a

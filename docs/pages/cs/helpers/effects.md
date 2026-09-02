@@ -121,7 +121,7 @@ průběh cíl nikdy nepřekročí a nevytváří pružné odskočení. `tick()` 
 
 Kamera sleduje bod ve světě a vypočítává posun pohledu. Volitelně ho omezí tak, aby za hranou úrovně nebyla vidět prázdná plocha.
 
-- `Camera(scene, w, h, lerp=0.18, world_w=0, world_h=0)` - `w` a `h` jsou rozměry obrazovky, `lerp` určuje vyhlazení v každém snímku a nenulové `world_w` a `world_h` omezí pohled na rozměry světa.
+- `Camera(scene, w, h, lerp=0.18, world_w=0, world_h=0, top=0, bottom=0, left=0, right=0)` - `w` a `h` jsou rozměry obrazovky, `lerp` určuje vyhlazení v každém snímku a nenulové `world_w` a `world_h` omezí pohled na rozměry světa; `top`/`bottom`/`left`/`right` je vyhrazený pruh pro HUD (stejná čísla, jaká jsi dal `setup()` nebo `Scene`), aby kamera centrovala a omezovala pohled ve viditelné části obrazovky, ne pod HUDem.
 - `.follow(tx, ty, snap=False)` - posune střed kamery k `(tx, ty)` o podíl `lerp`; s `snap=True` ho nastaví okamžitě. Vrací `self`.
 - `.apply()` - vypočítá offset a přímo zavolá `scene.set_view`. Bez alokace; vrací `None`. Použij, když není žádný shake.
 - `.offset()` - vypočítá a vrátí offset jako n-tici `(ox, oy)` (alokuje). Předej to do `Shake.tick(ox, oy)` pro složení obou efektů.
@@ -129,13 +129,15 @@ Kamera sleduje bod ve světě a vypočítává posun pohledu. Volitelně ho omez
 ```python
 import picogame_fx as fx
 
-cam = fx.Camera(scene, W, 240, world_w=bounds_w)
+cam = fx.Camera(scene, W, H, world_w=bounds_w, world_h=bounds_h, top=BAR)   # stejný pruh jako setup(top=BAR)
 # ...každý snímek:
-cam.follow(player.x, 120).apply()
+cam.follow(player.x, player.y).apply()
 ```
 
 :::note[Pozor]
 `apply()` i `Shake` volají `scene.set_view()`. Pro kombinaci vypočítej `ox, oy = cam.follow(...).offset()` a předej je do `shaker.tick(ox, oy)`. Chování pohledu popisuje [/cs/scene-format/](/cs/scene-format/).
+
+Pruh pro HUD předej jako `top=`/`bottom=`/…, ne přičtením k `h`. `Camera(scene, W, H + BAR, ...)` sice správně centruje, ale omezuje pohled podle zvětšené výšky, takže `BAR` pixelů světa na každém okraji se nikdy nedostane do záběru. Simulátor upozorní, když se pruh kamery liší od pruhu scény.
 :::
 
 ### `fx.Sky` - vertikální gradientní pozadí

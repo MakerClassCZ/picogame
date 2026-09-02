@@ -186,7 +186,8 @@ st = State()                                    # all mutable game state in ONE 
                                                 # State.__init__ sets st.state = TITLE
 def new_game():
     st.reset()                                  # score/lives = start; reset positions, clear pools
-    st.state = PLAY
+    btn.clear()                                 # flush the A that started the run - just_pressed
+    st.state = PLAY                             #  edges outlive the transition (a phantom jump)
 
 def main():                                     # the per-frame loop lives in a FUNCTION, not module
     poll = btn.poll; pressed = btn.just_pressed  # hoist hot lookups -> locals

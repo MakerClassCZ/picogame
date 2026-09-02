@@ -70,6 +70,7 @@ st = State()
 
 def new_game():
     st.reset()
+    buttons.clear()          # flush the A that started the run, or it fires once more in PLAY
     st.state = PLAY
 
 

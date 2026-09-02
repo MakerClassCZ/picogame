@@ -108,8 +108,9 @@ Pick by what owns the pixels:
 - `.reserve(chars)` - reserve the label's text buffer **now**, on the fresh startup heap, for up to `chars` characters, so a long line first shown *later* (e.g. a game-over banner) isn't allocated on a fragmented heap (a `MemoryError`). Renders nothing visible. See [memory](/memory/).
 
 **`SceneBox(scene, pg, font, x, y, w, h, fg, bg, nlines=3, key=None, border=None)`** - a multi-line dialog or status panel over a live scene. Its `StripDraw` callback composites the panel, border, and text without retaining a pixel surface. Pass `border` for a raised frame.
-- `.show(lines)` - fill the panel and set text, then reveal. **Call once**, not per frame.
+- `.show(lines)` - fill the panel and set text, then reveal. **Call once**, not per frame. Only the first `nlines` rows fit; extra lines are dropped (the simulator warns) - build the box with a larger `nlines` or split the text.
 - `.hide()` - make the panel fully transparent and blank the rows.
+- `.visible` - `True` while shown; assigning it toggles the panel like `show()`/`hide()` without touching the text.
 - `.set_line(i, text)` - update one row in place (no Canvas/border redraw).
 
 ![picogame_ui.SceneBox — a bordered dialog box over a live scene](/img/ui_dialog.png)
