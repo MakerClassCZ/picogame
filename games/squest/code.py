@@ -375,7 +375,7 @@ def kill_sub(s):
     bubbles.emit(s.x + 10, s.y + 9, 8, 2, 14, pg.rgb565(255, 240, 200))   # bright pressure release
     subs.free(s)
     st.score += 10
-    shaker.add(0.4)                                  # subs jolt the screen (half a death's trauma)
+    shaker.add(0.6)                                  # subs jolt the screen (a small kick; <0.5 is sub-pixel)
     sfx_seq(SEQ_SUBHIT)
     maybe_extra_life()
 

@@ -9,8 +9,8 @@ Reaching for feedback on a game event? This table routes you to the right effect
 
 | Event | Reach for |
 |---|---|
-| Small hit / took damage | sprite `flash` (1-3 frames) + a small `Shake` (`add(~0.15)`) |
-| Enemy killed / big impact | `Particles` burst + a bigger `Shake` (`add(~0.6)`) + [hit-stop](#hit-stop-frame-freeze) |
+| Small hit / took damage | sprite `flash` (1-3 frames) + a small `Shake` (`add(0.6)`) |
+| Enemy killed / big impact | `Particles` burst + a bigger `Shake` (`add(0.8)`-`add(1.0)`) + [hit-stop](#hit-stop-frame-freeze) |
 | Pickup / score pop | a `Tween` pop (the blip is on the [audio page](/helpers/audio/)) |
 | Screen / scene change | `Fade` |
 | Menu / UI motion | `Tween` |
@@ -28,7 +28,7 @@ Create these helpers for a `Scene` and update the time-based ones once per game 
 `Shake` stores an intensity called trauma. Calling `add()` raises it; each `tick()` applies a random offset and reduces the stored value. Pass the normal camera offset to `tick()` so both effects use one `scene.set_view()` call.
 
 - `Shake(scene, max_offset=6, decay=0.03, seed=0x9E37)` - `max_offset` is the peak pixel offset (about 6 suits 320x240; over 10 hides the action). `decay` is trauma lost per frame (about 0.03 reads as a "kick", not a "rumble").
-- `.add(amount)` - add trauma in the 0..1 range, clamped to 1.0. About 0.6 for a hit or explosion, 0.15 for a small bump. Trauma is squared before use, so small events barely shake and big ones slam.
+- `.add(amount)` - add trauma in the 0..1 range, clamped to 1.0. Use 0.6 for a small kick, 0.8 for a hit or explosion, 1.0 for a big impact. Trauma is squared before use, so small events barely shake and big ones slam - and below about 0.5 the offset is under one pixel at `max_offset=6` (0.4 gives 0.96 px), so such a shake is invisible and only costs the full repaints.
 - `.tick(cam_x=0, cam_y=0)` - adds a decaying random offset on top of `(cam_x, cam_y)` and calls `scene.set_view` with the sum. Returns `True` while still shaking. Pass your camera offset here so shake and a moving camera don't both call `set_view` and stomp each other.
 
 ```python

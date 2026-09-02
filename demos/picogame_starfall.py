@@ -188,7 +188,6 @@ def main():
                             fader.out(speed=2)           # fade to black on game over
                 else:
                     st.score += 1
-                    shaker.add(0.12)                     # tiny kick on catch
                     kit.coin()
                     pop.move(s.x, s.y); pop.visible = True
                     st.pop_t = 5

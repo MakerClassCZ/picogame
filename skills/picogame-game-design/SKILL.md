@@ -102,11 +102,12 @@ Polish the *response*, not the simulation. On a handheld you own the whole pipel
 **same frame** the button is read (≤1–2 frames latency). Then, roughly in value order:
 1. **Sound on the key action** — the single highest fun-per-byte feedback (see 1.7).
 2. **Hit-flash** — `picogame_fx.Flash(spr)`: `fl.hit(WHITE, 2)` on impact, `fl.tick()` once per frame before `refresh()`. Cheapest visual punch, and the helper exists because the hand-rolled counter is off by one (it counts LOGIC frames, so the sprite lights for one frame instead of two) and because a flash overwrites a tint/dither the sprite may be wearing.
-3. **Screenshake (trauma model)** — keep a scalar `trauma 0..1`; events *add* (hit +0.3, big +0.6);
-   each frame offset = `max_off * trauma² * rand(-1,1)` via `picogame_fx.Shake` (strip-rendered
-   games — road/raycaster/mode-7 — use `Shake(None)` and spend `.ox`/`.oy` in the renderer's own
-   camera params; `set_view` never moves a StripDraw). `max_off ≈ 6 px` on
-   320×240 (>10 hides the action); decay ≈ 0.9/s (the default 0.03/frame). Square the trauma so small events barely shake.
+3. **Screenshake (trauma model)** — keep a scalar `trauma 0..1`; events *add* (small kick +0.6,
+   hit +0.8, big +1.0 — under ~0.5 the squared offset is sub-pixel, i.e. invisible and only costs
+   repaints); each frame offset = `max_off * trauma² * rand(-1,1)` via `picogame_fx.Shake`
+   (strip-rendered games — road/raycaster/mode-7 — use `Shake(None)` and spend `.ox`/`.oy` in the
+   renderer's own camera params; `set_view` never moves a StripDraw). `max_off ≈ 6 px` on
+   320×240 (>10 hides the action); decay ≈ 0.9/s (the default 0.03/frame).
 4. **Hit-stop** — freeze the sim **2–8 frames** (2–6 typical) on a big impact; makes hits *connect*.
 5. **A particle/pop on the event** — `picogame_fx`/`Particles`; a ring or sparks on catch/score.
 6. **Easing/tween** — UI and pickups ease in (`picogame_fx.Tween`, ~0.15–0.35 per frame), don't snap.

@@ -9,8 +9,8 @@ Hledáš odezvu na herní událost? Tato tabulka tě nasměruje na správný efe
 
 | Událost | Sáhni po |
 |---|---|
-| Malý zásah / obdržené poškození | `flash` spritu (1–3 snímky) + slabý `Shake` (`add(~0.15)`) |
-| Zabití nepřítele / velký náraz | výbuch `Particles` + silnější `Shake` (`add(~0.6)`) + [hit-stop](#hit-stop-zmrazení-snímku) |
+| Malý zásah / obdržené poškození | `flash` spritu (1–3 snímky) + slabý `Shake` (`add(0.6)`) |
+| Zabití nepřítele / velký náraz | výbuch `Particles` + silnější `Shake` (`add(0.8)`–`add(1.0)`) + [hit-stop](#hit-stop-zmrazení-snímku) |
 | Sebrání / naskočení skóre | „pop" přes `Tween` (blip je na [stránce o zvuku](/cs/helpers/audio/)) |
 | Změna obrazovky / scény | `Fade` |
 | Pohyb v nabídce / rozhraní | `Tween` |
@@ -28,7 +28,7 @@ Tyto objekty vytvoř pro danou scénu a časované efekty aktualizuj jednou za h
 `Shake` ukládá intenzitu nazvanou trauma. Volání `add()` ji zvýší a každý `tick()` přidá náhodný posun a uloženou hodnotu sníží. Běžný posun kamery předej do `tick()`, aby oba efekty použily jediné volání `scene.set_view()`.
 
 - `Shake(scene, max_offset=6, decay=0.03, seed=0x9E37)` - `max_offset` je maximální posun v pixelech a `decay` úbytek intenzity za snímek. Výchozí hodnoty jsou určené pro obrazovku 320×240 a 30 FPS.
-- `.add(amount)` - přidá intenzitu v rozsahu 0 až 1 a výsledek omezí na 1. Před výpočtem posunu se hodnota umocní na druhou, takže slabé události mají výrazně menší účinek.
+- `.add(amount)` - přidá intenzitu v rozsahu 0 až 1 a výsledek omezí na 1. Použij 0.6 pro malý kopanec, 0.8 pro zásah nebo výbuch, 1.0 pro velký náraz. Před výpočtem posunu se hodnota umocní na druhou, takže slabé události mají výrazně menší účinek - a pod zhruba 0.5 je posun při `max_offset=6` menší než jeden pixel (0.4 dává 0.96 px), takže takové třesení není vidět a jen stojí překreslení celé obrazovky.
 - `.tick(cam_x=0, cam_y=0)` - přidá náhodný posun k `(cam_x, cam_y)` a zavolá `scene.set_view()` s výsledkem. Dokud třesení trvá, vrací `True`.
 
 ```python
