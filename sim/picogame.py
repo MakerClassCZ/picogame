@@ -1282,8 +1282,14 @@ class Scene:
                     y2 += self._oy
         except Exception:
             return
-        if (y2 <= self._top or y1 >= _H - self._bottom
-                or x2 <= self._left or x1 >= _W - self._right):
+        if x2 <= 0 or y2 <= 0 or x1 >= _W or y1 >= _H:
+            return                            # simply OFF-SCREEN (parked, pooled, scrolled away):
+        #                                       normal, and nothing to do with a reserved band
+        in_band = ((self._top and y2 <= self._top)
+                   or (self._bottom and y1 >= _H - self._bottom)
+                   or (self._left and x2 <= self._left)
+                   or (self._right and x1 >= _W - self._right))
+        if in_band:
             _host.note("a %s at (%d,%d)-(%d,%d) lies entirely inside the band reserved by "
                        "setup(top=%d, bottom=%d, left=%d, right=%d) - the scene never draws "
                        "there, so this layer is silently dead. Paint the band with HudBar / "
