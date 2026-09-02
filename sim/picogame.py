@@ -1036,17 +1036,9 @@ class StripDraw:
         self._w = width
         self._h = height
         self.always_dirty = always_dirty   # device-only effect (the sim has no dirty-rect; it full-repaints)
-        if always_dirty and width * height >= (_W * _H) // 2:
-            # The sim can't SHOW this cost (it repaints everything anyway), so at least name it:
-            # a big always_dirty layer marks its whole rect dirty every frame, which on device
-            # drags every other layer's strips into the repaint - the measured 14 fps trap.
-            _host.note("full-screen StripDraw, always_dirty=True (%dx%d). Correct IF its content "
-                       "really changes every frame (a road, a raycaster, a scrolling sky). If it "
-                       "changes only sometimes (HUD, menu, overlay), on DEVICE it repaints every "
-                       "frame and drags the whole scene out of dirty-rect (measured: 14 fps on a "
-                       "static screen) - then pass always_dirty=False and invalidate() on change. "
-                       "The sim cannot tell the two apart: it has no dirty-rect at all."
-                       % (width, height))
+        # NOTE: the "big always_dirty layer" cost is judged when the layer is ADDED TO A SCENE,
+        # not here - always_dirty only means anything to scene.refresh(), and picogame_ui's
+        # immediate widgets build a StripDraw that never joins a scene.
         self._pending = True
         self._sd_own = None              # --strict-dirty only: this layer's own last output, and
         self._sd_below = None            #  the pixels beneath it when that output was made
@@ -1249,6 +1241,22 @@ class Scene:
         self._pending_checks.append(item)     # judged at the first refresh, not here: at add()
         return item                           #  time a layer is often still parked at (0,0)
 
+    def _check_always_dirty(self, item):
+        """A big always_dirty layer marks its whole rect dirty EVERY frame, which on device drags
+        every other layer's strips into the repaint (measured: 14 fps on a static screen). Judged
+        on scene entry, not in the constructor: always_dirty only means anything to refresh(), and
+        picogame_ui's immediate widgets build a StripDraw that never joins a scene."""
+        if not isinstance(item, StripDraw) or not item.always_dirty:
+            return
+        if item._w * item._h < (_W * _H) // 2:
+            return
+        _host.note("full-screen StripDraw, always_dirty=True (%dx%d) in a scene. Correct IF its "
+                   "content really changes every frame (a road, a raycaster, a scrolling sky). If "
+                   "it changes only sometimes (HUD, menu, overlay), on DEVICE it repaints every "
+                   "frame and drags the whole scene out of dirty-rect - then pass "
+                   "always_dirty=False and invalidate() on change. The sim cannot tell the two "
+                   "apart: it has no dirty-rect at all." % (item._w, item._h))
+
     def _check_reserved(self, item):
         # A layer that lies ENTIRELY inside a setup(top=/bottom=/left=/right=) band never draws -
         # the scene doesn't touch reserved margins (that space belongs to HudBar / pg.render). It
@@ -1345,6 +1353,7 @@ class Scene:
         _host.present()
         if self._pending_checks:             # first frame with real positions: judge the layers
             for it in self._pending_checks:
+                self._check_always_dirty(it)
                 self._check_reserved(it)
             del self._pending_checks[:]
         if fb == prev:                       # firmware parity: a no-change frame returns None
