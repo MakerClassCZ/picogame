@@ -617,6 +617,10 @@ Checkpoint timer (OutRun) or qualifying lap (Pole Position) drives tension.
 - `centrifugal=0.3` — push off road on corners:
   `playerX −= dx·speedPercent·curve·centrifugal` (faster + tighter = flung wider —
   the steering challenge).
+- **These numbers are the SEGMENT projector's, where the car owns a world x.** `picogame_road`
+  uses the other model: the car never moves on screen and `tick(dist, lateral_px)` slides the
+  WORLD under it, so `lateral_px` IS your position - collide against it, not against a car sprite,
+  and feed `road.curve_at(dist)` into it for the same centrifugal pull.
 - Speed @60fps: `maxSpeed = segmentLength/step = 12000` (clamp so the car can't
   skip a segment — keeps collision per-segment); `accel = maxSpeed/5` (0→top ~5 s);
   off-road decel `−maxSpeed/2`, off-road speed limit `maxSpeed/4`.

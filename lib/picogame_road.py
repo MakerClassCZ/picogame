@@ -11,6 +11,12 @@
 # Needs firmware/sim with the native pair (upstream engine, sim, and the WASM playground all
 # have it, bit-identically - the sim golden-tests them).
 #
+# MENTAL MODEL: the CAR NEVER MOVES on screen. `tick(dist, lateral_px)` moves the WORLD under it -
+# `dist` scrolls the road toward you, `lateral_px` slides the road sideways (positive = the road
+# goes left, i.e. the car appears to go right). So there is no car x to collide with: test the
+# obstacle's position against your own `lateral_px`, not against a sprite. (The segment-projector
+# formulas in the genre playbook assume the opposite model, where the car has a world x.)
+#
 #   road = picogame_road.Road(pg, W, H, horizon=H // 3,
 #                             colors=dict(sky=..., road_a=..., road_b=...,
 #                                         rumble_a=..., rumble_b=..., dash=...))
@@ -98,7 +104,8 @@ class Road:
         cfg += [world_step, curve_step, nrow - 1]   # NOMINAL bottom row samples dist exactly (hill headroom rows sample slightly past it, as picobike does)
         self.cfg = array("i", cfg)
         self._wrap = max(self._periods)
-        self._world_step = world_step
+        self.world_step = world_step     # public: row_of()/half_of() callers need it to place
+        self._world_step = world_step    #  things at a world distance without re-deriving it
         self._band = band
         self._dash_band = dash_band
         self._d05 = 0

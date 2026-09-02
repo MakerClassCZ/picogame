@@ -252,6 +252,10 @@ class Fade:
         return self
 
     def out(self, speed=2.0):                              # -> opaque
+        """Fade to FULLY opaque - a solid wall of `color` that hides everything under it. That is
+        what a scene transition wants; it is NOT what a game-over screen wants, because the message
+        you are fading in goes under it too. For a darkened-but-readable backdrop use `dim(level)`
+        (or `pulse(peak)` for a flash), where a level below 16 stays a see-through dither."""
         return self.to(self.LEVELS, speed)
 
     def into(self, speed=2.0):                             # -> clear

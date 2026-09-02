@@ -101,7 +101,7 @@ mechanics (rules) that produce them.
 Polish the *response*, not the simulation. On a handheld you own the whole pipeline — act on the
 **same frame** the button is read (≤1–2 frames latency). Then, roughly in value order:
 1. **Sound on the key action** — the single highest fun-per-byte feedback (see 1.7).
-2. **Hit-flash** — `sprite.flash = WHITE` for **1–3 frames** on impact; cheapest visual punch.
+2. **Hit-flash** — `picogame_fx.Flash(spr)`: `fl.hit(WHITE, 2)` on impact, `fl.tick()` once per frame before `refresh()`. Cheapest visual punch, and the helper exists because the hand-rolled counter is off by one (it counts LOGIC frames, so the sprite lights for one frame instead of two) and because a flash overwrites a tint/dither the sprite may be wearing.
 3. **Screenshake (trauma model)** — keep a scalar `trauma 0..1`; events *add* (hit +0.3, big +0.6);
    each frame offset = `max_off * trauma² * rand(-1,1)` via `picogame_fx.Shake` (strip-rendered
    games — road/raycaster/mode-7 — use `Shake(None)` and spend `.ox`/`.oy` in the renderer's own

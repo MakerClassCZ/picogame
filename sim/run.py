@@ -321,7 +321,9 @@ def main():
                          "that reads the wall clock itself - which is a device bug anyway.")
     ap.add_argument("--profile", action="store_true",
                     help="headless run under cProfile + tracemalloc; print a perf report "
-                         "(call counts, time [sim-skewed], per-frame game/lib allocation)")
+                         "(call counts, time [sim-skewed], per-frame game/lib allocation). Costs "
+                         "roughly 10x the run time, and a LEAK verdict needs 900+ frames to mean "
+                         "anything - caches and lazy imports are still filling before that.")
     args = ap.parse_args()
 
     # Backend default: a human running `run.py game.py` wants to SEE it, so open a live pygame window
