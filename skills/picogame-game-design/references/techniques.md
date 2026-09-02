@@ -485,8 +485,9 @@ A beep on the key action confirms what the eye is doing and is the best fun-per-
   sweep (`pitch_bend`) ONLY on zaps + death — the default waveform bends as a sine *wobble*; a clean glide DOES exist - the RAMP waveform (`picogame_synth`) sweeps linearly, and long decays
   with bends everywhere sound mushy. Carry meaning in the **contour**: ascending = win/kill, descending
   = lose/death, two alternating tones = warning/heartbeat, rising pitch = filling/charging.
-- **You can't judge sound yourself — have it listened to**: the simulator is **silent** (no audio
-  backend — but the libs import and no-op fine there, no guard needed), and you don't hear it either.
+- **You can't judge sound yourself — have it listened to**: a HEADLESS run is silent (the live
+  pygame window does play synthio; the libs import and no-op fine either way, no guard needed),
+  and you have no ears at all.
   Don't design custom `picogame_synth` sounds blind: if `tools/synth_preview.py` is in the repo,
   render them to WAV and ask the USER to listen and approve before shipping. The ready-made
   `picogame_sfx.Kit` skips this — it's pre-tuned, which is why it's the first choice.

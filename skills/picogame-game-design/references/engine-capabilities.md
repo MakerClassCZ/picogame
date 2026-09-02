@@ -236,7 +236,7 @@ for b in bullets.items:                   #  for several, pre-allocate a dict pe
 ```python
 spr.anchor = (0.5, 0.5)                   # pivot at center
 spr.scale = 1.6                           # float; integer scales stay crisp, fractional ok (a pulse)
-spr.angle = 30                            # degrees; nearest-neighbour, shimmers a little
+spr.angle = 30                            # degrees CLOCKWISE about the anchor; nearest-neighbour
 spr.transpose = True                      # diagonal mirror; + flip_x/flip_y reaches all 8 orientations
 ```
 Use runtime `angle`/`scale` for a **few** sprites or smooth/arbitrary values; **pre-bake
@@ -297,7 +297,7 @@ orientations from ONE tile, pairing with `png2picogame.py --dedup` to shrink the
 ## 5. RAM budget & the #1 gotcha
 
 RP2040 has **264 KB** SRAM; firmware uses ~72 KB static, leaving **~138–190 KB** Python heap
-(treat **~138 KB** as the planning number for the supported RP2040 build — the real figure moves with firmware/build options, so measure YOUR target build with `gc.mem_free()` at boot). RP2350 (Fruit Jam) has **~520 KB** heap — there a
+(treat **~138 KB** as the planning number for the supported RP2040 build — the real figure moves with firmware/build options, so measure YOUR target build with `gc.mem_free()` at boot). That is the heap AT BOOT, before your game exists: once the strip buffers, engine objects, assets and synthio are up, a real game sees far less — **~25–40 KB free while running** (HW-measured on a PicoPad: 43.7 KB free at start of the devtest cartridge, 34.3 KB mid-run). Plan assets against the ~138 KB, but expect the ~25–40 KB when you allocate mid-game. RP2350 (Fruit Jam) has **~520 KB** heap — there a
 full-screen Canvas (150 KB) *is* affordable. But **RP2040 stays the primary target** (nothing ships
 RP2350-only) unless the user explicitly asks otherwise (then build to the RP2350/Fruit Jam budget and
 use it fully): design to the RP2040 budget and treat the RP2350 headroom as slack, not a licence. **Assets
@@ -552,16 +552,16 @@ The shipped games ARE the worked references. Public repo: **https://github.com/M
   centered sprite grows/spins in place. Native `overlaps`/`near` account for the anchor
   correctly on both sides (the old `picogame_collide` helper that didn't is deleted). `scale=1.0, angle=0` is the fast blit path — leave them there when idle.
 - **Camera repaints everything.** `set_view` changes repaint the whole screen (no dirty-rect win
-  while scrolling). StripDraw is screen-space → add it `fixed=True` in a scrolling scene or it smears.
+  while scrolling). StripDraw is screen-space ALWAYS — `fixed=True` on it is a no-op (it neither scrolls nor smears in a scrolling scene).
 - **`fast=` rarely matters.** The DMA `Display` only beats portable `bus.send` when a repaint spans
   multiple strips (full-frame / heavy blit, ~5–30%); for normal dirty-rect games it's ~0%. Leave
   `fast=True`; it self-downgrades to portable where no backend exists.
 - **Noise ≠ randomness.** `value2d/fbm2d` are smooth and correlated (terrain/sky); use a PRNG for
   spawns/drops. On device noise is the fast fixed-point C impl.
-- **Audio is opt-in / silent by default.** The sim is silent, but **no import guard is needed** —
+- **Audio is opt-in.** A HEADLESS sim run is silent; the live pygame window does play synthio (held notes are the exception — the sim says so in its run summary). **No import guard is needed** —
   `picogame_synth`/`picogame_sfx` import and run everywhere, degrading to silent no-ops (`Synth()`
   self-guards a failed init; branch on `.available`). `picogame_audio.Audio()`, by contrast, *raises*
   if it can't open an output. Each `picogame_audio.load()` sample stays resident in RAM. Preview synth
-  SFX with `tools/synth_preview.py` (the sim can't play them).
+  SFX with `tools/synth_preview.py --spec yourfile.py:SFX` (a WAV for a HUMAN to judge).
 - **Don't churn objects.** Never create/free sprites or big buffers per frame — pre-allocate (Pool,
   arena); the GC is non-moving, so churn fragments the heap.

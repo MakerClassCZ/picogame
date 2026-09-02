@@ -153,7 +153,7 @@ bmenu.draw(picogame_game.display(), bufA)
 
 ![picogame_ui.SceneMenu — a cursor menu over a live scene](/img/ui_menu.png)
 
-**`GridCursor(cols, rows, tx=0, ty=0, wrap=False)`** - logic-only 2D cursor for a battlefield, tile inventory, or match-3. It owns movement (D-pad auto-repeat) and confirm/cancel; *you* draw the grid and a highlight at `(cursor.tx, cursor.ty)`. `wrap=True` wraps at edges, else it clamps.
+**`GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=..., interval=...)`** - logic-only 2D cursor for a battlefield, tile inventory, or match-3. It owns movement (D-pad auto-repeat) and confirm/cancel; *you* draw the grid and a highlight at `(cursor.tx, cursor.ty)`. `wrap=True` wraps at edges, else it clamps.
 - `.tick(btn)` - returns the `(tx, ty)` tuple on A, `ui.CANCEL` on B, else `None`.
 - `.tx`, `.ty` - current cell.
 - `.index` (property) - `ty * cols + tx`, handy for indexing a flat list.

@@ -23,7 +23,8 @@ _frame = 0
 _seq = []                                  # pending arpeggio notes [play_frame, note]
 try:
     import math
-    import synthio                         # noqa: F401  (device-only; ImportError in the sim)
+    import synthio                         # noqa: F401  (the sim ships a shim, so this imports
+    #                                          there too - the guard is for boards built without it)
     import picogame_synth as snd
 
     _synth = snd.Synth(sfx_level=0.7)

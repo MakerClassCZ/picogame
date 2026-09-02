@@ -50,7 +50,7 @@ Retained-mode scene with dirty-rectangle rendering; `buffer_a/b` are strip buffe
 - `set_view(ox, oy)` — camera offset (screen position of the scene origin); changing it repaints all.
 - `view` — read-only `(ox, oy)` camera offset.
 - `invalidate()` — force a full repaint next refresh.
-- `refresh() -> list | None` — diff & repaint changed regions; returns the dirty rect `[x1,y1,x2,y2]` (reused) or None. **In the SIMULATOR there is no dirty-rect at all**: it clears and redraws everything and always returns the full play rect, so this return value is not a measurement there (an instrumented "94% of the screen dirty" is a constant, not your game). Run `sim/run.py --strict-dirty` to at least catch the StripDraw half of it - a layer you forgot to `invalidate()` then freezes in the sim as it does on device.
+- `refresh() -> list | None` — diff & repaint changed regions; returns the dirty rect `[x1,y1,x2,y2]` (reused) or None. **The SIMULATOR has no dirty-rect**: it clears and redraws everything, then returns the full play rect - or `None` when the finished frame is pixel-identical to the last one (firmware parity for the `if scene.refresh():` idiom). So the rect's SIZE is not a measurement there (an instrumented "94% of the screen dirty" is a constant, not your game). Run `sim/run.py --strict-dirty` to at least catch the StripDraw half of it - a layer you forgot to `invalidate()` then freezes in the sim as it does on device.
 
 ### `Tilemap(tileset, cols, rows)`
 A grid of tile indices into a tileset Bitmap (each frame = one tile); a Scene layer.
@@ -83,7 +83,7 @@ A RAM RGB565 drawing surface composited as a Scene layer (`width*height*2` bytes
 - Read-only props: `x`, `y`, `width`, `height`.
 
 ### `StripDraw(callback, x=0, y=0, width=0, height=0, *, always_dirty=True)`
-Immediate-mode layer with **no pixel buffer**: each refresh it calls `callback(view, vx, vy, vw, vh)` once per render strip inside its rect. `view` is a Canvas pointing at the live strip (use Canvas primitives, incl. `view.text`); view-local `(0,0)` = screen `(vx, vy)`. In a scrolling scene add it `fixed`.
+Immediate-mode layer with **no pixel buffer**: each refresh it calls `callback(view, vx, vy, vw, vh)` once per render strip inside its rect. `view` is a Canvas pointing at the live strip (use Canvas primitives, incl. `view.text`); view-local `(0,0)` = screen `(vx, vy)`. It is screen-space ALWAYS, so `fixed=True` on it is a no-op - it neither scrolls with the camera nor smears in a scrolling scene.
 - `always_dirty=True` (default) repaints every frame → for animated/scanline content (pseudo-3D, gradients). `always_dirty=False` repaints only when invalidated or overlapped by another change → for static/on-change panels (it still renders once on first refresh).
 - `invalidate()` — mark it dirty so the next refresh repaints it (the way to update an `always_dirty=False` panel when its content changes).
 
@@ -154,7 +154,7 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 - `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
 - `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating · `.draw(display, buffer, force=False)`.
 - `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating — the same menu as an in-scene layer.
-- `GridCursor(cols, rows, tx=0, ty=0, wrap=False)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — D-pad cursor over a grid (inventory / board). `tick` moves on held D-pad (auto-repeat) and returns the selected cell on A, `ui.CANCEL` on B, else `None`; guard with `if pick is not None and pick is not ui.CANCEL:` (the tuple does not support `>= 0`).
+- `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=..., interval=...)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — `delay`/`interval` tune the held-direction repeat (frames before the first repeat / between repeats) — D-pad cursor over a grid (inventory / board). `tick` moves on held D-pad (auto-repeat) and returns the selected cell on A, `ui.CANCEL` on B, else `None`; guard with `if pick is not None and pick is not ui.CANCEL:` (the tuple does not support `>= 0`).
 
 ### `picogame_options` — settings menu
 - `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` — an in-scene options screen of toggles/choices.

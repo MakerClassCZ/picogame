@@ -50,7 +50,7 @@ Retained scéna s vykreslováním podle dirty regions. Na SPI backendu jsou `buf
 - `set_view(ox, oy)` — offset kamery (pozice počátku scény na obrazovce); jeho změna překreslí vše.
 - `view` — dvojice `(ox, oy)` s aktuálním posunem kamery, jen pro čtení.
 - `invalidate()` — vynutí překreslení celé obrazovky při dalším `refresh()`.
-- `refresh() -> list | None` — porovná a překreslí dirty regiony; vrací dirty rect `[x1,y1,x2,y2]` (znovupoužitý) nebo None.
+- `refresh() -> list | None` — porovná a překreslí dirty regiony; vrací dirty rect `[x1,y1,x2,y2]` (znovupoužitý) nebo None. **Simulátor dirty-rect nemá**: překresluje vše a vrací celý play rect — nebo `None`, když je hotový frame pixelově shodný s minulým (parita s firmwarem kvůli idiomu `if scene.refresh():`). VELIKOST toho rectu tedy v simu nic neměří, ale jeho pravdivostní hodnota ano.
 
 ### `Tilemap(tileset, cols, rows)`
 Mřížka indexů do bitmapy tilesetu, kde každý snímek představuje jeden tile; vrstva `Scene`.
@@ -83,7 +83,7 @@ Kreslicí plocha RGB565 skládaná jako vrstva scény (`width*height*2` bajtů).
 - Vlastnosti jen pro čtení: `x`, `y`, `width`, `height`.
 
 ### `StripDraw(callback, x=0, y=0, width=0, height=0, *, always_dirty=True)`
-Immediate vrstva bez vlastní pixelové plochy. Při `refresh()` volá `callback(view, vx, vy, vw, vh)` pro části svého obdélníku, které backend právě skládá. `view` je pohled typu `Canvas` do aktuální cílové oblasti; použij jeho kreslicí primitiva včetně `view.text()`. Místní `(0,0)` odpovídá obrazovkovému `(vx, vy)`. V posouvané scéně vrstvu přidej jako `fixed`.
+Immediate vrstva bez vlastní pixelové plochy. Při `refresh()` volá `callback(view, vx, vy, vw, vh)` pro části svého obdélníku, které backend právě skládá. `view` je pohled typu `Canvas` do aktuální cílové oblasti; použij jeho kreslicí primitiva včetně `view.text()`. Místní `(0,0)` odpovídá obrazovkovému `(vx, vy)`. Je VŽDY v obrazovkových souřadnicích, takže `fixed=True` u ní nic nedělá — v posouvané scéně se ani neposouvá, ani nerozmazává.
 - `always_dirty=True` (výchozí) překresluje každý snímek, proto se hodí pro animovaný obsah a efekty po řádcích. `always_dirty=False` překresluje jen po invalidaci nebo když ho překryje jiná změna, proto se hodí pro panely měněné na vyžádání. Při prvním `refresh()` se vykreslí vždy.
 - `invalidate()` — označí ho jako dirty, aby ho příští refresh překreslil (způsob, jak aktualizovat panel s `always_dirty=False`, když se změní jeho obsah).
 - JEDINÁ vlastnost je `count` — kolik trojúhelníků příští refresh kreslí (přiřazení označí vrstvu dirty). Typ nemá x/y/width/height/always_dirty.
@@ -154,7 +154,7 @@ Kterou textovou cestu použít (`Canvas.text` vs vyrenderovaná Bitmap vs StripD
 - `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
 - `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace · `.draw(display, buffer, force=False)`.
 - `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace — totéž menu jako vrstva ve scéně.
-- `GridCursor(cols, rows, tx=0, ty=0, wrap=False)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — kurzor na D-padu po mřížce (inventář / herní deska). `tick` se hýbe drženým D-padem (auto-repeat) a vrací vybranou buňku na A, `ui.CANCEL` na B, jinak `None`; hlídej přes `if pick is not None and pick is not ui.CANCEL:` (tuple neumí `>= 0`).
+- `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=..., interval=...)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — `delay`/`interval` ladí opakování při držení směru (framy do prvního opakování / mezi opakováními) — kurzor na D-padu po mřížce (inventář / herní deska). `tick` se hýbe drženým D-padem (auto-repeat) a vrací vybranou buňku na A, `ui.CANCEL` na B, jinak `None`; hlídej přes `if pick is not None and pick is not ui.CANCEL:` (tuple neumí `>= 0`).
 
 ### `picogame_options` — menu nastavení
 - `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` — obrazovka nastavení (přepínače/volby) ve scéně.
