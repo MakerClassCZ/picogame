@@ -1305,28 +1305,46 @@ class Scene:
         self._bottom = bottom
         self._left = left
         self._right = right
+        self._pending_checks = []             # layers awaiting the reserved-band check
 
     def add(self, item, *, fixed=False):
         self._items.append(item)
         self._kinds.append(_kind(item))
         self._fixed.append(fixed)
-        self._check_reserved(item)
-        return item
+        self._pending_checks.append(item)     # judged at the first refresh, not here: at add()
+        return item                           #  time a layer is often still parked at (0,0)
 
     def _check_reserved(self, item):
         # A layer that lies ENTIRELY inside a setup(top=/bottom=/left=/right=) band never draws -
         # the scene doesn't touch reserved margins (that space belongs to HudBar / pg.render). It
         # is dropped in silence on device too, so say it here rather than let a blank HUD look
         # like a broken callback.
+        #
+        # Judged at the FIRST REFRESH, in SCREEN coordinates, and only for a layer that is visible
+        # and non-empty. Doing it at add() in world coordinates cried wolf on every ordinary idiom -
+        # a picogame_pool.Pool parks unspawned sprites at (0,0) invisible, a scrolling world puts
+        # most sprites outside the current view, and "construct, then place" is how games are
+        # written. It fired on five shipped games, which is how a warning stops being read.
         if not (self._top or self._bottom or self._left or self._right):
             return
         try:
             if isinstance(item, StripDraw):
+                if item._w <= 0 or item._h <= 0:
+                    return                    # an empty rect draws nothing anywhere; not this bug
                 x1, y1, x2, y2 = item.x, item.y, item.x + item._w, item.y + item._h
             elif isinstance(item, Sprite):
+                if not item.visible:
+                    return                    # a parked/pooled sprite is not "silently dead"
                 x1, y1, x2, y2 = item._bounds()
             else:
                 return
+            if item in self._items:           # non-fixed layers scroll with the view
+                i = self._items.index(item)
+                if not self._fixed[i] and not isinstance(item, StripDraw):
+                    x1 += self._ox
+                    x2 += self._ox
+                    y1 += self._oy
+                    y2 += self._oy
         except Exception:
             return
         if (y2 <= self._top or y1 >= _H - self._bottom
@@ -1384,6 +1402,10 @@ class Scene:
             vy = 0 if fx else self._oy
             _draw_item(item, kind, vx, vy, clip)
         _host.present()
+        if self._pending_checks:             # first frame with real positions: judge the layers
+            for it in self._pending_checks:
+                self._check_reserved(it)
+            del self._pending_checks[:]
         if fb == prev:                       # firmware parity: a no-change frame returns None
             return None
         return [x0, y0, x1, y1]
