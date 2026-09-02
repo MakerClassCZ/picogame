@@ -26,7 +26,6 @@ _strict_dirty = False       # --strict-dirty: skip an always_dirty=False StripDr
                             #  invalidate()d - the sim otherwise full-repaints and hides the bug
 
 
-_fb_prev = None             # previous frame's pixels, for restoring clean layers in strict mode
 
 
 def _set_strict_dirty(on):
@@ -34,16 +33,28 @@ def _set_strict_dirty(on):
     _strict_dirty = bool(on)
 
 
-def _restore_rect(sd):
-    # Put back what this layer drew last frame (it is clean, so the device would not repaint it).
-    if _fb_prev is None:
-        return
+def _sd_rect(sd):
+    """The layer's on-screen rect, clipped to the framebuffer."""
+    return (max(0, sd.x), min(_W, sd.x + sd._w),
+            max(0, sd.y), min(_H, sd.y + sd._h))
+
+
+def _sd_grab(sd):
+    """Copy the layer's rect out of the live framebuffer (strict-dirty bookkeeping only)."""
     fb = _host.fb
-    x0 = max(0, sd.x)
-    x1 = min(_W, sd.x + sd._w)
-    for y in range(max(0, sd.y), min(_H, sd.y + sd._h)):
-        row = y * _W
-        fb[row + x0:row + x1] = _fb_prev[row + x0:row + x1]
+    x0, x1, y0, y1 = _sd_rect(sd)
+    return [fb[y * _W + x0:y * _W + x1] for y in range(y0, y1)]
+
+
+def _sd_paint(sd, stash):
+    """Put a stash back. False if it no longer fits the rect (the layer was moved/resized)."""
+    fb = _host.fb
+    x0, x1, y0, y1 = _sd_rect(sd)
+    if len(stash) != y1 - y0 or (stash and len(stash[0]) != x1 - x0):
+        return False
+    for i, y in enumerate(range(y0, y1)):
+        fb[y * _W + x0:y * _W + x1] = stash[i]
+    return True
 _KIND_TRIANGLES = 5
 _SIM_STRIP_H = 8        # emulate the device's banded render so per-strip bugs surface
 
@@ -769,7 +780,67 @@ class Canvas:
                 if v is not None:
                     self._data[base + cx] = v
 
-    def mode7(self, tex, horizon, y_off, z, rx0, ry0, rsx, ry_sx, cam_x, cam_y):
+    def tcolumns(self, dists, wallx, kinds, n, tex, colormap, sh, stride=1, tex_cols=64,
+                 nlights=32, light_shift=15, x_off=0, y_off=0, mode=0, tex_id=0):
+        # Sim of the native textured wall-column painter (Doom's column renderer).
+        # Integer math IDENTICAL to the firmware C: the unclipped column height is
+        # recomputed from `dists` (raycast's own top/bot are screen-CLIPPED), the
+        # texture column is a contiguous run of a TRANSPOSED PAL8 atlas, and the
+        # colour is palette[colormap[light * 256 + texel]].
+        texels = tex.width
+        if texels <= 0 or (texels & (texels - 1)) or (tex_cols & (tex_cols - 1)):
+            return                                   # power-of-2 dims, as on device
+        if tex.palette is None:
+            return
+        n = min(n, len(dists), len(wallx), len(kinds))
+        nlights = min(nlights, len(colormap) >> 8)
+        data, pal, tstride = tex._data, tex.palette, tex.stride
+        mask = texels - 1
+        half = sh >> 1
+        for i in range(n):
+            perp = dists[i]
+            if perp <= 0:
+                continue
+            lh = (sh << 16) // perp
+            if lh <= 0:
+                continue
+            k = kinds[i]
+            kind = k >> 1
+            if kind < 1:
+                continue
+            if mode:
+                # step riser: stands on the base floor line, height = cell value in
+                # eighths of a cell (identical derivation to the firmware C)
+                hs = 8 if kind > 8 else kind
+                b = half + (lh >> 1) + y_off
+                t = b - ((lh * hs) >> 3)
+            else:
+                t = half - (lh >> 1) + y_off
+                b = t + lh
+            if b <= 0 or t >= self._h:
+                continue
+            x0 = i * stride + x_off
+            x1 = min(x0 + stride, self._w)
+            x0 = max(0, x0)
+            if x1 <= x0:
+                continue
+            tc = (tex_id if mode else (kind - 1)) * tex_cols + ((wallx[i] * tex_cols) >> 16)
+            base = tc * tstride
+            light = min(nlights - 1, (perp >> light_shift) + (k & 1))
+            lm = light << 8
+            seg = b - t
+            vstep = (texels << 16) // (seg if seg > 0 else 1)
+            ct = max(0, t)
+            cb = min(self._h, b)
+            v0 = (ct - t) * vstep
+            for x in range(x0, x1):
+                v = v0
+                for y in range(ct, cb):
+                    self._data[y * self._w + x] = pal[colormap[lm + data[base + ((v >> 16) & mask)]]]
+                    v += vstep
+        # (no dirty-rect in the sim: it full-repaints; the device marks the span here)
+
+    def mode7(self, tex, horizon, y_off, z, rx0, ry0, rsx, ry_sx, cam_x, cam_y, up=False):
         # Perspective ground plane (Mode-7). sy is a row WITHIN this surface; the
         # absolute screen row is sy + y_off (0 for a full Canvas, strip y for a
         # StripDraw view). Integer math IDENTICAL to the firmware C: per-row 1/z
@@ -782,9 +853,14 @@ class Canvas:
         shy = F - (th.bit_length() - 1)
         mx, my = tw - 1, th - 1
         stride = tex.stride
-        y0 = max(0, horizon - y_off + 1)
-        for sy in range(y0, self._h):
-            denom = (sy + y_off) - horizon
+        # Floor fills DOWN from the horizon, ceiling UP - mirror images, one sign flip
+        # (identical to the firmware C; the caller picks the height through z).
+        if up:
+            y0, y1 = 0, max(0, min(self._h, horizon - y_off))
+        else:
+            y0, y1 = max(0, horizon - y_off + 1), self._h
+        for sy in range(y0, y1):
+            denom = (horizon - (sy + y_off)) if up else ((sy + y_off) - horizon)
             if denom <= 0:
                 continue
             rowdist = z // denom
@@ -1037,6 +1113,8 @@ class StripDraw:
                        "The sim cannot tell the two apart: it has no dirty-rect at all."
                        % (width, height))
         self._pending = True
+        self._sd_own = None              # --strict-dirty only: this layer's own last output, and
+        self._sd_below = None            #  the pixels beneath it when that output was made
         self._view = Canvas(1, 1)        # reused; data/w/h repointed per strip
 
     def invalidate(self, x=None, y=None, w=None, h=None):
@@ -1179,10 +1257,20 @@ def _draw_item(item, kind, vx, vy, clip):
     elif kind == _KIND_PARTICLES:
         item._draw(vx, vy, clip)
     else:
-        if (_strict_dirty and kind == _KIND_STRIPDRAW
-                and not item.always_dirty and not item._pending):
-            _restore_rect(item)       # clean layer: last frame's pixels stand (device behaviour),
-            return                    #  so a forgotten invalidate() shows as a FROZEN panel
+        if _strict_dirty and kind == _KIND_STRIPDRAW and not item.always_dirty:
+            # Device rule (Scene.c:117 + the strip compositor): a clean layer is skipped ONLY while
+            # nothing else dirties its rect - any overlapping repaint re-runs its callback. So we
+            # restore the layer's OWN last output (not the composite, which would burn in whatever
+            # a passing sprite drew ON TOP of it), and only while what lies BENEATH it is unchanged.
+            below = _sd_grab(item)
+            if (not item._pending and item._sd_own is not None
+                    and below == item._sd_below and _sd_paint(item, item._sd_own)):
+                return                # frozen: a forgotten invalidate() still shows stale content
+            item._sd_below = below    # something changed under it (or it was invalidated): redraw
+            item._draw(vx, vy, clip)
+            item._sd_own = _sd_grab(item)
+            item._pending = False
+            return
         item._draw(vx, vy, clip)
         if kind == _KIND_STRIPDRAW:
             item._pending = False
@@ -1281,10 +1369,7 @@ class Scene:
     def refresh(self):
         bg = self._background
         fb = _host.fb
-        prev = list(fb)                      # last frame's pixels: strict mode restores clean
-        if _strict_dirty:                    #  StripDraws from them (a layer the game did not
-            global _fb_prev                  #  invalidate() KEEPS SHOWING what it drew before,
-            _fb_prev = prev                  #  exactly as the panel does on device)
+        prev = list(fb)                      # for the no-change return value (firmware parity)
         x0 = self._left                      # play rect; the reserved border is left untouched
         x1 = _W - self._right
         y0 = self._top
@@ -1357,13 +1442,15 @@ def collide(*a):
 
 
 def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc, top, bot, col, dist,
-            runs=None):
+            runs=None, wallx=None):
     # Sim implementation of the native picogame.raycast wall-caster (the C DDA primitive on device;
     # like Canvas.mode7, the sim provides the same op in Python). Same 16.16 inputs: pos/leftRay/rayStep
     # are Q16; it reconstructs floats, runs the per-column DDA and fills top/bot (px), col (wire RGB565
     # from wc[cell*2+side]) and dist (16.16 perpendicular distance). Used by picogame_ray.Raycaster.
     # Optional `runs` (uint16 buffer, len>=5*ncols as five ncols planes [x0|x1|top|bot|col]): also
     # emit the RLE-merged wall runs (x in pixels = column*stride) and return the run count.
+    # Optional `wallx` (uint16, >=ncols): where along the wall face the ray landed, as a Q16
+    # fraction - the texture coordinate Canvas.tcolumns needs, mirror-flipped already.
     px = posx / 65536.0
     py = posy / 65536.0
     half = sh >> 1
@@ -1417,6 +1504,12 @@ def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc,
         ct = cell if (cell * 2 + 1) < len(wc) else 1
         col[c] = wc[ct * 2 + side]
         dist[c] = int(perp * 65536)
+        if wallx is not None:
+            w = (py + perp * rdy) if side == 0 else (px + perp * rdx)
+            frac = int((w - _math.floor(w)) * 65536) & 0xFFFF
+            if (side == 0 and rdx > 0) or (side == 1 and rdy < 0):
+                frac = 65535 - frac
+            wallx[c] = frac
     if runs is not None and ncols > 0:
         cap = len(runs) // 5                      # five uint16 planes (mirrors the C layout)
         n = min(ncols, cap)
