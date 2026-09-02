@@ -177,6 +177,13 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
             else:
                 verdict = "one-off — the second half is flat, this is warm-up, not a leak"
             print("  first half %+d B, second half %+d B  ->  %s" % (first, second, verdict))
+            # A short window cannot separate warm-up from a leak: a glyph cache or a lazy import
+            # fills over the first few hundred frames and lands in BOTH halves, so it reads as a
+            # leak. Say so where the verdict is read, not only in the docs - a probe agent chased
+            # exactly this on 180 frames and the same unmodified game came back clean at 412.
+            if verdict.startswith("LEAK") and span < 600:
+                print("  ...but %d frames is a SHORT window: caches and lazy imports are still"
+                      " filling. Re-run with --frames 900+ before believing it." % span)
         top = [d for d in diff if d.size_diff > 0][:8]
         if top:
             for d in top:
