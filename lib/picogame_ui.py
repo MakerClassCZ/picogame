@@ -304,14 +304,26 @@ class HudBar:
 
     def _draw(self, view, vx, vy, vw, vh):
         # view-local (0,0) == screen (vx, vy); items are stored screen-absolute, so subtract (vx,vy).
-        view.clear(self.bg)
+        # Fill OUR rect, not the view: as a scene layer the view spans the whole render-region
+        # width (the layer's rect gates rows only), so view.clear() would paint the bar's colour
+        # right across the play area - the StripDraw gotcha this file warns about elsewhere.
+        view.fill_rect(self.x - vx, self.y - vy, self.w, self.h, self.bg)
         for spr in self._icons:
             if getattr(spr, "visible", True):
                 view.blit(spr.bitmap, spr.x - vx, spr.y - vy, spr.frame,
                           spr.flip_x, spr.flip_y)      # Canvas.blit carries frame + flips only
         for lb in self._labels:
-            if lb.text:
-                view.text(lb.x - vx, lb.y - vy, lb.text, lb.fg, lb.font)
+            if not lb.text:
+                continue
+            # Clip to the BAR, not to the view: as a scene layer the view spans the whole render
+            # region width (the layer's rect only gates rows), so an over-long label would bleed
+            # sideways into the play area. Fixed-cell font -> the fit is a division, and the slice
+            # only happens when it really overflows (no churn on the normal path).
+            fits = (self.x + self.w - lb.x) // lb.font.get_bounding_box()[0]
+            if fits <= 0:
+                continue
+            view.text(lb.x - vx, lb.y - vy,
+                      lb.text if len(lb.text) <= fits else lb.text[:fits], lb.fg, lb.font)
 
     def add(self, sprite):
         """An icon Sprite (heart, gauge) blitted into the bar at its own x/y on draw().
@@ -355,8 +367,8 @@ class TextBox:
         self._sd = pg.StripDraw(self._draw, x, y, w, h)
 
     def _draw(self, view, vx, vy, vw, vh):
-        view.clear(self.bg)
-        if self.border is not None:
+        view.fill_rect(self.x - vx, self.y - vy, self.w, self.h, self.bg)   # our rect, not the
+        if self.border is not None:                                         #  full view width
             view.frame3d(0, self.y - vy, self.w, self.h, self.border, self.bg)
         for i, ln in enumerate(self._lines):
             if ln:
