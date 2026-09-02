@@ -92,7 +92,7 @@ The module is safe to import on firmware without audio. If audio initialisation 
 a silent no-op; check `AVAILABLE` or `synth.available` only when the UI needs to expose audio settings.
 The desktop simulator's live pygame window plays these `picogame_synth` voices through `pygame.mixer` (an approximation for tuning by ear); headless runs stay silent. Either way the same game path runs unchanged.
 
-Built-in waveform constants (one-cycle, signed 16-bit arrays you share across notes): `SINE`, `SAW`, `TRIANGLE`, `SQUARE`, `NOISE`. The functions `sine()`, `saw()`, `triangle()`, `square()`, `noise()` build fresh copies if you need them. For a crisp arcade blip reach for a short `SQUARE` note (`SINE` and `TRIANGLE` read softer and rounder).
+Built-in waveform constants (one-cycle, signed 16-bit arrays you share across notes): `SINE`, `SAW`, `TRIANGLE`, `SQUARE`, `NOISE`. Each table is built the first time you read it (512 B, a few ms), so touch the shapes you use while building your notes at startup, not from the game loop. The functions `sine()`, `saw()`, `triangle()`, `square()`, `noise()` build fresh copies if you need them. For a crisp arcade blip reach for a short `SQUARE` note (`SINE` and `TRIANGLE` read softer and rounder).
 
 ### `note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08, amplitude=0.6, bend=None, cutoff=None)`
 

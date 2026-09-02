@@ -110,7 +110,7 @@ podle dostupnosti zvuku měníš uživatelské rozhraní. Živé okno desktopov�
 tyto `picogame_synth` hlasy přes `pygame.mixer` (aproximace pro ladění sluchem); běh bez okna zůstává
 tichý. Tak či tak stejná část hry proběhne beze změny.
 
-Vestavěné konstanty průběhů (jednocyklová, signed 16-bit pole, která sdílíš mezi notami): `SINE`, `SAW`, `TRIANGLE`, `SQUARE`, `NOISE`. Funkce `sine()`, `saw()`, `triangle()`, `square()`, `noise()` postaví čerstvé kopie, pokud je potřebuješ. Na svižný arkádový blikanec sáhni po krátké notě `SQUARE` (`SINE` a `TRIANGLE` znějí měkčeji a oblejší).
+Vestavěné konstanty průběhů (jednocyklová, signed 16-bit pole, která sdílíš mezi notami): `SINE`, `SAW`, `TRIANGLE`, `SQUARE`, `NOISE`. Každá tabulka se postaví při prvním čtení (512 B, pár ms), takže na průběhy, které používáš, sáhni už při stavbě not na startu, ne z herní smyčky. Funkce `sine()`, `saw()`, `triangle()`, `square()`, `noise()` postaví čerstvé kopie, pokud je potřebuješ. Na svižný arkádový blikanec sáhni po krátké notě `SQUARE` (`SINE` a `TRIANGLE` znějí měkčeji a oblejší).
 
 ### `note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08, amplitude=0.6, bend=None, cutoff=None)`
 
