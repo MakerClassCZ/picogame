@@ -389,13 +389,13 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
 
 **Machine-verifiable — the agent confirms these (sim run + screenshot + RAM estimate):**
 1. **Runs clean** — N frames in the sim with no exception (`sim/run.py … --frames N`), not just
-   "imports." Then a **`--frames 3600 --fast`** run must also finish clean — it catches the crashes
+   "imports." Then a **`--frames 3600`** run must also finish clean — it catches the crashes
    a short run hides: an unbounded list, a pool that fills, a state the game only reaches after
    minutes. It does NOT catch per-frame *churn* (CPython's GC hides same-frame garbage that the
    device's non-moving heap would fragment — `engine-capabilities.md §5`), so read the hot loop for
-   allocations too; `--profile` reports RETAINED growth only. `--fast` skips
-   the frame sleep (`dt` still reads the nominal 1/fps, so the game behaves identically) — without it
-   the soak takes two minutes of waiting, which is how it ends up quietly shortened.
+   allocations too; `--profile` reports RETAINED growth only. A headless run skips the frame sleep
+   by default (`dt` still reads the nominal 1/fps, so the game behaves identically), so the soak
+   costs compute, not two minutes of waiting — and the same `--seed` reproduces the same frame.
 2. It **reads at a glance** in the PNG — *name* the player's shape+colour and each threat's from the
    shot alone; if you can't tell them apart by **shape AND colour** (not colour alone), it fails. HUD legible.
    This applies to **every object you just added**, not only the player: find it in the shot and check

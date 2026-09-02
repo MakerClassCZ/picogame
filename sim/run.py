@@ -300,19 +300,25 @@ def main():
                     help="fix the RNG so a run REPEATS: seeds picogame_rand's default seed and "
                          "CPython's random. Without it every run deals a different game, so two "
                          "screenshots can't be compared and a difficulty complaint can't be "
-                         "reproduced.")
+                         "reproduced. The other half of reproducibility is the clock, which "
+                         "headless runs now fake by default - under --real-time a dt-scaled "
+                         "game drifts with machine load and the same seed still diverges.")
     ap.add_argument("--strict-dirty", action="store_true",
                     help="honour each always_dirty=False StripDraw's dirty bit instead of "
                          "repainting everything: a layer you forgot to invalidate() after a "
                          "content change then STOPS UPDATING here, the way it does on device "
                          "(the sim has no dirty-rect otherwise, so that bug is invisible).")
     ap.add_argument("--fast", action="store_true",
-                    help="headless: run the frame loop at full speed by giving picogame_clock a "
-                         "VIRTUAL clock -- the frame sleep is skipped but dt still reads the nominal "
-                         "1/fps, so dt-scaled movement behaves exactly as it does at the real rate "
-                         "(and becomes deterministic: no machine-load jitter between runs). Turns a "
-                         "3600-frame soak from two minutes of wall clock into however long the "
-                         "compute takes. A game that reads time.monotonic() itself is NOT faked.")
+                    help="(now the DEFAULT headless; kept so old command lines still work) run the "
+                         "frame loop at full speed on a VIRTUAL clock: the frame sleep is skipped "
+                         "but dt still reads the nominal 1/fps, so dt-scaled movement behaves "
+                         "exactly as at the real rate - and becomes deterministic, which is what "
+                         "makes --seed reproduce a screenshot. A game that reads time.monotonic() "
+                         "itself is NOT faked.")
+    ap.add_argument("--real-time", action="store_true",
+                    help="headless: sleep between frames to hold the nominal fps, as a live window "
+                         "does. Nobody is watching a headless run, so this only matters for a game "
+                         "that reads the wall clock itself - which is a device bug anyway.")
     ap.add_argument("--profile", action="store_true",
                     help="headless run under cProfile + tracemalloc; print a perf report "
                          "(call counts, time [sim-skewed], per-frame game/lib allocation)")
@@ -358,11 +364,15 @@ def main():
         _random.seed(args.seed)                     # ... and the stdlib RNG some games use
     _host.set_tick_mode(_uses_clock(game_path))   # decided statically, see _uses_clock
     _install_frame_boundary(_host)
-    if args.fast:
-        if args.backend == "pygame":
+    # Virtual clock is the headless DEFAULT: a headless run has no viewer, so sleeping to hold
+    # 30 fps only burns wall clock (measured: 11 s vs under 1 s for 300 frames) - and the real
+    # clock makes dt depend on machine load, which is why --seed alone could not reproduce a
+    # screenshot. --real-time opts back out; a live window always runs in real time.
+    if args.backend == "pygame":
+        if args.fast:
             print("[sim] --fast is ignored with a live window (a window has to run in real time).")
-        else:
-            _install_virtual_clock()
+    elif not args.real_time:
+        _install_virtual_clock()
 
     if args.hold:                      # hold buttons for the whole run (input testing)
         for name in args.hold.split(","):

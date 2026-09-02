@@ -431,7 +431,7 @@ forgiving API — it's the fastest way to iterate. Build on PC, validate with sc
 ```bash
 python sim/run.py game.py             # with pygame installed: LIVE WINDOW, NO frame cap (never
                                       #  exits on its own!) - automation always passes --frames
-                                      #  or --shot/--keys/--fast, which force headless PIL
+                                      #  or --shot/--keys, which force headless PIL
 python sim/run.py game.py --shot out.png                    # save final frame to a PNG
 python sim/run.py game.py --frames 300 --shot-at 120 --shot mid.png   # grab frame 120
 python sim/run.py game.py --hold RIGHT,B --shot out.png      # hold buttons (input testing)
@@ -440,7 +440,7 @@ python sim/run.py game.py --backend pygame                  # live interactive w
 ```
 CLI: `game` (positional), `--frames N` (default 150), `--backend pil|pygame`, `--shot PATH`,
 `--shot-at N`, `--hold NAME,NAME` (logical `UP/DOWN/LEFT/RIGHT/A/B/X/Y`), `--keys TIMELINE`,
-`--profile` (per-frame timing). `--fast` runs headless at full speed — the frame sleep is skipped but `dt` stays nominal, so a long soak costs compute, not wall clock.
+`--profile` (per-frame timing). A headless run is full speed by DEFAULT — the frame sleep is skipped and `dt` stays nominal, so a long soak costs compute rather than wall clock, and a `--seed` run reproduces frame for frame. `--real-time` sleeps like a live window if you ever need it.
 `--keys` is `FRAME:BUTTON[:HELD_FRAMES]` items separated by commas — `25:B:3` taps B for 3 frames at
 frame 25, `40:X` presses and holds, `60:-X` releases. This is how you test anything read with
 `just_pressed` (shoot, jump, confirm, place): `--hold` can only express "down the whole run", so a
