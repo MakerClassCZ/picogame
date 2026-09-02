@@ -1,18 +1,16 @@
 # picogame timing helpers: frame-rate cap + dt, and a fixed-timestep accumulator.
 # Both are driven by ONE primitive - a _Metronome of ideal event boundaries spaced at exactly the
 # requested rate, on a millisecond timebase (supervisor.ticks_ms). Clock sleeps to the next boundary;
-# FixedStep counts the boundaries that have passed. tick_async() additionally needs `asyncio` - a
-# BUILT-IN (native C) module in the picogame firmware, so no /lib file is required; the ImportError
-# fallback keeps everything else working on a build that happens to omit it.
+# FixedStep counts the boundaries that have passed. tick_async() additionally needs `asyncio`,
+# imported on its FIRST call, not here: a game that never awaits must not pay for it - with the
+# Adafruit asyncio package in /lib the import costs 7.4 KB of heap and 43 ms on RP2040 (measured),
+# and every game imports this module. The ImportError surfaces as a RuntimeError from tick_async().
 
 import time
 
 from micropython import const
 
-try:
-    import asyncio
-except ImportError:
-    asyncio = None
+asyncio = None                  # bound by tick_async() on first use
 
 # Millisecond timebase: wrap-safe and allocation-free on device. supervisor.ticks_ms() returns a
 # SMALL int that wraps at 2**29 ms (~6.2 days) - unlike time.monotonic_ns(), which is a big-int
@@ -141,8 +139,12 @@ class Clock:
     async def tick_async(self):
         """Like tick(), but yields to other asyncio tasks during the idle wait.
         Note: rendering is blocking, so async only helps in this cap-sleep gap."""
+        global asyncio
         if asyncio is None:
-            raise RuntimeError("asyncio not available in this build")
+            try:
+                import asyncio
+            except ImportError:
+                raise RuntimeError("asyncio not available in this build")
         now = _ms()
         if not self._capped:
             return self._advance(now, now)

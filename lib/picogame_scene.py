@@ -34,6 +34,8 @@ class View:
         self._tile = (0, 0, 16, 16)   # (ox, oy, tile_w, tile_h) - dims kept here, not
                                       # read off the C Tilemap (which doesn't expose them)
         self._props = {}         # asset_id -> {prop: bytes}
+        self._cur = {}           # the primary tilemap's prop table (see _bind)
+        self._solid = None       # ... and its "solid" table, or None
 
     @property
     def tile_size(self):
@@ -69,13 +71,21 @@ class View:
         if self.audio and self.sounds.get(sound_id):
             self.audio.sfx(self.sounds[sound_id])
 
+    def _bind(self):
+        # Cache the primary tilemap's prop tables: the per-frame probes below are then two
+        # lookups instead of a dict chain that built a throwaway {} on every call.
+        tm = self._tm
+        self._cur = self._props.get(tm[1], {}) if tm is not None else {}
+        self._solid = self._cur.get("solid")
+
     def _prop_bytes(self, name):
-        if self._tm is None:
-            return None
-        return self._props.get(self._tm[1], {}).get(name)
+        return self._cur.get(name)
 
     def is_solid(self, tx, ty):
-        return self.tile_has(tx, ty, "solid")
+        b = self._solid
+        if b is None:
+            return False
+        return bool(b[self.tilemap.get_tile(tx, ty)])
 
     def set_tile_prop(self, tile, prop, on=True):
         """Flip a flag for a TILE TYPE at runtime: every cell holding that tile
@@ -92,12 +102,13 @@ class View:
         elif tile >= len(b):
             b.extend(bytes(tile + 1 - len(b)))
         b[tile] = 1 if on else 0
+        self._bind()                       # the table (or the asset's dict) may be new
 
     def tile_has(self, tx, ty, prop):
-        b = self._prop_bytes(prop)
-        if b is None or self._tm is None:
+        b = self._cur.get(prop)
+        if b is None:
             return False
-        return bool(b[self._tm[0].get_tile(tx, ty)])
+        return bool(b[self.tilemap.get_tile(tx, ty)])
 
 
 def _build_bitmaps(pg, assets):
@@ -273,6 +284,7 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
     if music and v.audio and v.sounds.get(music):
         v.audio.music(v.sounds[music])
     v.camera = scene.get("camera")
+    v._bind()
     return v
 
 

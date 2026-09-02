@@ -182,8 +182,9 @@ class Label:
             self.sprite.move(x, y)
 
     def set(self, text):
-        text = "" if text is None else str(text)   # None -> hidden (match ui.SceneLabel/HudLabel _txt),
-        if text == self.text:                       # not the literal "None"
+        if not isinstance(text, str):               # (str(s) COPIES in MicroPython - skip it)
+            text = "" if text is None else str(text)   # None -> hidden (match ui _txt), not "None"
+        if text == self.text:
             return False
         self.text = text
         if text == "":                     # empty = hidden: don't leave stale glyph pixels behind

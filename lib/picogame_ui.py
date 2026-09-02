@@ -31,6 +31,10 @@ LINE_H = const(12)
 
 def _txt(x):
     # None -> "" (a blank/hidden field), not the literal "None"; everything else -> str.
+    # A str passes through as-is: MicroPython's str(s) COPIES (a print into a fresh buffer),
+    # which made an unchanged 28-char SceneLabel.set() cost 175 us + 48 B on RP2040.
+    if isinstance(x, str):
+        return x
     return "" if x is None else str(x)
 
 

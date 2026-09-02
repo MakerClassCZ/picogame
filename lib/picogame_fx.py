@@ -45,7 +45,9 @@ class Shake:
 
     trauma is squared before use (Eiserloh) so small events barely shake and big ones slam.
     `max_offset` ~6 px suits 320x240 (>10 hides the action). `decay` is trauma lost per frame
-    (~0.03 = 0.9/sec at 30 fps -> a 'kick', not a 'rumble')."""
+    (~0.03 = 0.9/sec at 30 fps -> a 'kick', not a 'rumble'). Amounts: 0.6 = a small kick,
+    0.8 = a hit, 1.0 = a big impact. Below ~0.5 the squared offset is under one pixel at
+    max_offset 6 (0.4 -> 0.96 px), i.e. invisible - it only costs the full repaints."""
 
     def __init__(self, scene, max_offset=6, decay=0.03, seed=0x9E37):
         self.scene = scene                           # None = offset-only mode (StripDraw games)
@@ -64,7 +66,8 @@ class Shake:
         return (self._r % 2001 - 1000) / 1000.0
 
     def add(self, amount):
-        """Add trauma (0..1). e.g. 0.6 = a hit/explosion, 0.15 = a small bump."""
+        """Add trauma (0..1): 0.6 = a small kick, 0.8 = a hit/explosion, 1.0 = a big impact.
+        Under ~0.5 nothing visibly moves (sub-pixel at max_offset 6)."""
         self.trauma = min(1.0, self.trauma + amount)
 
     def tick(self, cam_x=0, cam_y=0):
@@ -293,6 +296,8 @@ class Fade:
         if self._hold > 0:                   # hold at the current level (a flash's "pop")
             self._hold -= 1
             return False
+        if self.level == self.target and self._pulse is None:
+            return True                      # idle or held: nothing moves, nothing to repaint
         if self.level < self.target:
             self.level = min(self.target, self.level + self.speed)
         elif self.level > self.target:
@@ -387,18 +392,34 @@ class Camera:
         self.w = w
         self.h = h
         self.lerp = lerp
-        self.world_w = world_w
-        self.world_h = world_h
         # the visible play rect (screen coords) - the reserved bands never show the world
         self._vx = left
         self._vy = top
         self._vw = w - left - right
         self._vh = h - top - bottom
-        self.cx = self._vx + self._vw / 2.0         # camera centre, world coords (start: offset 0)
-        self.cy = self._vy + self._vh / 2.0
+        self._hx = self._vx + self._vw / 2.0        # view centre: offset = centre - camera
+        self._hy = self._vy + self._vh / 2.0
+        self.cx = self._hx                          # camera centre, world coords (start: offset 0)
+        self.cy = self._hy
         self.ox = 0                                 # last computed view offset (ints, alloc-free)
         self.oy = 0
+        self.world_w = world_w                      # 0 = unclamped; may be reassigned (new level)
+        self.world_h = world_h
+        self._bounds()
         _check_band(scene, top, bottom, left, right)
+
+    # The clamp bounds depend only on the play rect and the world size, so they are computed
+    # once per world size, not per frame. Plain attributes, deliberately NOT a property: on
+    # MicroPython a class with any property pays a class lookup on EVERY attribute store
+    # (MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS), 4 -> 19 us per store on RP2040 - more than the
+    # whole saving. _compute re-derives the bounds when it sees a changed world size instead.
+    def _bounds(self):
+        self._ww = self.world_w
+        self._wh = self.world_h
+        self._xmin = float(self._vx + self._vw - self._ww)
+        self._xmax = float(self._vx)
+        self._ymin = float(self._vy + self._vh - self._wh)
+        self._ymax = float(self._vy)
 
     def follow(self, tx, ty, snap=False):
         if snap:
@@ -411,12 +432,22 @@ class Camera:
     def _compute(self):
         # screen column s shows world column s - ox (set_view semantics), so the visible rect
         # [vx, vx+vw) shows world [vx-ox, vx+vw-ox); clamp keeps that inside [0, world_w).
-        ox = self._vx + self._vw / 2.0 - self.cx
-        oy = self._vy + self._vh / 2.0 - self.cy
-        if self.world_w:                            # clamp so we don't show past the world edge
-            ox = min(float(self._vx), max(float(self._vx + self._vw - self.world_w), ox))
-        if self.world_h:
-            oy = min(float(self._vy), max(float(self._vy + self._vh - self.world_h), oy))
+        ox = self._hx - self.cx
+        oy = self._hy - self.cy
+        ww = self.world_w
+        wh = self.world_h
+        if ww != self._ww or wh != self._wh:        # world resized after construction
+            self._bounds()
+        if ww:                                      # clamp so we don't show past the world edge
+            if ox < self._xmin:                     # (lower bound first: a world narrower than
+                ox = self._xmin                     #  the view pins to the upper bound, as before)
+            if ox > self._xmax:
+                ox = self._xmax
+        if wh:
+            if oy < self._ymin:
+                oy = self._ymin
+            if oy > self._ymax:
+                oy = self._ymax
         self.ox = int(ox)
         self.oy = int(oy)
 

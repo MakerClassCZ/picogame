@@ -34,6 +34,7 @@ except ImportError:                             # not deployed -> silent no-op, 
 UP, DOWN, LEFT, RIGHT, A, B, X, Y = (1 << i for i in range(8))
 L1, L2, R1, R2, START, SELECT = (1 << i for i in range(8, 14))
 _NBITS = const(14)
+_FMASK = const((1 << 29) - 1)     # poll counter period: stays a small int, wrap-safe diffs
 # NOT const(): the Buttons class body below re-exports `ALL` as a class attribute (the
 # `L1, ..., ALL = L1, ..., ALL` line), and assigning to a const-declared name is a compile error
 # under mpy-cross ("can't assign to expression") - even though CPython/the sim tolerate it.
@@ -199,7 +200,8 @@ class Buttons:
             for s in self._sources:
                 self._mapped |= getattr(s, "mapped", ALL)
             self.state = self.prev = self._pressed = self._released = 0
-            self._hold = [0] * _NBITS
+            self._frame = 0
+            self._stamp = [0] * _NBITS
             return
         # `matrix` = drive a scanned ROW x COLUMN key matrix (e.g. a QWERTY) instead of one-pin-per-
         # button; map only the keys you want onto game buttons, the rest are ignored. Pass:
@@ -250,7 +252,8 @@ class Buttons:
         self.prev = 0
         self._pressed = 0
         self._released = 0
-        self._hold = [0] * _NBITS                         # per-button held-frame counts (for repeat)
+        self._frame = 0                                   # poll counter (wraps; see _FMASK)
+        self._stamp = [0] * _NBITS                        # per-button: the poll it went down (for repeat)
         self._keys = None
         if prefer_keypad:
             try:
@@ -338,7 +341,8 @@ class Buttons:
         self.prev = 0
         self._pressed = 0
         self._released = 0
-        self._hold = [0] * _NBITS
+        self._frame = 0
+        self._stamp = [0] * _NBITS
         rows = [_resolve_pin(p) for p in m["rows"]]
         cols = [_resolve_pin(p) for p in m["cols"]]
         if not rows or not cols or None in rows or None in cols:      # clear error, not a late KeyMatrix fault
@@ -391,29 +395,27 @@ class Buttons:
         for src in self._sources:
             s |= src.read()
         self.state = s
+        f = (self._frame + 1) & _FMASK
+        self._frame = f
         if self._flush:                      # first poll after clear(): consume this frame's edges so a
-            self.prev = self.state           # button HELD across the transition doesn't read as a fresh
+            self.prev = s                    # button HELD across the transition doesn't read as a fresh
             self._pressed = self._released = 0   # press (matters for USB sources, which keep holding it)
             self._flush = False
-            h = self._hold                   # pre-seed held bits so the loop below lands on 2, not 1 -
-            i = 0                            # repeat()'s first-press edge must not fire either (a menu
-            b = 1                            # opened by a held button would move its cursor one step)
-            while b < (1 << _NBITS):
-                if s & b:
-                    h[i] = 1
+            e = s                            # stamp the held bits one poll BACK, so they read as held
+            f -= 1                           # for 2 frames: repeat()'s first-press edge must not fire
+        else:                                # either (a menu opened by a held button would move its
+            e = s & ~self.prev               # cursor one step)
+        # Held-frame counts for repeat() are derived from the poll a button went DOWN, so the idle
+        # frame (nothing changed) does no per-button work; only new presses are stamped.
+        if e:
+            st = self._stamp
+            i = 0
+            while e:
+                if e & 1:
+                    st[i] = f
+                e >>= 1
                 i += 1
-                b <<= 1
-        # track held-frame counts (for repeat())
-        h = self._hold
-        s = self.state
-        i = 0
-        b = 1
-        limit = 1 << _NBITS
-        while b < limit:
-            h[i] = h[i] + 1 if (s & b) else 0
-            i += 1
-            b <<= 1
-        return self.state
+        return s
 
     def attach(self, source):
         """OR another input source (an object with .read() -> logical mask) into this
@@ -473,10 +475,12 @@ class Buttons:
     def repeat(self, button, delay=15, interval=4):
         """Auto-repeat for a SINGLE button: True the frame it's pressed, then every `interval`
         frames once it's been held `delay` frames. Great for menu / grid movement."""
+        if not (self.state & button):
+            return False
         b = button; i = 0           # bit index of the mask (int.bit_length isn't in MicroPython-WASM)
         while b > 1:
             b >>= 1; i += 1
-        c = self._hold[i]
+        c = ((self._frame - self._stamp[i]) & _FMASK) + 1   # frames held so far, this one included
         if c == 1:
             return True
         return c > delay and (c - delay) % interval == 0
@@ -490,8 +494,8 @@ class Buttons:
         self.state = self.prev = self._pressed = self._released = self._hw = 0
         self._flush = True                   # suppress edges on the next poll (a still-held source
         #                                      button must not re-fire as a fresh press after clear)
-        for i in range(_NBITS):
-            self._hold[i] = 0
+        #                                      (the held-frame stamps need no reset: state is 0, and
+        #                                      the flush re-stamps whatever is still held)
 
 
 class Timer:
