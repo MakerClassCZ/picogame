@@ -154,11 +154,11 @@ Kterou textovou cestu použít (`Canvas.text` vs vyrenderovaná Bitmap vs StripD
 - `HudBar(pg, display, buffer, x, y, w, h, bg)` · `.add(sprite)` (ikona Sprite) · `.label(font, x, y, fg, text=" ")` → objekt popisku, který aktualizuješ přes `handle.set(text)` · `.draw()` — okamžitě skládaný pruh bez pixelové plochy velikosti panelu; volej při změně HUD.
 - `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
 - `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace · `.draw(display, buffer, force=False)`.
-- `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace — totéž menu jako vrstva ve scéně.
+- `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.set_items(items, sel=0)` (vymění položky a změní velikost BEZ nové vrstvy scény) · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace — totéž menu jako vrstva ve scéně.
 - `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=15, interval=4)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — `delay`/`interval` ladí opakování při držení směru (framy do prvního opakování / mezi opakováními) — kurzor na D-padu po mřížce (inventář / herní deska). `tick` se hýbe drženým D-padem (auto-repeat) a vrací vybranou buňku na A, `ui.CANCEL` na B, jinak `None`; hlídej přes `if pick is not None and pick is not ui.CANCEL:` (tuple neumí `>= 0`).
 
 ### `picogame_options` — menu nastavení
-- `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` — obrazovka nastavení (přepínače/volby) ve scéně.
+- `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None, visible=True)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.set_rows(rows, sel=0)` · `.tick(btn)` — **jeho `tick()` vrací KLÍČ řádku, zatímco `SceneMenu`/`Menu` vrací INDEX** (jediný rozdíl, který kousne při přechodu z jednoho na druhý) — obrazovka nastavení (přepínače/volby) ve scéně.
 
 ### `picogame_shapes` — generátory jednobarevných bitmap
 - `rect(w, h, color)` · `circle(d, color)` · `ring(d, color, thickness=2)`

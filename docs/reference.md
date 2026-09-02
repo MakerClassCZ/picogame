@@ -154,11 +154,11 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 - `HudBar(pg, display, buffer, x, y, w, h, bg)` · `.add(sprite)` (an icon Sprite) · `.label(font, x, y, fg, text=" ")` → a text handle; update it with `handle.set(text)` · `.draw()` (repaint the bar, call on HUD changes) — a fixed bar that composites sprites + labels (0 retained RAM).
 - `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
 - `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating · `.draw(display, buffer, force=False)`.
-- `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating — the same menu as an in-scene layer.
+- `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.set_items(items, sel=0)` (swap the entries and resize WITHOUT a new scene layer) · `.tick(btn)` → **index** ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating — the same menu as an in-scene layer.
 - `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=15, interval=4)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — `delay`/`interval` tune the held-direction repeat (frames before the first repeat / between repeats) — D-pad cursor over a grid (inventory / board). `tick` moves on held D-pad (auto-repeat) and returns the selected cell on A, `ui.CANCEL` on B, else `None`; guard with `if pick is not None and pick is not ui.CANCEL:` (the tuple does not support `>= 0`).
 
 ### `picogame_options` — settings menu
-- `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` — an in-scene options screen of toggles/choices.
+- `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None, visible=True)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.set_rows(rows, sel=0)` · `.tick(btn)` — an in-scene options screen of toggles/choices. **Its `tick()` returns the row's KEY where `SceneMenu`/`Menu` return an INDEX** - the one difference that bites when you move a menu from one to the other. Use `OptionsMenu` for named settings with values, `SceneMenu` for a plain list of actions.
 
 ### `picogame_shapes` — single-colour bitmap generators
 - `rect(w, h, color)` · `circle(d, color)` · `ring(d, color, thickness=2)`

@@ -574,6 +574,8 @@ class SceneMenu:
         self.sel = 0
         self.top = 0
         self.paged = paged
+        self._rows_req = rows            # what the caller ASKED for; set_items re-derives from it
+        self._width_req = width
         self.rows = max(1, min(rows or len(self.items), len(self.items)))
         self._t = 1 if title else 0
         n = self.rows + self._t
@@ -589,6 +591,32 @@ class SceneMenu:
 
     def _render_full(self):
         self.panel.show(_menu_lines(self.title, self._row_text, self.top, self.rows, len(self.items)))
+
+    def set_items(self, items, sel=0):
+        """Replace the entries, keeping the SAME scene layer - the build-once rule this module asks
+        for, applied to a menu whose contents change (an action unlocks, a unit is recruited, an
+        item sells out). The panel is resized when the row count or the longest label changes, and
+        a SHRINK forces a full repaint so the old, larger rectangle is erased. A hidden menu stays
+        hidden. `OptionsMenu.set_rows` is the twin for value/toggle rows - note its `tick()` returns
+        a row KEY where this one returns an INDEX."""
+        self.items = list(items)
+        self.rows = max(1, min(self._rows_req or len(self.items), len(self.items)))
+        n = self.rows + self._t
+        panel = self.panel
+        w, h = _menu_w(self.items, self._width_req), _panel_h(n)
+        if (w, h) != (panel.w, panel.h):
+            shrank = w < panel.w or h < panel.h
+            panel.w, panel.h = w, h
+            panel._sd.width, panel._sd.height = w, h
+            if shrank:
+                panel.scene.invalidate()     # the vacated rect is nobody else's to erase
+        panel.nlines = n
+        panel._lines = [""] * n
+        self.sel = self._clamp(sel)
+        self.top = ((self.sel // self.rows) * self.rows if self.paged
+                    else max(0, min(self.sel, len(self.items) - self.rows)))
+        if self.active:
+            self._render_full()
 
     def show(self, sel=0):
         """Reveal the menu (resets the cursor). The scene paints it until hide()/destroy()."""
