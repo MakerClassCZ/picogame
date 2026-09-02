@@ -943,3 +943,65 @@ test · 1 billboard enemy type that walks toward the player · exit tile = win.
 floor under the walls · step-based menu combat (§11).
 
 ---
+
+## 13. Narrative / Dialogue Adventure
+
+*The public tree ships no narrative exemplar yet - `picogame_script`'s own header
+(`lib/picogame_script.py`) carries the runnable skeleton this section expands.*
+
+*Exemplars: point-and-click adventures, visual novels, Ace Attorney, the conversation
+half of a Zelda-like.*
+
+**CORE LOOP** — Move (or point) into a **situation** → read what it says → **choose** →
+the world remembers the choice → a later situation reads that memory back. The verb is
+*find out*, and the reward is a door that opens because you were curious.
+
+**WHAT MAKES IT FUN** — Consequence you can SEE, and content you can MISS. A branch that
+only recolours the ending text is not a branch; the good version is an ending you could
+have walked straight past. **This is a slow genre: the 10-second bar means *intrigued by
+the first exchange*, not *scoring in 10 s*** - there is no frame-timing pressure at all
+(same quality-bar note as §11).
+
+**CONTROLS** — D-pad to move or to pick a line · **A** = advance / confirm · **B** = back
+/ cancel. Nothing else: a dialogue game that needs a third verb is usually two games.
+
+**ENGINE MAPPING — this is the engine's cheapest genre.** Text through `SceneBox` /
+`Canvas.text` is a buffer-less StripDraw: **measured at ~0 retained bytes across dozens of
+dialogue pages**, so the story itself costs nothing. Spend the RAM on the map instead.
+- **Scripts as generators** — `picogame_script.Director`: `yield from d.text([...])` waits
+  for A, `d.ask([...])` sets `d.answer` (A/B), `d.fade_out()/fade_in()` covers a map swap,
+  and `d.tick()` returns True while a script runs, which is your "freeze the player" flag.
+  Register with `d.on("name", fn)`; the game loop still owns the frame - nothing blocks.
+- **Hotspots = scene zones.** Put the trigger in the level, not in code: `view.in_zone(px,
+  py)` returns the zone, and a `script` key in its data names the script to `d.start()`.
+- **Memory = event flags.** `d.ev_set("gate_open")` / `d.ev("gate_open")` is the story's
+  "already happened" set; persist what matters yourself with `picogame_save` (pack flags
+  into an int). The Director deliberately does not own your save file.
+- **Bulk text belongs in data**, not in code: a dict per level in its own `.mpy` imported
+  on map entry (the usual split-per-scene pattern), so only the current chapter is resident.
+- **One reused panel**, not a panel per line: build the `SceneBox` once and re-`show()` it.
+
+**STRUCTURE (what to write down before coding)** — the beats, each named: the **question**
+the player is answering, two or three **outcome buckets** (not one per permutation - map
+many states onto few endings), and for each bucket the **one fact** that decides it. Then
+place a hotspot for that fact somewhere skippable. That is the whole design.
+
+**PITFALLS**
+- **Every branch funnelling into one ending** - the commonest failure. If the player cannot
+  reach an ending they did not see coming, the choices were decoration.
+- **`Director.text()` hides the box on its last page** and the box is only reachable through
+  the private `_ensure_box()`; for an epilogue card that must stay up, use your own
+  `SceneBox` (a known gap, not a bug in your code).
+- **Glyph cache, not text buffers, is the RAM risk** - a font paints from a per-glyph cache,
+  so an unusual character set costs more than the same text length in ASCII.
+- **Walls of text.** The screen is 320x240: about six lines of ~34 cells. Write to that box,
+  or the player skips.
+- **A dialogue box drawn as a `Canvas`** - that is the 31 KB mistake; the box widgets are
+  StripDraw for a reason.
+
+**MVP:** a walkable map with two hotspots · one `Director` script with a `text()` and an
+`ask()` · one event flag that a later script reads · two endings, one of them missable.
+
+**NICE TO HAVE:** a portrait sprite beside the box · a typewriter reveal (advance the
+slice per frame in the script) · inventory as event flags · `picogame_cutscene` for a
+scripted opening.
