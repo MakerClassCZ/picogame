@@ -73,7 +73,7 @@ TURN = 3.8
 GRIP_SPEED = 3.5                                 # full steering grip up to here...
 TURN_MIN = 0.42                                  # ...falls to this fraction of TURN at SPEED_MAX (understeer)
 
-cam = fx.Camera(scene, W, H + BAR, lerp=1.0, world_w=WORLD_W, world_h=WORLD_H)
+cam = fx.Camera(scene, W, H, lerp=1.0, world_w=WORLD_W, world_h=WORLD_H, top=BAR)   # same band as setup()
 WHITE = pg.rgb565(255, 255, 255)
 
 NLAPS = 5

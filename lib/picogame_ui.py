@@ -205,10 +205,10 @@ class SceneLabel:
 
 
 class SceneBox:
-    """A multi-line text box pinned in the scene, toggled with show()/hide(). A buffer-less StripDraw:
-    scene.refresh() composites its panel + border + text straight into the live strip (Canvas.clear /
-    frame3d / Canvas.text) - ZERO retained RAM (no Canvas panel), one present, no flicker over a
-    scrolling/animated world.
+    """A multi-line text box pinned in the scene, toggled with show()/hide() or `.visible`. A
+    buffer-less StripDraw: scene.refresh() composites its panel + border + text straight into the
+    live strip (Canvas.clear / frame3d / Canvas.text) - ZERO retained RAM (no Canvas panel), one
+    present, no flicker over a scrolling/animated world.
 
     The scene-layer twin of the immediate `TextBox`. Use SceneBox for a dialog/status box OVER a LIVE
     scene (overworld talk, in-game popup). Use `TextBox` (immediate, pg.render) on a STATIC screen.
@@ -253,7 +253,12 @@ class SceneBox:
                 view.text(x0 + 8, y0 + 7 + i * LINE_H, ln, self.fg, self.font)
 
     def show(self, lines):
-        """Set the text + reveal. Call once (not per frame) - scene.refresh() paints it on change."""
+        """Set the text + reveal. Call once (not per frame) - scene.refresh() paints it on change.
+        Only the first `nlines` lines fit; the rest are dropped (the sim says so)."""
+        if len(lines) > self.nlines:
+            _warn_outside("SceneBox.show() got %d lines but the box holds nlines=%d - the rest is "
+                          "dropped. Build it with nlines=%d, or split the text."
+                          % (len(lines), self.nlines, len(lines)))
         for i in range(self.nlines):
             self._lines[i] = _txt(lines[i]) if i < len(lines) else ""
         self._hidden = False
@@ -262,6 +267,20 @@ class SceneBox:
     def hide(self):
         self._hidden = True
         self._sd.invalidate()                # repaint the rect once (as bg) -> clean erase, then idle
+
+    @property
+    def visible(self):
+        """Shown or hidden - the same flag show()/hide() toggle, as a Sprite-style attribute.
+        Setting it True re-reveals the last lines shown."""
+        return not self._hidden
+
+    @visible.setter
+    def visible(self, on):
+        on = bool(on)
+        if on == (not self._hidden):
+            return
+        self._hidden = not on
+        self._sd.invalidate()
 
     def set_line(self, i, text):
         """Update ONE line; invalidate so the next scene.refresh() repaints the box with it."""

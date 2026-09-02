@@ -441,8 +441,8 @@ class Buttons:
         every call between two poll()s answers the same, which is what lets several systems react to
         one press. The state-machine hazard that follows: a state ENTERED this frame must not read
         the same edge, or the button that ended the game also dismisses the game-over screen before
-        it is seen. Branch the states with `elif` (so only one runs per frame), or gate the new
-        state on a frame counter."""
+        it is seen. Branch the states with `elif` (so only one runs per frame), call `clear()` on
+        the transition (it flushes the edge, see below), or gate the new state on a frame counter."""
         # With extra sources (USB pad) attached: edges come from the COMBINED level diff only. A source
         # and the keypad can hold the SAME logical bit, so mixing in the keypad's own queue edge would
         # falsely fire a press/release the other source doesn't agree with (e.g. a release while the pad

@@ -13,6 +13,7 @@
 
 import sys
 import os
+import time
 import argparse
 import traceback
 
@@ -99,6 +100,7 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
     snap = {}
 
     prev = host._frame_hook            # keep a --keys timeline running under --profile
+    t0 = time.monotonic()
 
     def hook(fr):
         if prev is not None:
@@ -107,6 +109,9 @@ def _run_profiled(host, code, g, game_path, game_dir, root, frames):
             snap["t"] = tracemalloc.take_snapshot()
         if fr == mid:
             snap["mid"] = tracemalloc.take_snapshot()
+        if fr % 100 == 0:              # a piped run shows nothing for minutes otherwise -
+            print("[sim] profiling frame %d/%d, %.0f s" % (fr, frames, time.monotonic() - t0),
+                  flush=True)          #  which reads as a hung game loop
 
     host.set_frame_hook(hook)
     tracemalloc.start()
@@ -322,8 +327,10 @@ def main():
     ap.add_argument("--profile", action="store_true",
                     help="headless run under cProfile + tracemalloc; print a perf report "
                          "(call counts, time [sim-skewed], per-frame game/lib allocation). Costs "
-                         "roughly 10x the run time, and a LEAK verdict needs 900+ frames to mean "
-                         "anything - caches and lazy imports are still filling before that.")
+                         "10-25x a plain run - tracemalloc scales with allocations per frame, not "
+                         "with frames, so a collision-heavy game sits at the top - and a LEAK "
+                         "verdict needs 900+ frames to mean anything (caches and lazy imports are "
+                         "still filling before that): budget minutes for it, ~300 frames for timings.")
     args = ap.parse_args()
 
     # Backend default: a human running `run.py game.py` wants to SEE it, so open a live pygame window
@@ -423,9 +430,9 @@ def main():
     code = compile(src, game_path, "exec")
     g = {"__name__": "__main__", "__file__": game_path}
     if args.profile:
-        if args.frames > 600:
-            print("[sim] --profile traces every allocation: expect ~10x the wall time of a plain "
-                  "run (900 frames ~ 2 min). Profile a few hundred frames; soak WITHOUT --profile.")
+        print("[sim] --profile traces every allocation: expect 10-25x the wall time of a plain "
+              "run (progress every 100 frames). Timings need ~300 frames; a leak verdict 900+; "
+              "soak WITHOUT --profile.", flush=True)
         _run_profiled(_host, code, g, game_path, game_dir, root, args.frames)
         return
     try:

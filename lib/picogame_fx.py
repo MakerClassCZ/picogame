@@ -371,19 +371,34 @@ class Camera:
         # --- or with shake: ---
         ox, oy = cam.follow(player.x, player.y).offset()
         shaker.tick(ox, oy)
+
+    `w`/`h` are the SCREEN size. A scene built with a reserved HUD band (`Scene(top=BAR)` /
+    `picogame_game.setup(top=BAR)`) never scrolls those rows, so pass the same band here
+    (`top=BAR`, and `bottom`/`left`/`right` alike): the camera then centres on the rows that
+    actually show the world and clamps so world 0 lands at the band's inner edge and the far
+    edge is reachable. Padding `h` by the band instead fixes the centre but not the clamp -
+    the view stops BAR px short of the world's end. The firmware Scene does not expose its
+    band, which is why it is stated here again; the simulator flags a mismatch.
     """
 
-    def __init__(self, scene, w, h, lerp=0.18, world_w=0, world_h=0):
+    def __init__(self, scene, w, h, lerp=0.18, world_w=0, world_h=0,
+                 top=0, bottom=0, left=0, right=0):
         self.scene = scene
         self.w = w
         self.h = h
         self.lerp = lerp
         self.world_w = world_w
         self.world_h = world_h
-        self.cx = w / 2.0                           # camera centre, world coords
-        self.cy = h / 2.0
+        # the visible play rect (screen coords) - the reserved bands never show the world
+        self._vx = left
+        self._vy = top
+        self._vw = w - left - right
+        self._vh = h - top - bottom
+        self.cx = self._vx + self._vw / 2.0         # camera centre, world coords (start: offset 0)
+        self.cy = self._vy + self._vh / 2.0
         self.ox = 0                                 # last computed view offset (ints, alloc-free)
         self.oy = 0
+        _check_band(scene, top, bottom, left, right)
 
     def follow(self, tx, ty, snap=False):
         if snap:
@@ -394,12 +409,14 @@ class Camera:
         return self
 
     def _compute(self):
-        ox = self.w / 2.0 - self.cx
-        oy = self.h / 2.0 - self.cy
+        # screen column s shows world column s - ox (set_view semantics), so the visible rect
+        # [vx, vx+vw) shows world [vx-ox, vx+vw-ox); clamp keeps that inside [0, world_w).
+        ox = self._vx + self._vw / 2.0 - self.cx
+        oy = self._vy + self._vh / 2.0 - self.cy
         if self.world_w:                            # clamp so we don't show past the world edge
-            ox = min(0.0, max(float(self.w - self.world_w), ox))
+            ox = min(float(self._vx), max(float(self._vx + self._vw - self.world_w), ox))
         if self.world_h:
-            oy = min(0.0, max(float(self.h - self.world_h), oy))
+            oy = min(float(self._vy), max(float(self._vy + self._vh - self.world_h), oy))
         self.ox = int(ox)
         self.oy = int(oy)
 
@@ -413,6 +430,24 @@ class Camera:
         """Update the scene camera directly - allocation-free (no tuple). Returns None."""
         self._compute()
         self.scene.set_view(self.ox, self.oy)
+
+
+def _check_band(scene, top, bottom, left, right):
+    """Simulator only: the reserved band is stated twice (Scene(top=...) and Camera(top=...))
+    because the firmware Scene does not expose it - say so once when the two disagree, since
+    the symptom (the view centred/clamped a band's height off) is otherwise silent. Device: no-op."""
+    try:
+        import _host                            # simulator only; the board has no such module
+    except ImportError:
+        return
+    if scene is None or not hasattr(scene, "_top"):
+        return
+    got = (scene._top, scene._bottom, scene._left, scene._right)
+    if got != (top, bottom, left, right):
+        _host.note("Camera(top=%d, bottom=%d, left=%d, right=%d) but its Scene reserves "
+                   "top=%d, bottom=%d, left=%d, right=%d - the camera centres and clamps on the "
+                   "wrong rows/columns (the view sits a band's height off at the world edges). "
+                   "Pass the Scene's band to Camera." % ((top, bottom, left, right) + got))
 
 
 def _unwire(c):
