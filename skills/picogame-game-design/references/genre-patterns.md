@@ -829,6 +829,11 @@ enemy `Pool` on waypoints · currency + ~5 telegraphed waves + lose-on-leak.
 
 *Exemplars: picatro (this project), Slay the Spire, Balatro-likes.*
 
+*Also the section for **management / tycoon-lite** (a stall, a workshop, a dispatcher): same
+grammar - spend a limited resource from a menu, watch the consequences resolve, advance a turn -
+so take the controls, the engine mapping and the slow-genre note from here, and the numbers-on-
+screen half from `picogame_ui` (HudBar, SceneLabel, SceneMenu/OptionsMenu) + `picogame_save`.*
+
 **CORE LOOP** — Turn-based, menu-driven: draw a hand → **choose** cards/targets from a
 selection → resolve effects (score/damage/status) → advance through a run of
 escalating encounters; a meta layer (unlocks/relics) rewards the *next* run.
