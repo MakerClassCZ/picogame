@@ -11,6 +11,8 @@
 #   python3 tools/synth_preview.py --play          # also play the montage (needs `aplay`/`afplay`)
 
 import argparse
+import json
+import sys
 import math
 import os
 import subprocess
@@ -69,16 +71,21 @@ def midi_to_hz(m):
 
 def render(midi, wave="square", attack=0.005, decay=0.06, sustain=0.0,
            amplitude=0.6, bend=None, tail=0.03):
-    """Render one note to a float32 mono signal at SR. `bend` = (semitones, ms)."""
+    """Render one note to a float32 mono signal at SR. `bend` = (semitones, ms) for the DEFAULT
+    sine sweep (a wobble/swoop: up to +semitones and back), or (semitones, ms, "ramp") for the
+    straight monotonic GLIDE that `picogame_synth.pitch_bend(waveform=RAMP)` produces on device."""
     base = midi_to_hz(midi)
     dur = attack + decay + tail
     n = max(1, int(SR * dur))
     t = np.arange(n) / SR
     if bend:
-        semi, ms = bend
+        semi, ms, shape = (tuple(bend) + ("sine",))[:3]
         period = ms / 1000.0
-        ph = np.clip(t / period, 0.0, 1.0)        # one sine cycle, then hold at the end value
-        freq = base * 2 ** ((semi / 12.0) * np.sin(2 * np.pi * ph))
+        ph = np.clip(t / period, 0.0, 1.0)        # one LFO pass, then hold at the end value
+        # RAMP is synthio's 2-sample table [+max, -max]: with once=True it interpolates max->min
+        # LINEARLY, i.e. a straight glide from +semi to -semi (the sine instead rises and returns)
+        lfo = (1.0 - 2.0 * ph) if shape == "ramp" else np.sin(2 * np.pi * ph)
+        freq = base * 2 ** ((semi / 12.0) * lfo)
     else:
         freq = np.full(n, base)
     phase = (np.cumsum(freq) / SR) % 1.0          # phase-accumulate into the cycle table
@@ -265,20 +272,62 @@ def build(sfx_set, outdir, label, order=None):
     return allp
 
 
+def load_spec(source):
+    """Load YOUR game's SFX set instead of a built-in preset. Two forms:
+
+        path/to/sfx.json          a JSON object {name: spec, ...}
+        path/to/game.py:SFX       a dict named SFX (or any attribute) in a Python file
+
+    A `spec` is the same shape the presets use: one note dict (`midi`, `wave`, `attack`,
+    `decay`, `sustain`, `amplitude`, `bend`, `tail`), `{"drum": {...}}`, or
+    `{"seq": [note, ...], "gap": seconds}`. `bend` is `[semitones, ms]` for the default sine
+    swoop or `[semitones, ms, "ramp"]` for a straight glide.
+    """
+    if ":" in source and not source.lower().endswith(".json"):
+        path, _, attr = source.rpartition(":")
+    else:
+        path, attr = source, None
+    if path.lower().endswith(".json"):
+        with open(path) as f:
+            spec = json.load(f)
+    else:                                        # a Python file: exec it and take `attr`
+        ns = {}
+        with open(path) as f:
+            code = compile(f.read(), path, "exec")
+        exec(code, ns)                           # noqa: S102 - a local file the caller named
+        if attr is None:
+            sys.exit("give the dict to preview: %s:NAME" % path)
+        if attr not in ns:
+            sys.exit("%s has no %r (found: %s)" % (path, attr, ", ".join(
+                k for k, v in ns.items() if isinstance(v, dict) and not k.startswith("_")) or "no dicts"))
+        spec = ns[attr]
+    if not isinstance(spec, dict) or not spec:
+        sys.exit("expected a non-empty {name: spec} dict, got %s" % type(spec).__name__)
+    return spec
+
+
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Render picogame SFX to WAV so a HUMAN can listen (the desktop sim is an "
+                    "approximation and agents have no ears). Presets, or your own game's set.",
+        epilog='e.g. --spec games/mygame/sfx.py:SFX --play')
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "out"))
     ap.add_argument("--label", default=None)
     ap.add_argument("--set", default="squest", choices=("squest", "drums", "pictor"))
+    ap.add_argument("--spec", default=None,
+                    help="YOUR sfx set: sfx.json, or game.py:DICTNAME (overrides --set)")
     ap.add_argument("--play", action="store_true")
     args = ap.parse_args()
-    label = args.label or args.set
-    if args.set == "drums":
-        allp = build(DRUMS, args.out, label, DRUMS_ORDER)
+    if args.spec:
+        spec = load_spec(args.spec)
+        label = args.label or os.path.splitext(os.path.basename(args.spec.split(":")[0]))[0]
+        allp = build(spec, args.out, label, sorted(spec))     # no fixed ORDER for a custom set
+    elif args.set == "drums":
+        allp = build(DRUMS, args.out, args.label or args.set, DRUMS_ORDER)
     elif args.set == "pictor":
-        allp = build(PICTOR, args.out, label, PICTOR_ORDER)
+        allp = build(PICTOR, args.out, args.label or args.set, PICTOR_ORDER)
     else:
-        allp = build(SQUEST, args.out, label)
+        allp = build(SQUEST, args.out, args.label or args.set)
     if args.play:
         for player in (("aplay", allp), ("afplay", allp), ("paplay", allp)):
             try:

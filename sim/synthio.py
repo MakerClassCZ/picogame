@@ -104,6 +104,21 @@ class MidiTrack:
             self._notes = []
 
 
+def _warn_if_held(note):
+    """Real synthio SUSTAINS a pressed note for as long as it is held, re-reading its live
+    .frequency/.amplitude every audio buffer - that is how picogame_synth.Drone drives an engine
+    or siren from per-frame set(). The sim renders ONE fixed-length clip at press() and never
+    re-renders, so a Drone is inaudible here (a picoracer engine built with amplitude=0.0 is
+    literally silence). Say that once rather than misrepresenting the sound."""
+    env = getattr(note, "envelope", None)
+    if env is None or float(getattr(env, "sustain_level", 0.0)) <= 0.0:
+        return                                 # a one-shot SFX: the clip model is faithful enough
+    import _host                               # lazy: keeps this shim importable on its own
+    _host.note("HELD note (sustain_level > 0, e.g. picogame_synth.Drone): the sim plays one "
+               "fixed-length clip at press() and never re-renders, so per-frame set() is "
+               "inaudible here - judge engine/siren/drone sounds on device.")
+
+
 class Synthesizer:
     def __init__(self, sample_rate=22050, channel_count=1):
         self._voice = None                     # set by the Mixer voice that plays this synth
@@ -111,6 +126,7 @@ class Synthesizer:
     def press(self, note):
         lvl = self._voice.level if self._voice is not None else 0.7
         for n in note if isinstance(note, (tuple, list)) else (note,):
+            _warn_if_held(n)
             _simaudio.play_note(n, lvl)        # a drum() voice is a tuple of notes
 
     def release(self, note):

@@ -235,9 +235,11 @@ A beep on the key action confirms what the eye is doing and is the best fun-per-
   etc. on events, `kit.tick()` once per frame. Reach for it FIRST; on audioless builds it degrades
   to a no-op, no guards needed.
 - **Same-frame** as the event; **never audio alone** — always pair with a visual.
-- **You can't judge sound yourself**: a headless run is silent (the live pygame window does play synthio). The Kit is pre-tuned; any
-  bespoke `picogame_synth` design must be rendered to WAV (`tools/synth_preview.py`) and approved by
-  the USER before shipping.
+- **You have no ears — so the Kit IS the audio plan.** It is pre-tuned and hardware-validated:
+  use it and move on; there is nothing to audition, tune or approve. Do NOT design bespoke
+  `picogame_synth` voices unless the user asked for them (a held engine/siren tone, music) — the
+  sim cannot demonstrate those and you cannot judge them. Never state how anything SOUNDS; when a
+  game does carry bespoke audio, list it as unverified, like fun.
 - Full recipes (chiptune palette, contour semantics, the crisp-not-rich lesson, music guidance):
   **`techniques.md` §Audio recipes**.
 

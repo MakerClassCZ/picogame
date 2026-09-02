@@ -53,14 +53,31 @@ def midi_to_hz(m):
     return 440.0 * 2.0 ** ((m - 69) / 12.0)
 
 
+def _lfo_shape(waveform, ph, once):
+    """LFO value in -1..1 at phase ph (0..1). `waveform` = None means synthio's default SINE;
+    a table (e.g. picogame_synth.RAMP = [+max, -max]) is sampled with linear interpolation, so
+    RAMP + once=True gives the straight max->min GLIDE the lib documents, not a sine wobble."""
+    if waveform is None:
+        return np.sin(2.0 * np.pi * ph)
+    tab = np.frombuffer(bytes(waveform), dtype="<i2").astype(np.float32) / 32767.0
+    if len(tab) < 2:
+        return np.full_like(ph, tab[0] if len(tab) else 0.0)
+    if once:                                  # sweep ACROSS the table once, then hold the end value
+        return np.interp(ph * (len(tab) - 1), np.arange(len(tab)), tab)
+    return np.interp(ph * len(tab), np.arange(len(tab) + 1),
+                     np.concatenate([tab, tab[:1]]))          # looping: wrap back to sample 0
+
+
 def _osc_env(freq_hz, table, env, amp, bend, n):
     """Render n samples: phase-accumulate through `table` at freq (+ optional bend LFO), apply ADSR."""
     t = np.arange(n) / _SR
     base = float(freq_hz)
     if bend is not None and getattr(bend, "rate", 0):
         period = 1.0 / max(1e-6, float(bend.rate))
-        ph = np.clip(t / period, 0.0, 1.0)                    # one sweep, then hold (matches synth_preview)
-        freq = base * 2.0 ** (float(bend.scale) * np.sin(2 * np.pi * ph))
+        once = getattr(bend, "once", True)
+        ph = np.clip(t / period, 0.0, 1.0) if once else (t / period) % 1.0
+        freq = base * 2.0 ** (float(bend.scale) * _lfo_shape(getattr(bend, "waveform", None), ph, once)
+                              + float(getattr(bend, "offset", 0.0)))
     else:
         freq = np.full(n, base)
     tbl = np.frombuffer(bytes(table), dtype="<i2").astype(np.float32)
