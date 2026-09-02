@@ -486,22 +486,13 @@ def _unwire(c):
     return (n >> 11) & 0x1F, (n >> 5) & 0x3F, n & 0x1F
 
 
-def _wire(r, g, b):
-    n = ((r & 0x1F) << 11) | ((g & 0x3F) << 5) | (b & 0x1F)
-    return ((n >> 8) | (n << 8)) & 0xFFFF
-
-
-def _lerp565(a, b, t):
-    ra, ga, ba = _unwire(a)
-    rb, gb, bb = _unwire(b)
-    return _wire(int(ra + (rb - ra) * t), int(ga + (gb - ga) * t), int(ba + (bb - ba) * t))
-
-
 class Sky:
     """A vertical gradient band (sky / background / day-night), drawn per-scanline via StripDraw
     - the classic Game Boy/raster trick. No retained full-screen buffer: it keeps only a small
     per-scanline colour LUT (`h` entries x 2 B), rebuilt only when `top`/`bottom` change. Change
-    `top`/`bottom` over time for day-night. Add it FIRST (it's a background layer).
+    `top`/`bottom` over time for day-night (a rebuild is integer-only and allocation-free,
+    ~5 ms per 120 rows on RP2040 - step the colours every few frames, not every frame).
+    Add it FIRST (it's a background layer).
 
         sky = Sky(scene, 0, 0, W, HORIZON, pg.rgb565(60,120,240), pg.rgb565(200,230,255))
     """
@@ -561,8 +552,16 @@ class Sky:
         prev = -1
         top = self._top
         bot = self._bottom
+        # Per-channel integer lerp (floor) - the same 5/6/5 values the float lerp truncated to,
+        # without the float maths and the two tuples per row (~64 B garbage/row, 34 ms/120 rows).
+        ra, ga, ba = _unwire(top)
+        dr, dg, db = _unwire(bot)
+        dr -= ra
+        dg -= ga
+        db -= ba
         for r in range(hh):
-            c = _lerp565(top, bot, r / den)
+            n565 = ((ra + dr * r // den) << 11) | ((ga + dg * r // den) << 5) | (ba + db * r // den)
+            c = ((n565 >> 8) | (n565 << 8)) & 0xFFFF      # to wire order (what StripDraw wants)
             if c != prev:
                 rt[n] = y0 + r
                 rb[n] = y0 + r

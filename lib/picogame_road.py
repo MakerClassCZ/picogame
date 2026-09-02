@@ -66,6 +66,11 @@ class Road:
         self.pg = pg
         self.w = width
         self.horizon = horizon
+        # This frame's effective horizon row (horizon + hill pitch) - for overlays that map
+        # their own rows onto the road (a finish chequer, roadside sprites). A plain attribute
+        # kept by set_grade(): a property here would make EVERY store in tick() pay the
+        # MicroPython special-accessor lookup (~4x per store).
+        self.horizon_now = horizon
         self.hill_amp = hill_amp
         n = (height - horizon) + hill_amp        # rows incl. downhill headroom
         self.rows = n
@@ -135,12 +140,7 @@ class Road:
         Feed grade into your speed too (speed += grade * pull) - a hill you can only see is
         scenery. Needs hill_amp > 0 at construction."""
         self._pitch = -int(grade * self.hill_amp)
-
-    @property
-    def horizon_now(self):
-        """This frame's effective horizon row (horizon + hill pitch) - for overlays that map
-        their own rows onto the road (a finish chequer, roadside sprites)."""
-        return self.horizon + self._pitch
+        self.horizon_now = self.horizon + self._pitch
 
     def draw(self, view, vy):
         """StripDraw callback body: draw this strip's sky + road rows. Grass: the scene

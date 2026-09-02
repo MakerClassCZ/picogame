@@ -77,21 +77,30 @@ def noise():
     return out
 
 
-# Prebuilt singletons (share one waveform across notes - they're read-only). Built ONLY
-# on an audio-capable build: an audio-less firmware can't play them, so it keeps inert
-# None placeholders (~2.5 KiB saved) while `snd.SQUARE` etc. still resolve (games alias
-# them at import; the no-op note() ignores the waveform anyway).
+# Shared waveform singletons SINE / SAW / TRIANGLE / SQUARE / NOISE (read-only, one table
+# per shape shared by every note). Built on FIRST USE, not at import: a game touches only
+# the shapes its notes use, so a Kit-only game never pays for SAW/TRIANGLE/SQUARE
+# (3 x 528 B, ~26 ms on the RP2040). The first read goes through the module __getattr__
+# below, which stores the table into this module's namespace - every later read is a plain
+# module attribute (measured: identical cost to an eager constant). Audio-less firmware
+# gets None placeholders so `snd.SQUARE` still resolves (the no-op note() ignores it).
+# Touch the tables at startup, not inside the game loop (a first use in a tick would build
+# the table mid-frame; picogame_music pre-touches the shapes its bank uses for that reason).
+_TABLES = {"SINE": sine, "SAW": saw, "TRIANGLE": triangle, "SQUARE": square, "NOISE": noise}
+
+
+def __getattr__(name):
+    build = _TABLES.get(name)
+    if build is None:
+        raise AttributeError(name)
+    table = build() if AVAILABLE else None
+    globals()[name] = table            # first touch only: from now on a plain module attribute
+    return table
+
+
 # RAMP: a 2-sample LFO shape; with once=True the LFO interpolates max->min LINEARLY over
 # 1/rate seconds - a clean ramp (pitch_bend(waveform=RAMP) = straight glide vs sine wobble).
-if AVAILABLE:
-    SINE = sine()
-    SAW = saw()
-    TRIANGLE = triangle()
-    SQUARE = square()
-    NOISE = noise()
-    RAMP = array.array("h", [32767, -32768])
-else:
-    SINE = SAW = TRIANGLE = SQUARE = NOISE = RAMP = None
+RAMP = array.array("h", [32767, -32768]) if AVAILABLE else None
 
 
 class _Null:

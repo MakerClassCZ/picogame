@@ -126,12 +126,15 @@ _COMPOSE_FONT = None          # one-font fast path: HUD text is virtually always
 _COMPOSE_CACHE = None         # so the hot loop looks glyphs up by BARE int cp - no tuple key alloc
 
 
-def compose_into(font, text, buf, w, chars):
+def compose_into(font, text, buf, w, chars, old=None):
     """Compose `text` into an EXISTING `buf` in place (stride `w`, height fh), truncated / blank-padded
-    to `chars` cells - every cell is (re)written so no clear is needed. No Bitmap, no palette, no
-    growth: the buffer is repainted in place (+ sprite.touch()). The row copies DO make short-lived
-    slice objects (~0.3-0.5 KB per changed update on device, freed by the next GC) - update on
-    CHANGE, not per frame, and this stays negligible. buf must be >= w*fh; `w` = fw*chars."""
+    to `chars` cells. `old` = the text the buffer holds NOW (composed with the same `chars`): only
+    the cells whose character differs are rewritten, so a one-digit score change costs one cell's
+    rows, not every cell's (a 28-cell line = 336 row copies otherwise). None = repaint every cell
+    (a fresh buffer). No Bitmap, no palette, no growth: the buffer is repainted in place (+
+    sprite.touch()). The row copies DO make short-lived slice objects (~30 B per changed cell on
+    device, freed by the next GC) - update on CHANGE, not per frame. buf must be >= w*fh; `w` =
+    fw*chars."""
     global _COMPOSE_FONT, _COMPOSE_CACHE
     if font is not _COMPOSE_FONT:
         _COMPOSE_FONT = font
@@ -139,8 +142,11 @@ def compose_into(font, text, buf, w, chars):
     cache = _COMPOSE_CACHE
     fw, fh = font.get_bounding_box()[:2]
     n = len(text)
+    m = len(old) if old is not None else -1         # -1: no old text -> repaint every cell
     for i in range(chars):
         cp = ord(text[i]) if i < n else 32          # pad the tail with blanks
+        if m >= 0 and (ord(old[i]) if i < m else 32) == cp:
+            continue                                # this cell already shows that character
         flat = cache.get(cp)
         if flat is None:                            # cache MEMORYVIEWS: mv row-slices copy no data
             flat = cache[cp] = memoryview(_glyph_flat(font, cp, fw, fh))

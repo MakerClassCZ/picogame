@@ -142,11 +142,21 @@ if AVAILABLE:
         single-shot is [(0, note)], a layered voice is [(0, (noteA, noteB))], a sequence
         lists more events."""
         fat = _fat_table()
+        # Fat notes with the same decay share one Envelope, the same cutoff one Biquad: the
+        # Note keeps the filter's running state itself, so synthio only READS these. The
+        # crack notes below keep private filters on purpose - _hit_rot mutates one at runtime.
+        envs = {}
+        lps = {}
 
         def _fat_note(midi, decay, amplitude, cutoff, bend=None):
+            env = envs.get(decay)
+            if env is None:
+                env = envs[decay] = _env(0.001, decay, decay * 0.65)
+            lp = lps.get(cutoff)
+            if lp is None:
+                lp = lps[cutoff] = _lp(cutoff)
             return synthio.Note(frequency=synthio.midi_to_hz(midi) * 0.5, waveform=fat,
-                                envelope=_env(0.001, decay, decay * 0.65),
-                                amplitude=amplitude, bend=bend, filter=_lp(cutoff))
+                                envelope=env, amplitude=amplitude, bend=bend, filter=lp)
 
         # hit (headphone rework): a bright noise crack + a tiny smear-noise flick - the SAME noise
         # family as boom/explosion (signature cohesion), NO ring-mod body (that was metallic on

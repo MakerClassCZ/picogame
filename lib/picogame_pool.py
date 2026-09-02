@@ -17,6 +17,10 @@
 #       if not al[i]: continue
 #       e = enemies.items[i]
 #
+# Read `alive`, never write it: the pool also keeps a live-slot counter, so `count()` and the
+# "pool full" answer are O(1) - a slot bit flipped by hand would desync the two. Go through
+# `spawn()`/`free()`.
+#
 # `sprite.data` for per-entity state - the pool NEVER reads or writes it, so pre-allocating one
 # dict per slot at start-up and only mutating it keeps a pool allocation-free.
 #
@@ -39,6 +43,7 @@ class Pool:
         import picogame as pg
         self.items = [pg.Sprite(bitmap, 0, 0, visible=False) for _ in range(capacity)]
         self.alive = bytearray(capacity)   # the in-use bit; `visible` is purely "draw this"
+        self._live = 0                     # how many bits are set (read-only for callers)
         for s in self.items:
             if anchor is not None:
                 s.anchor = anchor
@@ -63,9 +68,12 @@ class Pool:
         so a rock recycled from an exploding one is not still flashing white. Only `.data`
         and position are the caller's to set."""
         al = self.alive
+        if self._live == len(al):          # full: skip the scan (the usual case for a spammed
+            return None                    #  bullet pool, and the slowest one before this)
         for i in range(len(al)):
             if not al[i]:
                 al[i] = 1
+                self._live += 1
                 s = self.items[i]
                 b = self._base[i]
                 if b[0] != s.flash or b[1] != s.tint or b[2] != s.dither or b[3] != s.shadow:
@@ -86,16 +94,20 @@ class Pool:
 
     def free(self, s):
         """Return s's slot to the pool and hide it. Raises ValueError if s isn't ours."""
-        self.alive[self.items.index(s)] = 0
+        i = self.items.index(s)
+        if self.alive[i]:                  # a second free() of the same sprite is a no-op
+            self.alive[i] = 0
+            self._live -= 1
         s.visible = False
 
     def free_all(self):
         al = self.alive
         for i in range(len(al)):
             al[i] = 0
+        self._live = 0
         for s in self.items:
             s.visible = False
 
     def count(self):
-        """Count of live slots (cheap). Iterate `pool.items` for the sprites."""
-        return sum(self.alive)
+        """Count of live slots (O(1)). Iterate `pool.items` for the sprites."""
+        return self._live

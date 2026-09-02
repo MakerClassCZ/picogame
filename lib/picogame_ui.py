@@ -126,6 +126,7 @@ class SceneLabel:
             self.sprite.scale = scale       # integer scale (crisp) - e.g. a big centred message
         scene.add(self.sprite, fixed=fixed)  # fixed=True = camera-independent HUD; False = world-space
         self._text = None
+        self._composed = None               # the text the fixed buffer holds (set("") hides, keeps it)
 
     @property
     def x(self):
@@ -155,6 +156,7 @@ class SceneLabel:
         self._w = w
         self._chars = n
         self._fixed = True
+        self._composed = None               # fresh (blank) buffer: the next compose paints every cell
 
     def set(self, text):
         text = _txt(text)
@@ -167,7 +169,9 @@ class SceneLabel:
         if self._fixed:
             if len(text) > self._chars:     # outgrew the reserve -> re-fix bigger (one realloc, then stable)
                 self._make_fixed(len(text))
-            picogame_font.compose_into(self.font, text, self._buf, self._w, self._chars)
+            picogame_font.compose_into(self.font, text, self._buf, self._w, self._chars,
+                                       self._composed)     # rewrites only the cells that differ
+            self._composed = text
             self.sprite.visible = True
             self.sprite.touch()             # pixels changed in place - no new Bitmap, no growth
         else:
