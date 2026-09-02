@@ -557,9 +557,9 @@ class Tilemap:
             self._orient[off] = o
         return None
 
-    def fill(self, v):
+    def fill(self, value):
         for i in range(len(self._grid)):
-            self._grid[i] = v
+            self._grid[i] = value
             if self._orient is not None:
                 self._orient[i] = 0
 
@@ -597,7 +597,7 @@ class Tilemap:
 
 
 class Particles:
-    def __init__(self, capacity, size=1, gravity=0.0, fade=False):
+    def __init__(self, capacity, *, size=1, gravity=0.0, fade=False):
         self._cap = capacity
         self._size = size
         self._gravity = gravity
@@ -763,8 +763,8 @@ class Canvas:
                         self._data[base + cx] = bg
             x += fw
 
-    def blit(self, bm, x, y, frame=0, flip_x=False, flip_y=False):
-        fw, fh = bm.width, bm.height
+    def blit(self, bitmap, x, y, frame=0, flip_x=False, flip_y=False):
+        fw, fh = bitmap.width, bitmap.height
         for ry in range(fh):
             cy = y + ry
             if not (0 <= cy < self._h):
@@ -776,23 +776,23 @@ class Canvas:
                 if not (0 <= cx < self._w):
                     continue
                 sx = (fw - 1 - rx) if flip_x else rx
-                v = _src_pixel(bm, frame * fw + sx, sy)
+                v = _src_pixel(bitmap, frame * fw + sx, sy)
                 if v is not None:
                     self._data[base + cx] = v
 
-    def mode7(self, tex, horizon, y_off, z, rx0, ry0, rsx, ry_sx, cam_x, cam_y):
+    def mode7(self, texture, horizon, y_off, z, rx0, ry0, rsx, rsy, cam_x, cam_y):
         # Perspective ground plane (Mode-7). sy is a row WITHIN this surface; the
         # absolute screen row is sy + y_off (0 for a full Canvas, strip y for a
         # StripDraw view). Integer math IDENTICAL to the firmware C: per-row 1/z
         # distance divide, per-pixel 16.16 texture accumulate with pow2 wrap.
-        # tex must have power-of-2 width/height. rx0/ry0 = left-ray dir (Q16),
-        # rsx/ry_sx = per-pixel ray delta (Q16), z = posZ (Q16), cam_x/y = Q16.
+        # texture must have power-of-2 width/height. rx0/ry0 = left-ray dir (Q16),
+        # rsx/rsy = per-pixel ray delta (Q16), z = posZ (Q16), cam_x/y = Q16.
         F = 16
-        tw, th = tex.width, tex.height
+        tw, th = texture.width, texture.height
         shx = F - (tw.bit_length() - 1)          # world(1.0)->one tile
         shy = F - (th.bit_length() - 1)
         mx, my = tw - 1, th - 1
-        stride = tex.stride
+        stride = texture.stride
         y0 = max(0, horizon - y_off + 1)
         for sy in range(y0, self._h):
             denom = (sy + y_off) - horizon
@@ -800,14 +800,14 @@ class Canvas:
                 continue
             rowdist = z // denom
             stepx = (rowdist * rsx) >> F
-            stepy = (rowdist * ry_sx) >> F
+            stepy = (rowdist * rsy) >> F
             fx = cam_x + ((rowdist * rx0) >> F)
             fy = cam_y + ((rowdist * ry0) >> F)
             base = sy * self._w
             for sx in range(self._w):
                 tx = (fx >> shx) & mx
                 ty = (fy >> shy) & my
-                v = _src_pixel_row(tex, ty * stride + tx, 0)
+                v = _src_pixel_row(texture, ty * stride + tx, 0)
                 if v is not None:
                     self._data[base + sx] = v
                 fx += stepx
@@ -1212,8 +1212,8 @@ def _draw_item(item, kind, vx, vy, clip):
 
 
 class Display:
-    def __init__(self, busdisplay, *, rgb444=False):
-        self.display = busdisplay
+    def __init__(self, display, *, rgb444=False):
+        self.display = display
         self.rgb444 = rgb444        # honoured on device (COLMOD + pack); the sim renders RGB565
 
     def render(self, sprites, buffer_a, buffer_b, x0, y0, x1, y1, *, background=0):
@@ -1346,7 +1346,7 @@ class Scene:
         return [x0, y0, x1, y1]
 
 
-def render(display, items, buffer, x0, y0, x1, y1, *, background=0):
+def render(display, layers, buffer, x0, y0, x1, y1, *, background=0):
     fb = _host.fb
     cx0 = max(0, x0)
     cy0 = max(0, y0)
@@ -1359,7 +1359,7 @@ def render(display, items, buffer, x0, y0, x1, y1, *, background=0):
     clip = (cx0, cy0, cx1, cy1)
     # Mirror the firmware: immediate render handles ALL layer kinds, not just Sprites - so a StripDraw
     # composited via view.text() is a 0-RAM immediate HUD / text screen (no retained buffer).
-    for it in items:
+    for it in layers:
         _draw_item(it, _kind(it), 0, 0, clip)
     # Firmware parity: the C composites the region into `buffer` strip by strip (strip height =
     # len(buffer)//2 // region width), so after the call the buffer holds the LAST strip - the WHOLE
@@ -1387,23 +1387,21 @@ def invert(display, on):
     _host._inverted = bool(on)
 
 
-def collide(*a):
+def collide(x1, y1, x2, y2, ax1, ay1, ax2=None, ay2=None):
     # Inclusive AABB: boxes collide when they TOUCH (bounce-on-contact game feel). Pass sprite
     # boxes as (x, y, x+w, y+h). Mirrors the firmware. (render is half-open -- different domain:
     # pixels vs hitboxes.)
-    if len(a) == 8:
-        x1, y1, x2, y2, ax1, ay1, ax2, ay2 = a
-        return x1 <= ax2 and ax1 <= x2 and y1 <= ay2 and ay1 <= y2
-    x1, y1, x2, y2, px, py = a
-    return x1 <= px <= x2 and y1 <= py <= y2
+    if ax2 is None or ay2 is None:            # 6-arg form: box vs the POINT (ax1, ay1)
+        return x1 <= ax1 <= x2 and y1 <= ay1 <= y2
+    return x1 <= ax2 and ax1 <= x2 and y1 <= ay2 and ay1 <= y2
 
 
-def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc, top, bot, col, dist,
+def raycast(map, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wcolors, top, bot, col, dist,
             runs=None):
     # Sim implementation of the native picogame.raycast wall-caster (the C DDA primitive on device;
     # like Canvas.mode7, the sim provides the same op in Python). Same 16.16 inputs: pos/leftRay/rayStep
     # are Q16; it reconstructs floats, runs the per-column DDA and fills top/bot (px), col (wire RGB565
-    # from wc[cell*2+side]) and dist (16.16 perpendicular distance). Used by picogame_ray.Raycaster.
+    # from wcolors[cell*2+side]) and dist (16.16 perpendicular distance). Used by picogame_ray.Raycaster.
     # Optional `runs` (uint16 buffer, len>=5*ncols as five ncols planes [x0|x1|top|bot|col]): also
     # emit the RLE-merged wall runs (x in pixels = column*stride) and return the run count.
     px = posx / 65536.0
@@ -1441,7 +1439,7 @@ def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc,
                 sidey += ddy
                 mapy += stepy
                 side = 1
-            cell = flat[mapy * mw + mapx] if (0 <= mapx < mw and 0 <= mapy < mh) else 1
+            cell = map[mapy * mw + mapx] if (0 <= mapx < mw and 0 <= mapy < mh) else 1
             if cell:
                 break
         perp = (sidex - ddx) if side == 0 else (sidey - ddy)
@@ -1456,8 +1454,8 @@ def raycast(flat, mw, mh, posx, posy, lrx, lry, srx, sry, sh, stride, ncols, wc,
             b = sh
         top[c] = t
         bot[c] = b
-        ct = cell if (cell * 2 + 1) < len(wc) else 1
-        col[c] = wc[ct * 2 + side]
+        ct = cell if (cell * 2 + 1) < len(wcolors) else 1
+        col[c] = wcolors[ct * 2 + side]
         dist[c] = int(perp * 65536)
     if runs is not None and ncols > 0:
         cap = len(runs) // 5                      # five uint16 planes (mirrors the C layout)
@@ -1522,10 +1520,10 @@ def _i32(v):
     return ((v + 0x80000000) & 0xFFFFFFFF) - 0x80000000
 
 
-def road_edges(rl, rr, hw, n, cx_q16, dist, cfg):
+def road_edges(rl, rr, hw, n, cx0, dist, cfg):
     """Sim of the native pg.road_edges (C: picogame_road_edges): one racing-road frame's
     curve accumulator + integer edge tables in a single call. rl/rr = int16 outputs for
-    Canvas.road, hw = int32 Q16 per-row half-widths, cx_q16 = Q16 screen centre (incl.
+    Canvas.road, hw = int32 Q16 per-row half-widths, cx0 = Q16 screen centre (incl.
     lateral offset), dist = integer world distance, cfg = int32[7] curve/hill config
     [f1_q20, f2_q20, amp1k_q16, amp2k_q16, world_step, curve_step, d_row_off].
     Fixed-point port of the C, same LUT sine - golden-tested (selftest_road.py)."""
@@ -1534,7 +1532,7 @@ def road_edges(rl, rr, hw, n, cx_q16, dist, cfg):
         return
     f1, f2, a1k, a2k = cfg[0], cfg[1], cfg[2], cfg[3]
     wstep, cstep, drow = cfg[4], cfg[5], cfg[6]
-    cx = cx_q16
+    cx = cx0
     ddx = 0
     ck = 0
     cnt = 0
@@ -1556,7 +1554,7 @@ def road_edges(rl, rr, hw, n, cx_q16, dist, cfg):
         rr[i] = ((v + 0x8000) & 0xFFFF) - 0x8000
 
 
-def project(cam, pts, n, osx, osy):
+def project(cam, pts, n, out_sx, out_sy):
     """Sim implementation of the native picogame.project batch projector (C on device: float on an
     FPU board, 16.16 fixed on RP2040). Projects `n` world points to screen; a point behind the near
     plane gets sentinel -32768. cam = ex,ey,ez, rx,rz, ux,uy,uz, fx,fy,fz, focal, cx0, cy0, near."""
@@ -1571,12 +1569,12 @@ def project(cam, pts, n, osx, osy):
         Z = pts[i * 3 + 2] - ez
         cz = X * fx + Y * fy + Z * fz
         if cz < near:
-            osx[i] = -32768
-            osy[i] = -32768
+            out_sx[i] = -32768
+            out_sy[i] = -32768
             continue
         k = focal / cz
-        osx[i] = int(cx0 + (X * rx + Z * rz) * k)
-        osy[i] = int(cy0 - (X * ux + Y * uy + Z * uz) * k)
+        out_sx[i] = int(cx0 + (X * rx + Z * rz) * k)
+        out_sy[i] = int(cy0 - (X * ux + Y * uy + Z * uz) * k)
 
 
 # ---- procedural value-noise (the engine's noise lives here in the sim; on device

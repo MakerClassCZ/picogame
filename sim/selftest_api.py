@@ -13,6 +13,15 @@ surface (transcribed below from shared-bindings/picogame ROM tables - update BOT
 frozen API ever changes). Extra public names in the sim FAIL (underscore them); missing names
 FAIL unless listed in DEVICE_ONLY with a reason.
 
+Names alone are not enough. A sim-only PARAMETER passes a name check in silence and still breaks
+the game on the device - an added `Canvas.mode7(up=)` and `raycast(wallx=)` did exactly that. So
+every callable in C_SIG is signature-checked as well: parameter names in order, with `*` marking
+the keyword-only split.
+
+Regenerating C_SIG (do it from the INTEGRATION branch, never a feature branch - a branch that has
+not shipped is precisely what must NOT be mirrored here): extract shared-bindings/picogame from
+that branch, then parse the `//| def ...` docstrings and print one line per callable.
+
     python3 sim/selftest_api.py
 """
 import os
@@ -46,6 +55,83 @@ C_CLASS = {
     "Triangles": {"count"},
     "Scene": {"add", "add_all", "display", "invalidate", "refresh", "remove", "set_view", "view"},
 }
+# Firmware SIGNATURES, transcribed from the same shared-bindings docstrings: parameter names in
+# order, `*` marking the keyword-only split, `self` omitted. Names matter because MicroPython
+# accepts them as keywords, and an extra parameter is how a sim-only feature leaks in unnoticed
+# (a name-only check passes an added `up=` or `wallx=` in silence). Only callables listed here are
+# signature-checked; add a line when the frozen API grows one.
+C_SIG = {
+    None: {
+        'collide': ['x1', 'y1', 'x2', 'y2', 'ax1', 'ay1', 'ax2', 'ay2'],
+        'fat_layout': ['path'],
+        'fat_max_free_run': ['path'],
+        'fbm1d': ['x', '*', 'octaves', 'seed', 'lacunarity', 'gain'],
+        'fbm2d': ['x', 'y', '*', 'octaves', 'seed', 'lacunarity', 'gain'],
+        'invert': ['display', 'on'],
+        'project': ['cam', 'pts', 'n', 'out_sx', 'out_sy'],
+        'raycast': ['map', 'mw', 'mh', 'posx', 'posy', 'lrx', 'lry', 'srx', 'sry', 'sh', 'stride', 'ncols', 'wcolors', 'top', 'bot', 'col', 'dist', 'runs'],
+        'render': ['display', 'layers', 'buffer', 'x0', 'y0', 'x1', 'y1', '*', 'background'],
+        'repack': ['path'],
+        'rgb565': ['r', 'g', 'b'],
+        'road_edges': ['rl', 'rr', 'hw', 'n', 'cx0', 'dist', 'cfg'],
+        'value1d': ['x', '*', 'seed'],
+        'value2d': ['x', 'y', '*', 'seed'],
+        'vblank': ['framebuffer'],
+        'xip_map': ['path'],
+    },
+    'Canvas': {
+        'blit': ['bitmap', 'x', 'y', 'frame', 'flip_x', 'flip_y'],
+        'circle': ['cx', 'cy', 'r', 'color'],
+        'clear': ['color'],
+        'ellipse': ['cx', 'cy', 'rx', 'ry', 'color'],
+        'fill_circle': ['cx', 'cy', 'r', 'color'],
+        'fill_ellipse': ['cx', 'cy', 'rx', 'ry', 'color'],
+        'fill_rect': ['x', 'y', 'w', 'h', 'color'],
+        'fill_round_rect': ['x', 'y', 'w', 'h', 'r', 'color'],
+        'fill_triangle': ['x0', 'y0', 'x1', 'y1', 'x2', 'y2', 'color'],
+        'fill_triangles': ['verts', 'colors', 'n', 'x_off', 'y_off'],
+        'frame3d': ['x', 'y', 'w', 'h', 'light', 'dark'],
+        'line': ['x0', 'y0', 'x1', 'y1', 'color'],
+        'mode7': ['texture', 'horizon', 'y_off', 'z', 'rx0', 'ry0', 'rsx', 'rsy', 'cam_x', 'cam_y'],
+        'move': ['x', 'y'],
+        'pixel': ['x', 'y', 'color'],
+        'rect': ['x', 'y', 'w', 'h', 'color'],
+        'ring': ['cx', 'cy', 'r', 'thickness', 'color'],
+        'road': ['ri0', 'tab', 'rl', 'rr', 'd05_q8', 'd07_q8', 'colors'],
+        'text': ['x', 'y', 's', 'fg', 'font', 'bg'],
+        'triangle': ['x0', 'y0', 'x1', 'y1', 'x2', 'y2', 'color'],
+        'vspans': ['x0s', 'x1s', 'tops', 'bots', 'colors', 'n', 'x_off', 'y_off'],
+    },
+    'Particles': {
+        'clear': [],
+        'emit': ['x', 'y', 'count', 'speed', 'life', 'color'],
+        'tick': [],
+    },
+    'Scene': {
+        'add': ['item', '*', 'fixed'],
+        'add_all': ['items'],
+        'invalidate': [],
+        'refresh': [],
+        'remove': ['item'],
+        'set_view': ['ox', 'oy'],
+    },
+    'Sprite': {
+        'move': ['x', 'y'],
+        'near': ['other', 'r'],
+        'overlaps': ['other', 'inset'],
+        'touch': [],
+    },
+    'StripDraw': {
+        'invalidate': ['x', 'y', 'w', 'h'],
+    },
+    'Tilemap': {
+        'fill': ['value'],
+        'get_tile': ['tx', 'ty'],
+        'move': ['x', 'y'],
+        'set_tile': ['tx', 'ty', 'value', '*', 'flip_x', 'flip_y', 'transpose'],
+    },
+}
+
 # In the firmware but deliberately NOT in the sim - each with the reason it stays that way.
 DEVICE_ONLY = {
     None: {           # module level
@@ -76,10 +162,50 @@ def check(label, sim_names, c_names, device_only=()):
     return len(extra) + len(missing)
 
 
+def sim_signature(obj):
+    """The sim's parameter names in order, `*` for the keyword-only split, self dropped."""
+    import inspect
+    try:
+        sig = inspect.signature(obj)
+    except (TypeError, ValueError):
+        return None
+    out, star = [], False
+    for prm in sig.parameters.values():
+        if prm.name == "self":
+            continue
+        if prm.kind is prm.VAR_POSITIONAL:
+            out.append("*" + prm.name)
+        elif prm.kind is prm.VAR_KEYWORD:
+            out.append("**" + prm.name)
+        else:
+            if prm.kind is prm.KEYWORD_ONLY and not star:
+                out.append("*")
+                star = True
+            out.append(prm.name)
+    return out
+
+
+def check_sigs(label, obj, expected):
+    """Compare each listed callable's signature against the firmware's."""
+    bad = 0
+    for name, want in sorted(expected.items()):
+        fn = getattr(obj, name, None)
+        if fn is None:
+            continue                       # a missing NAME is already reported by check()
+        got = sim_signature(fn)
+        if got is None or got == want:
+            continue
+        bad += 1
+        print("FAIL %-9s %s(%s) - firmware takes (%s)"
+              % (label, name, ", ".join(got), ", ".join(want)))
+    return bad
+
+
 def main():
     bad = 0
     mod = {n for n in dir(pg) if not n.startswith("_")}
     bad += check("module", mod, C_MODULE, DEVICE_ONLY[None])
+    bad += check_sigs("module", pg, C_SIG[None])
 
     bm = pg.Bitmap(bytearray(8), 2, 2)
     insts = {
@@ -95,6 +221,7 @@ def main():
     for name, obj in insts.items():
         sim = {n for n in dir(obj) if not n.startswith("_")}
         bad += check(name, sim, C_CLASS[name], DEVICE_ONLY.get(name, ()))
+        bad += check_sigs(name, type(obj), C_SIG.get(name, {}))
 
     print("selftest_api: %s" % ("OK - sim public surface == firmware surface" if bad == 0
                                 else "%d drift(s)" % bad))
