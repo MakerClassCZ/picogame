@@ -396,7 +396,8 @@ def main():
             # button down on the frame the timeline names.
             apply_keys(0)
             apply_keys(1)
-            _host.set_frame_hook(lambda fr: apply_keys(fr + 1))
+            prev_hook = _host._frame_hook          # chain, don't clobber: --tap may have set one
+            _host.set_frame_hook(lambda fr: (apply_keys(fr + 1), prev_hook and prev_hook(fr)))
 
     os.chdir(game_dir)                 # so open("cavern.bin") etc. work
     src = open(game_path).read()

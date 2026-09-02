@@ -992,8 +992,11 @@ place a hotspot for that fact somewhere skippable. That is the whole design.
 - **`Director.text()` hides the box on its last page** and the box is only reachable through
   the private `_ensure_box()`; for an epilogue card that must stay up, use your own
   `SceneBox` (a known gap, not a bug in your code).
-- **Glyph cache, not text buffers, is the RAM risk** - a font paints from a per-glyph cache,
-  so an unusual character set costs more than the same text length in ASCII.
+- **The glyph cache is the RAM risk - but only on the OTHER text path.** `SceneBox` composites
+  through the C `Canvas.text` and really does retain nothing. `SceneLabel` and `HudBar` render
+  through `picogame_font`, which keeps a permanent per-glyph cache (`_MASKS`): a hint bar or a
+  name label costs a few KB once, and an unusual character set costs more than the same text
+  length in ASCII. Dialogue in a SceneBox is free; the labels around it are not.
 - **Walls of text.** The screen is 320x240: about six lines of ~34 cells. Write to that box,
   or the player skips.
 - **A dialogue box drawn as a `Canvas`** - that is the 31 KB mistake; the box widgets are

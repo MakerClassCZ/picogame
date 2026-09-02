@@ -197,8 +197,11 @@ def main():                                     # the per-frame loop lives in a 
         if st.state == PLAY:                    # most-frequent state first
             # ... move, collide, score; on death: ...
             if st.lives <= 0: st.state = OVER
-        elif pressed(A):                        # TITLE and OVER: A = (re)start
-            new_game()                          # INSTANT restart, no reload
+        elif pressed(A):                        # TITLE and OVER: A = (re)start. The `elif` is
+            new_game()                          #  LOAD-BEARING: just_pressed is stable for the
+        #                                          whole frame, so with a second `if` the A that
+        #                                          landed the killing blow would also dismiss the
+        #                                          game-over screen before the player saw it.
         refresh()
         tick()
 

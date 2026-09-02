@@ -26,6 +26,7 @@ An image atlas of equal-size frames (any size). `data` is a buffer; `palette` (a
 ### `Sprite(bitmap, x=0, y=0, *, frame=0, visible=True, flip_x=False, flip_y=False)`
 A positioned, animatable instance of a Bitmap.
 - Position/anim props: `x`, `y` (int px) · `fx`, `fy` (float sub-pixel) · `frame` · `visible` · `flip_x`, `flip_y` · `bitmap` (swap) · `data` (your payload).
+  **Never mix the two on one axis.** They are ONE stored value: writing `x` REPLACES it, discarding the sub-pixel remainder, so the classic "accumulate in `fx`, then clamp with `x`" freezes slow motion dead (a 0.4 px/frame drift never survives the clamp). Clamp with `fx`/`fy` too. Same on device - the firmware stores 24.8 fixed point and its `x` setter overwrites it identically, so the sim is not lying to you here.
 - Transform props (nearest-neighbour, about the anchor):
   - `scale` — float draw scale; `1.0` = native (fast path), `2.0` = double size, fractional allowed (e.g. a pulse).
   - `angle` — rotation in degrees; `0` = none (fast path). Combines with `scale`.
@@ -154,7 +155,7 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 - `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
 - `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating · `.draw(display, buffer, force=False)`.
 - `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating — the same menu as an in-scene layer.
-- `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=..., interval=...)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — `delay`/`interval` tune the held-direction repeat (frames before the first repeat / between repeats) — D-pad cursor over a grid (inventory / board). `tick` moves on held D-pad (auto-repeat) and returns the selected cell on A, `ui.CANCEL` on B, else `None`; guard with `if pick is not None and pick is not ui.CANCEL:` (the tuple does not support `>= 0`).
+- `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=15, interval=4)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — `delay`/`interval` tune the held-direction repeat (frames before the first repeat / between repeats) — D-pad cursor over a grid (inventory / board). `tick` moves on held D-pad (auto-repeat) and returns the selected cell on A, `ui.CANCEL` on B, else `None`; guard with `if pick is not None and pick is not ui.CANCEL:` (the tuple does not support `>= 0`).
 
 ### `picogame_options` — settings menu
 - `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` — an in-scene options screen of toggles/choices.

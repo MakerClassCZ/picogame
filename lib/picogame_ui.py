@@ -296,6 +296,17 @@ class HudLabel:
         self.fg = fg
 
 
+def _warn_outside(msg):
+    """Say it once when a widget silently draws nothing. Clipping keeps a mistake from wrecking the
+    screen, but a mistake that is invisible is worse than one that shows - the sim's reserved-band
+    check prints for this same class of error, so this one does too. Device: a no-op."""
+    try:
+        import _host                            # simulator only; the board has no such module
+    except ImportError:
+        return
+    _host.note(msg)
+
+
 class HudBar:
     """A HUD strip drawn OUTSIDE the scene, in a region the scene reserves with
     Scene(..., top=/bottom=). The scene never paints there; `draw()` composites the bar and
@@ -341,6 +352,8 @@ class HudBar:
             # only happens when it really overflows (no churn on the normal path).
             fits = (self.x + self.w - lb.x) // lb.font.get_bounding_box()[0]
             if fits <= 0:
+                _warn_outside("HudBar label at x=%d is outside the bar (%d..%d) - it draws "
+                              "nothing. Move it, or widen the bar." % (lb.x, self.x, self.x + self.w))
                 continue
             view.text(lb.x - vx, lb.y - vy,
                       lb.text if len(lb.text) <= fits else lb.text[:fits], lb.fg, lb.font)
@@ -387,12 +400,16 @@ class TextBox:
         self._sd = pg.StripDraw(self._draw, x, y, w, h)
 
     def _draw(self, view, vx, vy, vw, vh):
-        view.fill_rect(self.x - vx, self.y - vy, self.w, self.h, self.bg)   # our rect, not the
-        if self.border is not None:                                         #  full view width
-            view.frame3d(0, self.y - vy, self.w, self.h, self.border, self.bg)
+        # Everything is placed from the widget's own origin, never from the view's: as a scene
+        # layer the view spans the whole render-region width (the rect gates rows only), so a
+        # hardcoded 0/6 pins the border and the text to the SCREEN edge instead of the panel.
+        x0, y0 = self.x - vx, self.y - vy
+        view.fill_rect(x0, y0, self.w, self.h, self.bg)
+        if self.border is not None:
+            view.frame3d(x0, y0, self.w, self.h, self.border, self.bg)
         for i, ln in enumerate(self._lines):
             if ln:
-                view.text(6, (self.y + 6 + i * LINE_H) - vy, ln, self.fg, self.font)
+                view.text(x0 + 6, y0 + 6 + i * LINE_H, ln, self.fg, self.font)
 
     def _render(self, display, buffer):
         self.pg.render(_target(display), [self._sd], buffer,

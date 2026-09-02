@@ -26,6 +26,7 @@ Obrazový atlas stejně velkých snímků libovolné velikosti. `data` je buffer
 ### `Sprite(bitmap, x=0, y=0, *, frame=0, visible=True, flip_x=False, flip_y=False)`
 Umístěná, animovatelná instance Bitmap.
 - Vlastnosti pozice a animace: `x`, `y` (celé pixely) · `fx`, `fy` (desetinná poloha) · `frame` · `visible` · `flip_x`, `flip_y` · `bitmap` (výměna) · `data` (uživatelská data).
+  **Nikdy nemíchej obojí na téže ose.** Je to JEDNA uložená hodnota: zápis do `x` ji PŘEPÍŠE a zahodí desetinný zbytek, takže klasické „sčítej v `fx`, ořízni přes `x`" pomalý pohyb úplně zastaví (drift 0,4 px/frame ořez nikdy nepřežije). Ořezávej taky přes `fx`/`fy`. Na zařízení to platí stejně — firmware drží 24.8 fixed point a jeho setter `x` ji přepíše identicky, takže simulátor tady nelže.
 - Transformace (metoda nejbližšího souseda, kolem kotevního bodu):
   - `scale` — float měřítko vykreslení; `1.0` = nativní (rychlá cesta), `2.0` = dvojnásobná velikost, zlomky povoleny (např. pulz).
   - `angle` — rotace ve stupních; `0` = žádná (rychlá cesta). Kombinuje se se `scale`.
@@ -154,7 +155,7 @@ Kterou textovou cestu použít (`Canvas.text` vs vyrenderovaná Bitmap vs StripD
 - `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
 - `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace · `.draw(display, buffer, force=False)`.
 - `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` → index ≥0 na A, `CANCEL` (= -2) na B, `None` během navigace — totéž menu jako vrstva ve scéně.
-- `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=..., interval=...)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — `delay`/`interval` ladí opakování při držení směru (framy do prvního opakování / mezi opakováními) — kurzor na D-padu po mřížce (inventář / herní deska). `tick` se hýbe drženým D-padem (auto-repeat) a vrací vybranou buňku na A, `ui.CANCEL` na B, jinak `None`; hlídej přes `if pick is not None and pick is not ui.CANCEL:` (tuple neumí `>= 0`).
+- `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=15, interval=4)` · `.index` · `.tick(btn) -> (tx, ty) | None | ui.CANCEL` — `delay`/`interval` ladí opakování při držení směru (framy do prvního opakování / mezi opakováními) — kurzor na D-padu po mřížce (inventář / herní deska). `tick` se hýbe drženým D-padem (auto-repeat) a vrací vybranou buňku na A, `ui.CANCEL` na B, jinak `None`; hlídej přes `if pick is not None and pick is not ui.CANCEL:` (tuple neumí `>= 0`).
 
 ### `picogame_options` — menu nastavení
 - `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.tick(btn)` — obrazovka nastavení (přepínače/volby) ve scéně.

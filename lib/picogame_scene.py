@@ -1,5 +1,5 @@
 # picogame declarative-scene loader: build a ready Scene from a baked SCENE dict
-# (see SCENE_FORMAT.md + tools/scene_build.py). Uses only the
+# (see docs/scene-format.md + tools/scene_build.py). Uses only the
 # public picogame API, so the SAME loader runs on the device and in the simulator.
 # Loading is one-time (not a hot path), so Python is the right place for it.
 #
