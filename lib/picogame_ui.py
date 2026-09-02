@@ -123,6 +123,26 @@ class SceneLabel:
         scene.add(self.sprite, fixed=fixed)  # fixed=True = camera-independent HUD; False = world-space
         self._text = None
 
+    @property
+    def x(self):
+        """Screen x of the label. Assigning MOVES it (the scene repaints both the old and the new
+        rect). Without this, `label.x = ...` was a plain attribute write that silently did nothing -
+        the class has no move(), so people reasonably reached for the attribute."""
+        return self.sprite.x
+
+    @x.setter
+    def x(self, v):
+        self.sprite.x = v
+
+    @property
+    def y(self):
+        """Screen y of the label; assigning moves it (see `x`)."""
+        return self.sprite.y
+
+    @y.setter
+    def y(self, v):
+        self.sprite.y = v
+
     def _make_fixed(self, n):
         # Build the Bitmap + palette over a fixed n-char buffer ONCE; set() then composes in place.
         bmp, w, _, self._buf, self._pal = picogame_font._render_into(
