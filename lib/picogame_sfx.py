@@ -240,7 +240,8 @@ if AVAILABLE:
             self._play("zap")
 
         def pew(self):
-            """Feedback: an ENEMY fired (lower, darker than zap - not your action)."""
+            """Feedback: an ENEMY fired - higher, brighter, thinner and shorter than zap (a
+            quick tick against zap's long fall), so the two never read as the same gun."""
             self._play("pew")
 
         def jump(self):

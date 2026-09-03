@@ -250,8 +250,11 @@ class Fade:
     def to(self, target, speed=2.0):
         self.target = max(0.0, min(float(self.LEVELS), float(target)))
         self.speed = speed
-        if self.target > 0 or self.level > 0:
+        self._pulse = None                   # a plain target cancels a pulse in flight (else the
+        if self.target > 0 or self.level > 0:   # stale peak would auto-reverse the new fade)
             self._activate(True)
+        elif self._active:                   # into() cancelling an out() that never moved: tick()'s
+            self._activate(False)            # idle return would otherwise keep the overlay for good
         return self
 
     def out(self, speed=2.0):                              # -> opaque
@@ -266,6 +269,7 @@ class Fade:
 
     def set(self, level):
         self.level = self.target = max(0.0, min(float(self.LEVELS), float(level)))
+        self._pulse = None
         self._activate(self.level > 0)
         self._mark()
         return self
@@ -284,8 +288,9 @@ class Fade:
         # out-of-range peak (pulse(20)) would never satisfy `level >= _pulse` and the flash
         # would stay opaque forever. speed is clamped positive for the same reason.
         peak = self.LEVELS if level is None else max(0.0, min(float(self.LEVELS), float(level)))
-        self._pulse = peak
-        return self.to(peak, max(0.01, speed))
+        self.to(peak, max(0.01, speed))
+        self._pulse = peak                   # after to(): a plain target clears the marker
+        return self
 
     @property
     def is_done(self):
@@ -388,9 +393,9 @@ class Camera:
     def __init__(self, scene, w, h, lerp=0.18, world_w=0, world_h=0,
                  top=0, bottom=0, left=0, right=0):
         self.scene = scene
-        self.w = w
-        self.h = h
-        self.lerp = lerp
+        self.w = w                                  # screen size: fixed at construction (the play
+        self.h = h                                  # rect below derives from it once) - a new
+        self.lerp = lerp                            # screen size means a new Camera
         # the visible play rect (screen coords) - the reserved bands never show the world
         self._vx = left
         self._vy = top

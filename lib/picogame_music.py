@@ -158,21 +158,36 @@ class Player:
         self._playing = False
 
     def _start_pattern(self, pi):
-        row = self._patterns[pi]
-        self._pattern = pi
-        if row[4] & 1:
-            self._loop_start = pi
-        self._t0 = self._now()               # every channel restarts at 0 from here
-        for ch in range(4):
-            sid = row[ch]
-            self._ch_sfx[ch] = sid if sid in self._sfx else 0xFF
-            if self._ch_sfx[ch] == 0xFF and self._ch_note[ch] is not None:
-                self._synth.release(self._ch_note[ch])   # channel absent in the new pattern
-                self._ch_note[ch] = None
-            self._ch_i[ch] = 0
-            self._ch_next[ch] = 0
-            self._ch_arp[ch] = None
-        self._playing = True
+        # A row with every channel off (0xFF, or an sfx the bank lacks) plays nothing, so no
+        # leader ever finishes it: resolve its flags NOW and fall through to the row they name.
+        # Bounded by the pattern count - a bank whose reachable rows are all silent stops.
+        for _ in range(len(self._patterns)):
+            row = self._patterns[pi]
+            self._pattern = pi
+            if row[4] & 1:
+                self._loop_start = pi
+            self._t0 = self._now()           # every channel restarts at 0 from here
+            active = False
+            for ch in range(4):
+                sid = row[ch]
+                if sid in self._sfx:
+                    active = True
+                else:
+                    sid = 0xFF
+                self._ch_sfx[ch] = sid
+                if sid == 0xFF and self._ch_note[ch] is not None:
+                    self._synth.release(self._ch_note[ch])   # channel absent in the new pattern
+                    self._ch_note[ch] = None
+                self._ch_i[ch] = 0
+                self._ch_next[ch] = 0
+                self._ch_arp[ch] = None
+            if active:
+                self._playing = True
+                return
+            pi = self._next_pattern()
+            if pi is None:                   # the silent row carried the stop flag
+                break
+        self.stop()
 
     # --- per-frame ------------------------------------------------------------------
     def tick(self):
@@ -220,18 +235,21 @@ class Player:
         return 0
 
     def _advance_pattern(self):
-        flags = self._patterns[self._pattern][4]
-        if flags & 4:
+        nxt = self._next_pattern()
+        if nxt is None:
             self.stop()
-            return
-        if flags & 2:
-            self._start_pattern(self._loop_start)
-            return
-        nxt = self._pattern + 1
-        if nxt >= len(self._patterns):
-            self._start_pattern(self._loop_start)
         else:
             self._start_pattern(nxt)
+
+    def _next_pattern(self):
+        """The row the current one's flags lead to; None on the stop flag."""
+        flags = self._patterns[self._pattern][4]
+        if flags & 4:
+            return None
+        if flags & 2:
+            return self._loop_start
+        nxt = self._pattern + 1
+        return self._loop_start if nxt >= len(self._patterns) else nxt
 
     # --- note handling ----------------------------------------------------------------
     def _note_on(self, ch, sid, i, dur, now):

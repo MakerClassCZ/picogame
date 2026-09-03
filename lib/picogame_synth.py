@@ -98,6 +98,14 @@ def __getattr__(name):
     return table
 
 
+# `from picogame_synth import *` walks this list (a lazy table is not in the namespace until
+# touched, so a star import would otherwise miss it); inside this module a table is reached
+# through __getattr__(name), never as a bare global, for the same reason.
+__all__ = ("AVAILABLE", "SINE", "SAW", "TRIANGLE", "SQUARE", "NOISE", "RAMP",
+           "sine", "saw", "triangle", "square", "noise",
+           "note", "pitch_bend", "Synth", "Drone", "load_midi")
+
+
 # RAMP: a 2-sample LFO shape; with once=True the LFO interpolates max->min LINEARLY over
 # 1/rate seconds - a clean ramp (pitch_bend(waveform=RAMP) = straight glide vs sine wobble).
 RAMP = array.array("h", [32767, -32768]) if AVAILABLE else None
@@ -304,7 +312,7 @@ class Drone:
     def __init__(self, synth, waveform=None, amplitude=0.35, attack=0.03, release=0.12):
         self.synth = synth
         self.note = synthio.Note(
-            frequency=110.0, waveform=waveform if waveform is not None else SAW,
+            frequency=110.0, waveform=waveform if waveform is not None else __getattr__("SAW"),
             envelope=synthio.Envelope(attack_time=attack, decay_time=0.0,
                                       sustain_level=1.0, release_time=release),
             amplitude=amplitude)

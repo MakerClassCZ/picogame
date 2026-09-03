@@ -118,9 +118,9 @@ def open_framebuffer(width, height, color_depth=None):
     Lets a game pick its OWN resolution in code (fresh interpreter per game via the launcher),
     so nothing has to be hand-set in settings.toml. Behaviour by board:
       - a DVI/framebuffer board that exposes the picodvi pins (Fruit Jam: board.CKP/CKN/D0P...):
-        if the current display already matches width x height it is reused (no realloc / flicker,
-        and this cleanly absorbs a resolution left behind by the previous game across a soft
-        reload); otherwise release_displays() + a fresh picodvi.Framebuffer at this size;
+        if the current display already matches width x height x color_depth it is reused (no
+        realloc / flicker, and this cleanly absorbs a mode left behind by the previous game
+        across a soft reload); otherwise release_displays() + a fresh picodvi.Framebuffer;
       - a fixed-panel board (ST7789 SPI PicoPad) or the sim: a NO-OP - returns the existing
         display unchanged (the panel is a fixed size; the request is simply ignored).
 
@@ -147,17 +147,25 @@ def open_framebuffer(width, height, color_depth=None):
         return cur
     if not hasattr(board, "CKP"):
         return cur
-    if cur is not None and getattr(cur, "width", None) == width \
-            and getattr(cur, "height", None) == height:
-        return cur                              # already the right size -> reuse
     if color_depth is None:
         color_depth = 16 if width * height <= 320 * 240 else 8
-    # The size we are leaving, so a failed switch can put it back. release_displays() frees the
-    # scanout buffer we are about to reuse the memory of, so it has to happen first - which is
-    # exactly why a failure here would otherwise leave the board with NO display until a power
-    # cycle (a soft reload does not re-run the firmware's auto-construct).
-    prev = (getattr(cur, "width", 0), getattr(cur, "height", 0)) if cur is not None else None
+    prev = None                                 # the mode we are leaving: (w, h, depth)
+    if cur is not None:
+        fb = getattr(cur, "framebuffer", None)  # the picodvi.Framebuffer under the display
+        cur_depth = getattr(fb, "color_depth", None)
+        prev = (getattr(cur, "width", 0), getattr(cur, "height", 0),
+                cur_depth if cur_depth is not None else color_depth)
+        if prev == (width, height, color_depth):
+            return cur                          # already this mode -> reuse
+    # release_displays() frees the scanout buffer we are about to reuse the memory of, so it
+    # has to happen first - which is exactly why a failure here would otherwise leave the board
+    # with NO display until a power cycle (a soft reload does not re-run the firmware's
+    # auto-construct): `prev` is what a failed switch puts back.
     displayio.release_displays()
+    _RESOLVED.clear()                           # CircuitPython rebuilds the display (and its
+    _TARGET.clear()                             # picodvi bus) in the SAME static slot, so the
+                                                # id()-keyed memos would hand back a wrapper of
+                                                # the released buffer at the old depth
 
     def _build(w, h, depth):
         fb = picodvi.Framebuffer(
@@ -172,10 +180,10 @@ def open_framebuffer(width, height, color_depth=None):
     try:
         disp = _build(width, height, color_depth)
     except MemoryError:
-        if prev is None or prev == (width, height):
+        if prev is None or prev[:2] == (width, height):
             raise MemoryError(_scanout_hint(width, height, color_depth))
         try:                                    # put the previous mode back, then report
-            disp = _build(prev[0], prev[1], 16 if prev[0] * prev[1] <= 320 * 240 else 8)
+            disp = _build(prev[0], prev[1], prev[2])
         except MemoryError:
             raise MemoryError(
                 "no memory for %dx%d, and %dx%d could not be restored - power-cycle the board"
