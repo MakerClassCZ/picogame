@@ -211,8 +211,12 @@ t_title = ui.SceneLabel(scene, pg, terminalio.FONT, W // 2 - 40, H // 2 - 34, IN
 t_a     = ui.SceneLabel(scene, pg, terminalio.FONT, W // 2 - 66, H // 2 - 8, INK, SKY)
 t_b     = ui.SceneLabel(scene, pg, terminalio.FONT, W // 2 - 66, H // 2 + 8, INK, SKY)
 t_over  = ui.SceneLabel(scene, pg, terminalio.FONT, W // 2 - 70, H // 2 - 20, INK, SKY)
-# t_over only gets its ~31-char banner at game-over (an aged heap); reserve its buffer NOW on the fresh
-# startup heap so that later growth can't MemoryError. t_title/t_a/t_b get their long strings at startup.
+# Reserve every label's buffer NOW, on the fresh startup heap: the synthio kit above leaves the RP2040
+# heap fragmented, so even the title strings (set a few lines below) could not find a contiguous
+# ~1.7 KB run and MemoryError'd. t_over gets its ~31-char banner only at game-over (an aged heap).
+t_title.reserve(11)                  # "BANG! BANG!"
+t_a.reserve(20)                      # "A  -  1 PLAYER vs AI"
+t_b.reserve(24)                      # "B = 2 PLAYERS   X = DEMO"
 t_over.reserve(31)
 
 # --- mutable game state ---
