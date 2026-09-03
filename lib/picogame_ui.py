@@ -313,6 +313,14 @@ class SceneBox:
             self._lines[i] = self._fit(text)
             self._sd.invalidate()
 
+    def lift(self):
+        """Move the box to the TOP of the scene's draw order - a layer added after it (a fade,
+        an overlay) would otherwise paint over the dialogue. One full repaint on the next refresh;
+        the box keeps its layer, so nothing is rebuilt."""
+        self.scene.remove(self._sd)
+        self.scene.add(self._sd, fixed=True)
+        return self
+
     def destroy(self):
         """TRANSIENT box teardown: erase + detach from the scene so GC reclaims it (hide() keeps
         the scene slot forever). Dead after - make a new one to show a box again."""

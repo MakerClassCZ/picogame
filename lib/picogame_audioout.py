@@ -22,7 +22,7 @@ except ImportError:                             # not deployed -> silent no-op, 
     def _debug(*args):
         pass
 
-_KEEP = []   # holds DAC objects alive for the process: a native I2SOut can't carry the reference
+_KEEP = []   # holds THE DAC object alive for the process: a native I2SOut can't carry the reference
 
 
 def _db(name, default):
@@ -87,7 +87,11 @@ def _try_i2s(sample_rate):
         dac.configure_clocks(sample_rate=sample_rate)   # mclk_freq=None -> PLL from BCLK, no MCLK pin
         time.sleep(0.35)                                 # let the DAC output ramp before playback
         out = audiobusio.I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
-        _KEEP.append(dac)        # keep the DAC + its I2C device alive (I2SOut can't hold the ref)
+        # keep the DAC + its I2C device alive (I2SOut can't hold the ref). ONE entry: the board has
+        # one DAC, so a re-init (Audio/Synth deinit() + a new one in the same VM) replaces the
+        # previous driver object instead of accumulating one per init.
+        _KEEP.clear()
+        _KEEP.append(dac)
         return out
     except Exception as e:
         _debug("audioout: I2S DAC init failed ->", repr(e))

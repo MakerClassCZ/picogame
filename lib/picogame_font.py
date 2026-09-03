@@ -226,7 +226,13 @@ class Label:
             x0, y0, x1, y1 = old           # hidden: just clear the last footprint
         self.pg.render(display, self._slist if has_new else _EMPTY, buffer,
                        x0, y0, x1, y1, background=self.bg)
-        self._drawn = (self.x, self.y, self.x + self.w, self.y + self.h) if has_new else None
+        if not has_new:
+            self._drawn = None
+        elif (old is None or old[0] != self.x or old[1] != self.y
+              or old[2] != self.x + self.w or old[3] != self.y + self.h):
+            # a new footprint only when it CHANGED - a HUD drawn every frame with unchanged
+            # text would otherwise leave a 32 B tuple behind per label per frame
+            self._drawn = (self.x, self.y, self.x + self.w, self.y + self.h)
 
 
 # ---- ExtraFont: the builtin font + extra glyphs from small BDF subsets ------

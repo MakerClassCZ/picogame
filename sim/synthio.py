@@ -131,3 +131,6 @@ class Synthesizer:
 
     def release(self, note):
         pass                                   # one-shot clips self-terminate
+
+    def deinit(self):
+        pass                                   # parity with CP's Synthesizer.deinit()

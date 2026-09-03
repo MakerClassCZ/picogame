@@ -493,6 +493,27 @@ class Buttons:
         #                                      (the held-frame stamps need no reset: state is 0, and
         #                                      the flush re-stamps whatever is still held)
 
+    def deinit(self):
+        """Release the board pins this Buttons owns (the keypad scanner / KeyMatrix, or the
+        digitalio inputs of the polling backend) so a NEW Buttons() can claim them in the same
+        VM - a launcher or a test harness that rebuilds its input without a reload would otherwise
+        hit "pin in use". Attached sources (USB pad, I2C pad, keyboard, anything passed as
+        `sources=` or attach()ed) are NOT deinit'd, only dropped: they belong to their owner
+        (find_pads(), the caller). Idempotent; afterwards the instance polls as an empty player
+        (state 0), so a stray poll() is harmless."""
+        keys = self._keys
+        self._keys = None                    # first: poll() must never touch a released scanner
+        if keys is not None:
+            keys.deinit()
+        else:
+            for io in getattr(self, "_ios", ()):
+                io.deinit()
+        self._ios = []
+        self._pairs = []
+        self._active_low = True              # the polling branch with no pairs reads raw 0
+        self._sources = []
+        self.state = self.prev = self._down = self._up = self._hw = 0
+
 
 class Timer:
     """A decaying frame timer for INPUT LENIENCY - the small forgiveness windows that make

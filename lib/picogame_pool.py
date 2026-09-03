@@ -39,6 +39,9 @@
 #       if done: bullets.free(s)
 
 
+_NF = 9   # baseline fields per slot: flash, tint, dither, shadow, scale, angle, frame, flip_x, flip_y
+
+
 class Pool:
     def __init__(self, scene, bitmap, capacity, anchor=None, fixed=False):
         import picogame as pg
@@ -50,16 +53,32 @@ class Pool:
                 s.anchor = anchor
             s.data = None
             scene.add(s, fixed=fixed)
-        self._base = None                  # what a fresh slot looks like: snapped at the first
-                                           #  spawn(), so set-up after construction counts
+        # What a fresh slot looks like - 9 fields per slot in ONE flat list (no per-slot tuple:
+        # 64 slots = 2.3 KB instead of 3.3 KB), allocated HERE on the clean start-up heap and only
+        # written to at the first spawn(), so post-construction set-up counts and the first shot
+        # of the game allocates nothing.
+        self._base = [0] * (_NF * capacity)
+        self._snapped = False
 
     def baseline(self):
         """Snapshot what a FRESH slot looks like (scale/angle/frame/flips/a permanent tint).
         `spawn()` restores this snapshot, so a slot never comes back wearing the last user's
         hit-flash. Taken by itself at the first spawn(); call this to re-snapshot after
         reconfiguring the sprites later in the game."""
-        self._base = [(s.flash, s.tint, s.dither, s.shadow, s.scale, s.angle,
-                       s.frame, s.flip_x, s.flip_y) for s in self.items]
+        b = self._base
+        k = 0
+        for s in self.items:               # in-place: the list was sized at construction
+            b[k] = s.flash
+            b[k + 1] = s.tint
+            b[k + 2] = s.dither
+            b[k + 3] = s.shadow
+            b[k + 4] = s.scale
+            b[k + 5] = s.angle
+            b[k + 6] = s.frame
+            b[k + 7] = s.flip_x
+            b[k + 8] = s.flip_y
+            k += _NF
+        self._snapped = True
         return self
 
     def spawn(self):
@@ -72,26 +91,28 @@ class Pool:
         al = self.alive
         if self._live == len(al):          # full: skip the scan (the usual case for a spammed
             return None                    #  bullet pool, and the slowest one before this)
-        if self._base is None:
+        if not self._snapped:
             self.baseline()
+        b = self._base
         for i in range(len(al)):
             if not al[i]:
                 al[i] = 1
                 self._live += 1
                 s = self.items[i]
-                b = self._base[i]
-                if b[0] != s.flash or b[1] != s.tint or b[2] != s.dither or b[3] != s.shadow:
-                    s.flash, s.tint, s.dither, s.shadow = b[0], b[1], b[2], b[3]
-                if b[4] != s.scale:
-                    s.scale = b[4]
-                if b[5] != s.angle:
-                    s.angle = b[5]
-                if b[6] != s.frame:
-                    s.frame = b[6]
-                if b[7] != s.flip_x:
-                    s.flip_x = b[7]
-                if b[8] != s.flip_y:
-                    s.flip_y = b[8]
+                k = i * _NF
+                if (b[k] != s.flash or b[k + 1] != s.tint or b[k + 2] != s.dither
+                        or b[k + 3] != s.shadow):
+                    s.flash, s.tint, s.dither, s.shadow = b[k], b[k + 1], b[k + 2], b[k + 3]
+                if b[k + 4] != s.scale:
+                    s.scale = b[k + 4]
+                if b[k + 5] != s.angle:
+                    s.angle = b[k + 5]
+                if b[k + 6] != s.frame:
+                    s.frame = b[k + 6]
+                if b[k + 7] != s.flip_x:
+                    s.flip_x = b[k + 7]
+                if b[k + 8] != s.flip_y:
+                    s.flip_y = b[k + 8]
                 s.visible = True
                 return s
         return None

@@ -34,3 +34,6 @@ class Mixer:
     def __init__(self, voice_count=2, sample_rate=22050, channel_count=1,
                  bits_per_sample=16, buffer_size=1024, **kw):
         self.voice = [_Voice() for _ in range(voice_count)]
+
+    def deinit(self):
+        pass                                   # CP frees the mix buffers; the sim holds none

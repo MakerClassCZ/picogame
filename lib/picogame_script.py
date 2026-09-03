@@ -43,11 +43,11 @@
 # save file.
 #
 # RAM: the dialog box is a picogame_ui.SceneBox (buffer-less StripDraw, zero
-# retained RAM) and the fade is picogame_fx.Fade; both are built lazily on
-# first use, so a game that never calls text() pays nothing. The fade is always
-# added to the scene BEFORE the box (layer order is draw order), so dialogue
-# stays readable over a dim or a fade; a game that only ever fades pays for
-# no box.
+# retained RAM) and the fade is picogame_fx.Fade; each is built lazily on its
+# own first use, so a game that only talks never imports picogame_fx or builds
+# a Fade, and a game that only fades pays for no box. The fade always ends up
+# BELOW the box (layer order is draw order): a fade built after the box lifts
+# the box back on top once, so dialogue stays readable over a dim or a fade.
 #
 # The runner underneath is picogame_seq.Seq - the Director adds what a STORY
 # needs on top of a bare sequence: the dialog primitives, a script registry the
@@ -180,9 +180,6 @@ class Director:
 
     def _ensure_box(self):
         if self._box is None:
-            # Insertion order is z-order, so build the fade FIRST: a box created before the fade
-            # would sit under it forever, and dialogue shown over a dim()/fade would be invisible.
-            self._ensure_fade()
             import picogame_ui
             if self._boxgeom is None:
                 w, h = self._screen()
@@ -199,4 +196,8 @@ class Director:
             import picogame_fx
             w, h = self._screen()
             self._fade = picogame_fx.Fade(self.scene, w, h)
+            if self._box is not None:
+                # Insertion order is z-order: a box built earlier now sits UNDER the fade and a
+                # dim() would stipple the dialogue away - lift it back on top (one-off repaint).
+                self._box.lift()
         return self._fade

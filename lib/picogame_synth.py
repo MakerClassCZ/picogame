@@ -296,6 +296,23 @@ class Synth:
         self._muted = on
         self._apply_levels()
 
+    def deinit(self):
+        """Release the audio output (the PWM pin / I2S bus), the mixer and the synthesizer, so a
+        later Synth() or picogame_audio.Audio() in the SAME program can claim the output (the
+        launcher's reload between titles frees it anyway). Idempotent; afterwards the instance is
+        the silent no-op (`available` False, every call swallowed) - the twin of Audio.deinit()."""
+        if not self.available:
+            return
+        self.available = False
+        self._seq = None
+        self._last_sfx = None
+        for dev in (self.audio, self.mixer, self.synth):   # output first: it is what plays the rest
+            try:
+                dev.deinit()
+            except Exception:
+                pass
+        self.audio = self.mixer = self.synth = _Null()
+
 
 class Drone:
     """A continuously-HELD note for engine / siren / drone sounds. Press it once, then call
@@ -412,6 +429,9 @@ if not AVAILABLE:
 
         def mute(self, on):
             self._muted = on
+
+        def deinit(self):
+            pass                             # nothing claimed
 
     class Drone:
         """No-op Drone: keeps the .note / .playing surface so per-frame set() calls work."""
