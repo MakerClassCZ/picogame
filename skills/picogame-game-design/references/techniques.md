@@ -41,7 +41,7 @@ anything that needs replay determinism (§9).
 **Cutscenes / "do X over N frames" via coroutine sequences.** Instead of hand-rolled frame counters
 and `if`-ladders, express timed sequences as generators that `yield` once per frame. *picogame:*
 `picogame_seq` — `wait(n)`, `move_over(obj, x, y, n)`, and a `Seq` that advances ONE generator a step
-per `tick()`; compose many with `yield from`. Drive a `picogame_fx.Tween` from a sequence with `while not tw.tick(): yield` (the fx classes are NOT iterable - `yield from tween` raises TypeError).
+per `tick()`; compose many with `yield from`. Drive a `picogame_fx.Tween` from a sequence with `while not tw.is_done: tw.tick(); yield` (`tick()` returns the VALUE, `is_done` is the flag) (the fx classes are NOT iterable - `yield from tween` raises TypeError).
 Its `Script` turns the same generators into a scripted INPUT source (`btn.attach(script)`), so a
 title screen can PLAY ITSELF as an attract demo - and the same script drives a verification run.
 
@@ -149,7 +149,7 @@ everything (no dirty-rect win), so keep screen shakes short — 2–6 frames (§
 - **Raycast walls (first-person corridors, native C).** One DDA ray per screen column finds the
   nearest wall; each column draws as a vertical slice shaded by WHICH AXIS was hit (two-tone; the wall colour has no distance term - the per-column distance is returned for your own fog/falloff). *picogame:*
   `picogame_ray.Raycaster` driving the native `pg.raycast` (integer 16.16) into a `StripDraw` =
-  **0 RAM**, **~22-30 fps** full-screen. Add `.attach(sd)` on an `always_dirty=False` StripDraw for
+  **0 RAM**, **~36 fps uncapped** at stride 1 full-screen (RP2040). Add `.attach(sd)` on an `always_dirty=False` StripDraw for
   temporal repaint (standing still costs ~nothing — ideal for a grid-step dungeon crawler), and
   `.project_sprite()` for depth-tested billboard enemies. Combine with `mode7` if you want a
   textured floor under the walls.

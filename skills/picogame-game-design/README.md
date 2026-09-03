@@ -32,7 +32,8 @@ ln -s "$PWD/repos/picogame/skills/picogame-game-design" ~/.claude/skills/picogam
 Then run Claude from the project root (so `sim/run.py`, `examples/`, and the `lib/` helpers
 resolve). Ask for a game and the skill drives the design + build.
 
-## Proven
+## Validated
 
-The skill's own method was used to design and build **`examples/picogame_starfall.py`**
-(a catch-the-gems / dodge-the-bombs arcade game) end to end, validated in the simulator.
+The skill's own method was used end to end once — **`demos/picogame_starfall.py`**, an
+endless-arcade game, validated in the simulator (see `references/case-studies.md`; its choices are
+that game's, not the method's).

@@ -4,18 +4,20 @@ Fill this in BEFORE writing code. If you can't fill a line, the design isn't rea
 or deciding until you can. (Workflow steps 1–4 in SKILL.md.)
 
 ## 1. Concept (design backward from a feeling)
-- **Who plays & for how long:** <e.g. anyone, 1–3 minute runs on the handheld>
-- **Fantasy (what the player gets to BE — pick before the verb):** <e.g. star-catcher / short-order cook>
-- **Target feeling (MDA aesthetic):** <e.g. tense reflexes / cozy puzzle / speed thrill>
-- **Core verb (one):** <bounce / dodge / jump / steer / match / shoot>
-- **Core loop in ONE sentence:** <e.g. "dodge falling rocks, grab gems, survive as it speeds up">
-- **Identity — "It's $GENRE, and also ___":** <the ONE twist that earns the clone>
+- **Who plays & for how long:** <who, session length, and how a run ENDS — win / lose / both>
+- **Fantasy (what the player gets to BE — pick before the verb):** <one line — what will they brag about?>
+- **Target feeling (MDA aesthetic):** <name the emotion, not the genre>
+- **Core verb (one):** <one word — the thing the player does most>
+- **Core loop in ONE sentence:** <verb + what it acts on + what ends it>
+- **Concepts considered (3) and why this one (§1.0b):** <three one-liners; the pick + the reason it beat the other two>
+- **Identity:** <what makes this game NOT the nearest existing one — "It's $GENRE, and also ___" or "It's ___, played through $VERB">
 - **Anti-pillars (what this game is NOT):** <1–2 lines guarding scope & tone>
 
 ## 2. Genre & grammar
-- **Genre:** <Breakout / shmup / platformer / racer / puzzle / endless …>
+- **Genre:** <one of genre-patterns.md's sections … or your own § written here (see its header)>
 - **The one thing to get right (from genre-patterns.md):** <e.g. the jump arc / the paddle angle trick>
-- **MVP features (build these):** <3–5 bullets>
+- **Variation axis turned on purpose:** <which knob, and what it is set to>
+- **MVP features (build these):** <3–5 bullets — the least that proves YOUR loop, not the classic's spec>
 - **Deferred (nice-to-have, cut for now):** <bullets>
 
 ## 3. Fits the device?
@@ -23,6 +25,7 @@ or deciding until you can. (Workflow steps 1–4 in SKILL.md.)
 - **Controls (D-pad + A/B/X/Y):** <map every action>
 - **Moving-object budget:** <static bg + how many moving sprites>
 - **Readability:** <how the player / threats / goal stay findable on 320×240>
+- **Look & identity (§1.8):** <palette (which hue is the player, which is danger), silhouettes, HUD placement, how the title/outcome screens present — decided, not inherited from the starter>
 
 ## 4. Engine building blocks
 - **Surfaces:** <Sprite(s) / Tilemap / StripDraw / Canvas — and why>
@@ -31,14 +34,15 @@ or deciding until you can. (Workflow steps 1–4 in SKILL.md.)
 - **Assets:** <generated shapes first | real art via png2picogame>
 
 ## 5. Juice & difficulty plan
-- **Feedback on the key action:** <flash / particle / beep>
-- **Difficulty ramp (give it a shape):** <sawtooth — build → release at a milestone → re-engage ~10–15% harder; first spike ~60–90s; how it stays fair>
+- **Feedback (§1.3 is a menu):** <which touches, on which events, and why each fits the feeling — a touch you can't justify is noise>
+- **Sound design:** <event → Kit voice map; what stays silent>
+- **Difficulty ramp (give it a shape):** <name the shape · when the first spike lands and why (from YOUR loop length) · how it stays fair>
 - **Restart:** <instant on death?>
 
 ## 6. Done when (quality bar)
-- [ ] Core loop is fun in the first 10s (verified in sim)
+- [ ] Fun-proxy (5 items) reported · the 5 human questions handed over — fun itself is NOT claimed
 - [ ] Reads at a glance · clean on few buttons
-- [ ] One juice touch · fair difficulty
+- [ ] The chosen feedback touches land · fair difficulty
 - [ ] Fits RAM target · uses rgb565()/touch() correctly
 - [ ] Small, commented, starts from picogame_game.setup()
 

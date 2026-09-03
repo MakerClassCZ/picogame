@@ -17,17 +17,19 @@ import picogame_shapes as shapes
 import picogame_ui as ui
 
 # --- colors (ALWAYS via rgb565 — never raw 0xRRGGBB) ---
+# LOOK: placeholder palette — the brief's "Look & identity" line replaces all three (SKILL.md §1.8).
 BG = pg.rgb565(18, 22, 36)
 INK = pg.rgb565(255, 255, 255)
 HERO = pg.rgb565(240, 90, 90)
 
 W, H = picogame_game.screen()
-BAR = 16                                          # reserve a top HUD strip
+BAR = 16                                          # reserve a top HUD strip (one option: a bottom
+                                                  #  bar, a StripDraw HUD or no HUD are others)
 
 # --- tuning knobs: named constants at the top of the file. On CircuitPython the game's
 # source sits on the drive, so players adjust difficulty/effects HERE — no settings menu needed.
 SPEED = 3
-START_LIVES = 3
+START_LIVES = 3                                   # example resource — replace with yours or delete
 
 # setup() takes over the display and returns a retained Scene + its two strip buffers.
 scene, bufA, bufB = picogame_game.setup(background=BG, top=BAR)
@@ -37,12 +39,13 @@ clock = picogame_clock.Clock(30)                  # frame cap (fps)
 # --- HUD (camera-independent text bar) ---
 hud = ui.HudBar(pg, picogame_game.display(), bufA, 0, 0, W, BAR, pg.rgb565(12, 14, 26))
 score_label = hud.label(terminalio.FONT, 4, 3, INK, "SCORE 0")
-msg_label = hud.label(terminalio.FONT, W - 100, 3, INK, "A = START")
+msg_label = hud.label(terminalio.FONT, W - 100, 3, INK, "A = START")   # TITLE: a HUD string is the
+                                                  #  cheapest title presentation, not the only one (§1.6)
 hud.draw()
 
 # --- game objects: engine objects stay MODULE GLOBALS (built once, never rebuilt) -----
 # Prototype with generated shapes; swap in real art later (a Bitmap from png2picogame).
-hero = pg.Sprite(shapes.circle(16, HERO), W // 2, H // 2)
+hero = pg.Sprite(shapes.circle(16, HERO), W // 2, H // 2)   # LOOK: placeholder silhouette
 hero.anchor = (0.5, 0.5)
 scene.add(hero)
 
@@ -54,7 +57,8 @@ class State:
     """ALL mutable game state in ONE object — never rebound, reset in place."""
 
     def __init__(self):
-        self.state = TITLE                        # boot into the title, not straight into play
+        self.state = TITLE                        # example: boot into a title (straight into play
+                                                  #  with a hint is also fine — §1.6)
         self.score = 0
         self.lives = START_LIVES
         self.reset()

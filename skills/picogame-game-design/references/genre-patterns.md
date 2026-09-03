@@ -10,6 +10,17 @@ RAM. Read the actual parameters (resolution, buttons) from the board
 here are taken from the classics of each genre, not guessed — treat them as a
 starting point to tune.
 
+**How to read a genre section.** CORE LOOP, WHAT MAKES IT FUN, PITFALLS and the universal rules are
+the genre's *grammar* — that part transfers. CONTROLS and TUNING blocks are **the classic's answers**
+(one famous game's full button map and its measured numbers): the essential input is marked, the
+rest are extras you take only if your concept needs them. MVP = the least that proves *your* loop,
+not a spec of the classic — the maze section's MVP paragraph shows the form. Each section ends with
+**VARIATION AXES**: the knobs the genre leaves open (what the verb acts on, what ends a run, who
+moves, where the pressure comes from) — turn at least one on purpose or you get the exemplar back.
+**If your genre is not here** (cozy/sim, stealth, sports, rhythm, artillery …), write its section
+yourself in the brief — loop, the one thing to get right, essential input, MVP — using the closest
+section as a *form*, not as content.
+
 ## Cross-genre rules (read first)
 
 - **Convert frame counts from the classics to your FPS.** The classic tuning
@@ -44,7 +55,8 @@ starting point to tune.
 - **Single-screen / flip-screen layouts** are the RAM-cheapest choice and read
   best on a small display. Add scrolling/streaming only once the core loop is
   proven.
-- **Autofire on hold**, never tap-to-fire — mashing cramps thumbs on a handheld.
+- **Autofire on hold** unless each shot is a deliberate resource (then make firing cheap to
+  press) — mashing cramps thumbs on a handheld.
 - **Identity is carried by silhouette + color, never color alone.** Each entity
   type should be recognizable by shape AND color (Pac-Man's ghost colors work
   because the ghosts also share one readable shape and differ by behavior;
@@ -116,6 +128,7 @@ clear." Always min-vy clamp.
 win/lose · serve-on-press with min-vy clamp.
 **NICE TO HAVE:** power-ups (Enlarge, Multiball, Slow first) · speed tiers +
 multi-hit silver · Catch/sticky + Laser.
+**VARIATION AXES:** what deflects (paddle, a wall you paint, a shield you rotate) · what breaks (bricks, ice, a boss) · what the ball is (one, many, a thing you must NOT hit) · what ends a run (miss, timer, the last brick).
 
 ---
 
@@ -147,9 +160,10 @@ time. Layered with pattern-reading, the panic bomb, and a scoring meta
 - **A** — Shoot (autofire on hold; never mash).
 - **B** — Bomb/screen-clear (slight activation delay so panic-dodging doesn't
   waste it).
-- **X** — **Focus/slow-move** (Touhou staple): halve speed for precise dodging
-  *and reveal the hitbox dot* while held. The single most genre-correct control.
+- **X** — **Focus/slow-move**: halve speed for precise dodging *and reveal the hitbox dot*
+  while held — the standard bullet-hell control, if you build a bullet-hell.
 - **Y** — alt fire / polarity / shot-mode. Pause → Start, not a face button.
+Essential: move + one fire button. The rest are Galaga/Touhou's extras.
 
 **LEVEL / DIFFICULTY** — **Formations + dives (Galaga):** enemies hold a swaying
 grid, peel off on scripted dives; as the stage thins, survivors dive
@@ -181,11 +195,15 @@ the majority of bullets faster than reaction. Don't require mashing. Don't ship
 opaque punishing rank. Don't overdraw on tiny RAM — cap simultaneous bullets, tie
 pacing to live-entity count. Don't let bombs fire accidentally.
 
-**MVP:** 8-dir move + autofire + tiny central hitbox · bomb (limited, clears
-bullets + i-frames) · a few emitters (aimed/spread/spiral) with formation+dive
-waves.
+**MVP:** move + shoot + a small player hitbox · one thing that shoots back or dives at you ·
+one-hit (or few-hit) death and a wave respawn. Bombs, multiple emitter types, formations and
+dive waves are Galaga/Touhou's answers — add the one your concept's pressure source needs.
 **NICE TO HAVE:** focus button that reveals hitbox · graze scoring · a scoring
 twist (polarity/chains or a gentle visible rank).
+
+**VARIATION AXES:** what shoots (ship / wizard / gardener with a hose) · what the shot is (bullet,
+beam, boomerang, thrown thing) · what comes at you (waves, one big thing, terrain) · what ends the
+run (lives, a timer, a base you defend) · scroll direction or none.
 
 **Field note:** drive enemy patterns with **`(dx, dy, steps)` movement-script tables** — a tiny array per pattern, stepped one entry per frame; cheap, data-authored, easy to
 tune. For an Invaders fleet move the whole grid in **lockstep** (slide → on edge: drop + reverse),
@@ -244,15 +262,17 @@ multiplier lost on death.
   wrapped collision.
 
 **PITFALLS** — Don't bind rotation to the movement vector (kills decoupled facing).
-Don't only wrap the ship. Don't make hyperspace safe. Don't omit the saucer (no
-anti-camp = no skill ceiling). Don't let fragments multiply unbounded. Don't
+Don't only wrap the ship. Don't make hyperspace safe. Keep an anti-camping pressure (the saucer
+is Asteroids' version; a shrinking safe zone or a timer are others). Don't let fragments multiply unbounded. Don't
 require tap-firing. Don't skip a max-speed clamp.
 
-**MVP:** rotate+thrust+inertia with max-speed clamp and full screen-wrap · 3-tier
-splitting with 20/50/100 scoring + one-hit death · wave respawn + entity cap.
+**MVP:** rotate+thrust+inertia with a max-speed clamp and screen-wrap · splitting hazards
+(2–3 tiers) with score weighted toward the smaller/harder target · one-hit death · wave respawn +
+entity cap. (20/50/100 is Asteroids' 1979 table — a reference, not the rule.)
 **NICE TO HAVE:** lurking saucer with score-scaled aim · hyperspace with
 self-destruct risk · twin-stick-on-buttons mode / smartbomb + lose-on-death
 multiplier.
+**VARIATION AXES:** what you pilot (ship, boat on a current, a bee) · what splits (rocks, cells, ice) · whether space wraps or is walled · what the pressure source is (fragment count, a saucer, fuel).
 
 ---
 
@@ -274,7 +294,8 @@ Thorson, Celeste: these exist "to favor player success").
 - D-pad L/R move; Down crouch/fast-fall/drop-through; Up optional look-up.
 - **A = Jump** (the one button that must feel perfect).
 - **B = Run / dash / fire** (hold-to-run like SMB; or Celeste dash; or Mega Man
-  shoot). X/Y secondary (special weapon, grab/climb). Never overload jump.
+  shoot). X/Y secondary (special weapon, grab/climb). Overload jump only on purpose
+  (wall-jump, jump-attack) — it is the most-read input. Essential: move + jump.
 
 **LEVEL / DIFFICULTY**
 - **Four-beat grammar (kishōtenketsu):** Introduce a mechanic safely → Develop via
@@ -361,10 +382,12 @@ mid-body-embedding hacks and an extra standing-still probe. Keep the previous fr
 the whole special case disappears:
 
 ```python
+# sketch — tile_at / solid / one_way / tile_top are yours (picogame_tiles.TileFlags
+# gives the flag bits: at_px(tilemap, px, py, tiles.B_SOLID))
 prev_feet = st.y + PH                       # BEFORE the move
 st.y += st.vy
 feet = st.y + PH
-t = tiles.at(st.x + PW // 2, feet)          # tile under the mover's centre
+t = tile_at(st.x + PW // 2, feet)           # your lookup: the tile under the mover's centre
 if solid(t) or (one_way(t) and st.vy > 0 and prev_feet <= tile_top(feet) <= feet):
     st.y = tile_top(feet) - PH              # snap flush
     st.vy = 0; st.on_ground = True
@@ -374,6 +397,7 @@ if solid(t) or (one_way(t) and st.vy > 0 and prev_feet <= tile_top(feet) <= feet
 time + jump buffer · AABB tile collision with checkpoints.
 **NICE TO HAVE:** apex hang (half-gravity near peak) · corner correction ·
 dash/run-button + momentum/slopes.
+**VARIATION AXES:** what the jump is (fixed arc, variable, a dash, a hook) · what moves besides you (nothing, patrols, the level itself) · what ends a run (pit, timer, one hit) · whether the level is authored, scrolling-endless or generated · what you collect, if anything.
 
 ---
 
@@ -396,6 +420,7 @@ view makes paths/obstacles/interactive objects easy to read; the reward is
 - **X / Y = Inventory / Map** or a second item slot.
 - Interaction is *contextual on facing*: walk into an NPC/sign, press A to
   talk/examine — no separate examine button.
+Essential: move + one contextual action. The B-item slot and X/Y menus are Zelda's extras.
 
 **CAMERA / WORLD**
 - **Room-based / screen-flip (Zelda 1):** world is a grid of screen-sized rooms;
@@ -416,7 +441,7 @@ for a few frames. Contact damage: enemies hurt on touch + brief i-frames/knockba
 after a hit. Optional projectiles. Avoid turn-based battle systems unless that
 *is* your game.
 
-**KEEPING SCOPE TINY** — No leveling/XP; use **item-gated progression** (got the
+**KEEPING SCOPE TINY** — Prefer **item-gated progression** to XP/levelling (cheaper, no balance pass) (got the
 key/boots/bombs → new area opens). Tiny inventory, one equipped B-item.
 **Quests as flags, not systems** ("talked to elder = true"). Reuse tiles/enemies
 with palette swaps.
@@ -426,10 +451,15 @@ with palette swaps.
 landmark). Don't gate progress on undiscoverable info (cryptic Zelda-1 "burn this
 bush"). Don't put long walls of text on a 320×240 screen — short paged boxes.
 
-**MVP:** tile map + tile-flag collision with flip-screen camera · facing-based
-melee + contact damage with i-frames · NPC dialog + item-gated doors (flags).
+**MVP:** a tile map with tile-flag collision and a camera (flip-screen or follow) · one
+contextual action on facing (talk / examine / hit) · one way to be hurt with i-frames · one gate
+that opens when a flag flips. Melee combat, NPC dialog boxes and key-doors are Zelda 1's answers —
+a talking-only, a stealth or a farming top-down needs different ones.
 **NICE TO HAVE:** follow camera with bounds · small inventory/B-item slot ·
 pushable blocks / simple environmental puzzles.
+**VARIATION AXES:** what the action does (hit / talk / plant / push / steal) · what the world
+gate is (item, flag, time, reputation) · what hurts (enemies, hunger, a clock, nothing) · how the
+map is revealed (all at once, fog, by talking) · who else moves (patrols, schedules, nobody).
 
 ---
 
@@ -449,7 +479,8 @@ applied at the next legal turn). **Cornering trick:** allow pre/post-turning
 within ~4 px of an intersection center for a slight speed edge. A/B/X/Y reserved
 for Start/Pause — pure Pac-Man is a one-stick game.
 
-**THE FOUR GHOST AI ARCHETYPES** (exact rules, Dossier)
+**THE FOUR GHOST AI ARCHETYPES** (exact rules, Dossier — *reference for a faithful clone; the
+MVP below is the grammar to take*)
 - **Blinky (red) "Shadow":** target = Pac-Man's **current tile** (direct chase).
   Becomes **Cruise Elroy** when remaining dots drop below a threshold — speeds up
   and keeps chasing even during scatter.
@@ -507,6 +538,9 @@ chase board - dead ends are death sentences. Knock out ~10-20% of the walls so e
 a loop, then check that no cell is more than a couple of steps from a loop.
 **NICE TO HAVE:** full scatter/chase timer + mode reversal · tunnel warp with ghost
 slowdown · fruit bonuses + Cruise Elroy speed-up.
+**VARIATION AXES:** what you collect (dots, keys, survivors, nothing — just escape) · what hunts
+(chasers, a rising flood, darkness, the maze itself changing) · the release valve (power pellet,
+hiding spot, slow field, one-shot scare) · whether the maze is fixed, generated or edited by play.
 
 **Field note:** the #1 grid-feel win is **turn buffering** — store the last-pressed
 direction and apply it the instant the corner opens, so a slightly-early turn isn't dropped. Ghosts
@@ -568,10 +602,15 @@ nudges. Don't omit DAS/ARR or set DAS too long. Don't start fast, bury the rule,
 or ship flat clears with no "juice." Match-3: detect & reshuffle no-valid-move
 deadlocks.
 
-**MVP:** solid 7-bag + clear rule + top-out · gravity curve tied to level/line
-counter · lock delay (~0.5 s) + DAS/ARR.
+**MVP:** a board · a placement rule · a clear rule · one pressure source (gravity, a timer,
+a move budget) · a fail state. 7-bag, lock delay and DAS/ARR are Tetris's answers to *its*
+placement rule; a match-3 or a Sokoban-like takes the same four parts with different content
+(match-3: the one thing to get right is cascade readability).
 **NICE TO HAVE:** hold + ghost piece · combos / back-to-back / drop points ·
 next-piece preview + clear/cascade juice.
+**VARIATION AXES:** what is placed (blocks, tiles, words, creatures) · what clears (a line, a
+match, a path, a colour) · the pressure source (gravity, timer, moves, a growing threat) · whether
+the board is fixed, scrolling or grows.
 
 **Field note:** author levels as **ASCII-art strings** (Sokoban/Train) — one char per
 cell, trivially editable and tiny; parse into the board on load. For continue-without-NVM, gate
@@ -634,6 +673,7 @@ over-render `drawDistance` on weak HW. Sort sprites back-to-front by segment z.
 **MVP:** forward-scrolling road, per-segment scaling + curve-by-accumulation ·
 accel/brake/steer with centrifugal push · checkpoint timer.
 **NICE TO HAVE:** hills + parallax layers · traffic/rivals · branching forks.
+**VARIATION AXES:** what the road is (asphalt, river, a beam of light) · what is driven (car, sled, a rolling ball) · the pressure source (rivals, a timer, fuel, traffic) · what winning means (position, time, distance, survival).
 
 *picogame — pick the ground renderer:* **segment/scanline road** into a `StripDraw` (the classic
 OutRun look: curves, hills, rumble strips, ~0 RAM — see `examples/picogame_stripdraw_example.py`), or the native
@@ -718,6 +758,7 @@ the exact lead distance that scores in shared-screen.
 screen-distance score) · one waypoint-following CPU rival.
 **NICE TO HAVE:** drift + 2-tier mini-turbo · position-based items / one catch-up
 item · hazards + between-race upgrades.
+**VARIATION AXES:** track shape (loop, point-to-point, open arena) · who competes (rivals, a ghost, nobody — time only) · what steering is (rotate, lane-switch, tank) · what the hazard is (walls, oil, other cars).
 
 ---
 
@@ -748,7 +789,8 @@ horizontal spacing. Doodle Jump: stacked platforms, **max vertical gap ≤ ~0.7�
 fairness rule:** every generated gap must be clearable given current physics +
 speed — randomize *within* safe bounds, never *across* the solvability boundary.
 
-**TUNING (real, reverse-engineered)**
+**TUNING (real, reverse-engineered — the classics' values; they reproduce the classic, so
+if your verb is not flap/grow, derive yours from the fairness rule below)**
 - **Flappy Bird (60fps):** gravity ~0.25–0.6 px/frame² (gentle clones 0.25–0.3);
   flap sets velocity to ~−5 to −9 px/frame (−6.5 popular); vertical gap ~100–150
   px; horizontal pipe spacing ~200 px; scroll ~3–4 px/frame. The *flap* is
@@ -763,9 +805,8 @@ speed — randomize *within* safe bounds, never *across* the solvability boundar
 - **Restart target:** death → playable in **under 1 second**, single button, no
   menus/animations.
 
-**SCORE PSYCHOLOGY** — High-score chasing = variable reward / partial reinforcement
-(slot-machine effect). Near-miss = feels like almost-winning. "My fault" death
-converts frustration into retention.
+**SCORE PSYCHOLOGY** — near-misses and visible progress make "one more go" feel earned;
+a "my fault" death converts frustration into retention.
 
 **PITFALLS** — Slow/menu-gated restart (kills the loop). Generating impossible gaps
 (one unfair death → players blame the game). Spawning food/obstacles inside the
@@ -782,6 +823,7 @@ fair generation with a guaranteed-solvable spacing clamp · sub-1-second one-but
 restart + persistent high score.
 **NICE TO HAVE:** difficulty-via-speed ramp · obstacle/platform variety · near-miss
 feedback (sound/flash on tight clears) + screen-edge wrap.
+**VARIATION AXES:** what the one verb acts on (height, lane, speed, direction) · what the pressure is (speed, density, a chasing wall) · the space (side-scroll, vertical, fixed screen, a spiral) · what ends a run (one hit, a fill meter, a timer).
 
 ---
 
@@ -825,13 +867,14 @@ targeting priority give the watch-phase a decision).
 enemy `Pool` on waypoints · currency + ~5 telegraphed waves + lose-on-leak.
 **NICE TO HAVE:** tower types/upgrades · range preview on select · a boss wave ·
 `picogame_save` meta-progress.
+**VARIATION AXES:** what is placed (towers, walls, plants, traps) · what walks the path (creeps, water, customers) · what the resource is (gold, time, tiles) · whether the path is fixed, built by the player or by the enemy.
 
 ---
 
 ## 11. Card / Menu-Driven Roguelite (Deckbuilder)
 *Device-proven: picatro (public); Star Cluster (dev tree only).*
 
-*Exemplars: picatro (this project), Slay the Spire, Balatro-likes.*
+*Exemplars: picatro (in the tree), Slay the Spire, Balatro-likes.*
 
 *Also the section for **management / tycoon-lite** (a stall, a workshop, a dispatcher): same
 grammar - spend a limited resource from a menu, watch the consequences resolve, advance a turn -
@@ -874,7 +917,7 @@ turn-based — don't force arcade pacing or the arcade quality bar). Per-frame
 rebuilding of card lists (reuse). Opaque effects (show the number/outcome).
 
 **JUICE for a menu game** (screenshake is structurally out - fixed layers ignore `set_view`,
-so SS1.3's list needs a substitute): card LIFT on select (redraw the slot a few px higher),
+so §1.3's list needs a substitute): card LIFT on select (redraw the slot a few px higher),
 a 1-3 frame colour flash on the hit panel (swap the fill colour + `invalidate()`), number
 pop-ups via a short-lived SceneLabel, `Particles` sparks on damage (draw order is strictly scene-ADD order - add the particle layer after the StripDraw you want it above),
 hit-stop on big resolves, and `sfx.Kit` on every card played. All of it is invalidate-driven -
@@ -884,6 +927,9 @@ none of it needs a moving camera.
 resolve step with a visible score/damage · a short run of ~3 encounters · seeded
 `Rand`. **NICE TO HAVE:** card synergies/relics · `picogame_save` meta-unlocks ·
 a daily seed.
+**VARIATION AXES:** what a "card" is (spell, worker, dish, dice face) · what a run is (encounters,
+days, a season) · what the resource tension is (mana, time, hand size, hunger) · whether the deck
+grows, shrinks or is fixed · who or what you resolve against (a monster, a market, the weather).
 
 ---
 
@@ -908,7 +954,7 @@ jump-scare this hardware can produce.
   Combat can be turn-based/menu-driven (combine with §11). Easiest to read and
   to tune.
 - **Continuous shooter raycaster** (Wolfenstein) — smooth walking and turning,
-  ~22–30 fps while moving; billboard enemies via `project_sprite`, action in the
+  ~36 fps uncapped at stride 1 (RP2040) while moving; billboard enemies via `project_sprite`, action in the
   same frame.
 
 **CONTROLS** — UP/DOWN step forward/back · LEFT/RIGHT turn · **A** action/sidestep
@@ -946,10 +992,12 @@ occasionally flickers (a "tooth") — an inherent DDA artifact; `stride=1` softe
 it at a performance cost.
 
 **MVP:** map from strings + `Raycaster` + `.attach()` · movement with a `solid()`
-test · 1 billboard enemy type that walks toward the player · exit tile = win.
+test · one enemy behaviour (a billboard that walks toward you is the simplest) · one win
+condition (an exit tile is the simplest).
 **NICE TO HAVE:** keys/doors — `Raycaster.set_cell(x, y, 0)` opens one cell at runtime (grid, `solid()` and `.map` stay consistent; works with a standing camera) · minimap (a small
 `Tilemap` in a corner) · collectibles (billboard + WORLD-space distance: `(ix-px)**2 + (iy-py)**2 < r*r` in map units - `Sprite.near()` is a SCREEN-space test and first person has no player sprite) · `mode7` textured
 floor under the walls · step-based menu combat (§11).
+**VARIATION AXES:** what the walls are (dungeon, hedge maze, a ship's corridors) · what is inside (enemies, an exit, a thing to find, a voice) · whether the map is known, revealed or shifting · what the threat is (contact, darkness, a timer, nothing — exploration only).
 
 ---
 
@@ -1017,3 +1065,4 @@ place a hotspot for that fact somewhere skippable. That is the whole design.
 **NICE TO HAVE:** a portrait sprite beside the box · a typewriter reveal (advance the
 slice per frame in the script) · inventory as event flags · `picogame_cutscene` for a
 scripted opening.
+**VARIATION AXES:** who talks (people, a machine, the place itself) · what a choice changes (a flag, a relationship, the map) · what the space is (rooms to walk, a menu, a single screen) · what ends it (a resolution, a timer, a mystery solved).

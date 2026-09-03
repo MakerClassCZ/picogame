@@ -11,7 +11,7 @@
 A one-page cheat sheet of the engine's everyday API: the native `picogame` C module
 and the pure-Python `picogame_*` helper libraries in `lib/`. Signatures show parameter
 names and defaults; `*` marks keyword-only arguments. Colours are wire-order RGB565 ints
-(build them with `rgb565`). For longer explanations see the [engine guide](PICOGAME.md).
+(build them with `rgb565`). For longer explanations see the engine guide (`docs/engine.md` in the public repo).
 
 **See also:** [Fit it in RAM](/memory/) · [Drawing paths](/concepts/drawing-paths/) · [Performance](/performance/) · [Run on hardware](/hardware/) · [Coming from another engine](/concepts/coming-from/).
 
@@ -25,7 +25,8 @@ names and defaults; `*` marks keyword-only arguments. Colours are wire-order RGB
 - `RGB444_SUPPORTED` — `bool`; whether this board's panel can drive 12-bit RGB444 (lets one game opt into `Display(rgb444=True)` only where it works).
 - `rgb565(r, g, b) -> int` — wire-order colour from 8-bit channels.
 - `collide(x1, y1, x2, y2, ax1, ay1, ax2, ay2) -> bool` — AABB overlap (8 args = box vs box) or point-in-box (6 args: `collide(x1, y1, x2, y2, px, py)`). Inclusive AABB, so boxes collide when they touch (pass sprite boxes as `(x, y, x+w, y+h)`; fires on contact).
-- `FPU` — `bool`; `True` when the 3D math primitives (`pg.project`) run the hardware-float path (RP2350, ESP32-S3), `False` on the RP2040 (16.16 fixed-point). Pack `project` buffers to match: `array("f")` when `pg.FPU` else `array("i")` with values `int(v * 65536)`.
+- `raycast(...)` — the native DDA caster behind `picogame_ray` (17–19 positional ints/arrays; integer 16.16 on device). Use `picogame_ray.Raycaster`, not the raw call.
+- `FPU` — `int` (`1`/`0`); `1` when the 3D math primitives (`pg.project`) run the hardware-float path (RP2350, ESP32-S3), `0` on the RP2040 (16.16 fixed-point). Pack `project` buffers to match: `array("f")` when `pg.FPU` else `array("i")` with values `int(v * 65536)`.
 
 ### `Bitmap(data, width, height, *, format=RGB565, palette=None, frames=1, stride=0, transparent=None)`
 An image atlas of equal-size frames (any size). `data` is a buffer; `palette` (array of wire colours) is required for `PAL8`. `transparent` = the index/colour skipped when blitting.
@@ -51,6 +52,10 @@ A positioned, animatable instance of a Bitmap.
 
 ### `Display(display, *, rgb444=False)`
 Fast DMA backend wrapping a board's `busdisplay` (FourWire SPI). Pass to `Scene`. `rgb444=True` drives the panel in 12-bit RGB444 (~25% less SPI traffic) on panels that support it; gate with `RGB444_SUPPORTED`.
+- `.render(sprites, buffer_a, buffer_b, background=0)` — immediate-mode full-frame draw of a list of layers (no Scene, no dirty rects); `picogame_ui.HudBar` uses it.
+
+### `Framebuffer(buffer, width, height, *, native_rgb565=False, rgb332=False)`
+Target for boards that scan out a RAM framebuffer (Fruit Jam DVI): pass it to `Scene` instead of `Display`, and pass no strip buffers. Gate with `FRAMEBUFFER_SUPPORTED`; `picogame_game.setup()` picks the right target for the board — prefer it over constructing either directly. `FAST_DISPLAY_SUPPORTED` (async DMA overlap available) and `STRIP_H` (the build's strip height in rows) are the other build constants.
 
 ### `Scene(display, buffer_a=None, buffer_b=None, *, background=0, top=0, bottom=0, left=0, right=0)`
 The strip buffers are REQUIRED for an SPI target and unused (pass nothing) on a Framebuffer board.
@@ -149,6 +154,9 @@ Most games never call these (`picogame_game.setup` + `Scene` use them internally
 - Default map = the ubiquitous DragonRise `081f:e401` SNES-style pad; remap per pad from `settings.toml` (`PICOGAME_USBPAD`, no reflash — see [Custom board](/custom-board/)). Discover a new pad's report bytes with `tools/usbpad_probe.py`.
 - `.mapped` — mask of buttons this pad can report; `VERSION`, `MAPPED` module constants.
 
+### `picogame_i2cpad` — I2C gamepad source (Qwiic/STEMMA pads)
+- `I2CPad(...)` (a button **source** for `Buttons(sources=[…])`) · `attach(spec, i2c=None)` (build one from a preset name or a recipe) · `find_pads(preset='qwstpad', i2c=None)` (enumerate the pads on the bus — local multiplayer). Presets + recipes live in the module; see `/helpers/input/`.
+
 ### `picogame_usbkbd` — USB HID keyboard source (USB-host boards)
 - `UsbKbd(dev=None, iface=None, ep=None, keys=None, timeout_ms=None)` — `keys` by keyword (three device args precede it); the keyboard twin of `UsbPad`, a `Buttons(usb=…)` source. Found by its boot-keyboard HID interface (no fixed VID/PID); works with wired and 2.4 GHz-dongle keyboards (not Bluetooth).
 - Default map: arrows + WASD → D-pad, Z/Space → A, X → B, C → X, V → Y, Q → L1, E → R1, Enter → START, Esc → SELECT. Remap from `settings.toml` (`PICOGAME_USBKBD`, `NAME=HID-keycode`). For a combo dongle whose real keystrokes flow on a sibling interface, point it at the right channel with `PICOGAME_USBKBD_EP = "iface:endpoint"` (find it with `tools/usbkbd_probe.py`).
@@ -168,13 +176,13 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 - `SceneLabel(scene, pg, font, x, y, fg, bg=None, scale=1, fixed=True)` · `.set(text)` · `.reserve(chars)` · `.show(on)` · `.color(fg)` · `.destroy()` — camera-independent text label (a fixed Scene layer). `reserve(chars)` switches it to a FIXED-width buffer built once: `set()` then composes glyphs in place — no growth and no Bitmap/palette rebuilds (the compose leaves ~0.5-1.5 KB of short-lived slice churn per CHANGED update (device-measured: RP2040 ~0.6 KB, ESP32-S3 ~1.4 KB), freed at the next GC — update on change, not per frame), and the label cannot grow-realloc on a fragmented heap. Assign `.x` / `.y` to MOVE it (the scene repaints the old and the new rect); there is no width metric, so CENTRE a changing value by reserving the widest string and padding with spaces (the font cell is fixed-width, 6 px/char - `ui.text_width` / `ui.centred`). `scale=2` doubles the glyphs (a title banner needs no second sprite); `show(False)` HIDES it - use that to clear a reserved label, because `set(" ")` repaints its FULL reserved width in `bg` (a visible strip - two shipped games had this bug). `color()` recolours without a rebuild. destroy() detaches a ONE-SHOT label so GC reclaims it (recurring HUD: build once + set/hide instead).
 - `SceneBox(scene, pg, font, x, y, w, h, fg, bg, nlines=3, key=None, border=None)` · `.show(lines)` · `.hide()` · `.set_line(i, text)` · `.destroy()` — a multi-line in-scene panel (dialog/log); destroy() = one-shot teardown (needs firmware with `Scene.remove`).
 - `HudBar(pg, display, buffer, x, y, w, h, bg)` · `.add(sprite)` (an icon Sprite) · `.label(font, x, y, fg, text=" ")` → a text handle; update it with `handle.set(text)` · `.draw()` (repaint the bar, call on HUD changes) — a fixed bar that composites sprites + labels (0 retained RAM).
-- `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6)` · `.draw(display, buffer, lines, force=False)`.
+- `TextBox(pg, font, x, y, w, h, fg, bg, maxlines=6, border=None)` · `.draw(display, buffer, lines, force=False)`.
 - `Menu(pg, font, x, y, items, fg, bg, *, title=None, rows=None, width=None, paged=True)` · `.tick(btn)` → index ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating · `.draw(display, buffer, force=False)`.
 - `SceneMenu(scene, pg, font, x, y, items, fg, bg, title=None, rows=None, width=None, border=None, paged=True)` (**`width` is PIXELS, not characters** - the default sizes itself from the longest item; a 24 there is a 24-pixel panel, i.e. four characters) · `.show(sel=0)` · `.hide()` · `.set_items(items, sel=0)` · `.tick(btn)` → **index** ≥0 on A, `CANCEL` (= -2) on B, `None` while navigating. `set_items` swaps the entries and resizes the panel WITHOUT a new scene layer (the build-once rule), so a menu whose contents change does not have to be rebuilt — the same menu as an in-scene layer.
 - `GridCursor(cols, rows, tx=0, ty=0, wrap=False, delay=15, interval=4)` · `.index` · `.tick(btn)` — D-pad cursor over a grid (inventory / board). `delay`/`interval` tune the held-direction repeat (frames before the first repeat / between repeats): raise them for a board you aim on, lower them for a long inventory list.
 
 ### `picogame_options` — settings menu
-- `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None, visible=True)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.set_rows(rows, sel=0)` · `.tick(btn)` — an in-scene options screen of toggles/choices. **Its `tick()` returns the row's KEY where `SceneMenu`/`Menu` return an INDEX** - the one difference that bites when you move a menu from one to the other. Use `OptionsMenu` for named settings with values, `SceneMenu` for a plain list of actions.
+- `OptionsMenu(scene, pg, font, x, y, w, rows, fg, bg, title=None, border=None, visible=None)` · `.value(key)` · `.show(sel=0)` · `.hide()` · `.set_rows(rows, sel=0)` · `.tick(btn)` — an in-scene options screen of toggles/choices. **Its `tick()` returns the row's KEY where `SceneMenu`/`Menu` return an INDEX** - the one difference that bites when you move a menu from one to the other. Use `OptionsMenu` for named settings with values, `SceneMenu` for a plain list of actions.
 
 ### `picogame_shapes` — single-colour bitmap generators
 - `rect(w, h, color)` · `circle(d, color)` · `ring(d, color, thickness=2)`
@@ -194,7 +202,7 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - `Sprite.overlaps(other, inset=0) -> bool` — inclusive AABB box overlap (touch = hit). `other` = another `Sprite`, a point `(x, y)`, or a rect `(x1, y1, x2, y2)` (trigger zone / screen-cull). `inset` shrinks THIS sprite's box by N px per side for a fair hitbox.
 - `Sprite.near(other, r) -> bool` — circular: this sprite's centre within `r` px of `other`'s centre (squared distance, no sqrt). CENTRE, not `x`/`y`: with the default top-left anchor a 16x16 sprite's test point sits 8 px down-right of its position, which surprises when you aim at a static prop. `other` = a `Sprite` or a point `(x, y)`.
 - Raw primitive (any coords, no sprite): `pg.collide(x1, y1, x2, y2, ax1, ay1[, ax2, ay2])` — 8 args box-vs-box, 6 args box-vs-point.
-- Tile-grid collision (walls/terrain): probe `picogame_tiles` flags (`at_px(tm, x, y, SOLID)`), not AABB.
+- Tile-grid collision (walls/terrain): probe `picogame_tiles` flags (`TileFlags.at_px(tilemap, px, py, tiles.B_SOLID)` — a bit INDEX, not the `SOLID` mask), not AABB.
 
 ### `picogame_math` — numeric helpers, vectors & turn-based trig
 - `clamp(v, lo, hi)` · `mid(a, b, c)` · `lerp(a, b, t)` · `inv_lerp(a, b, v)` · `remap(v, a, b, c, d)` · `sgn(x)` · `approach(v, target, step)` · `wrap(v, lo, hi)`.
@@ -254,7 +262,7 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - Waveforms: the shared read-only tables `SINE` · `SAW` · `TRIANGLE` · `SQUARE` · `NOISE` (512 B each, built on the first read — touch them at startup, not in the loop) + `RAMP` (a 2-sample LFO shape: `pitch_bend(waveform=RAMP)` = straight glide); factories `sine()` · `saw()` · `triangle()` · `square(duty=0.5)` · `noise()` build a private copy.
 - `note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08, amplitude=0.6, bend=None, cutoff=None)` — build a reusable instrument note (`midi` 60 = middle C; `cutoff` = low-pass Hz).
 - `pitch_bend(semitones, ms, waveform=None, once=True)` — an LFO for a note's `bend` (slide / laser zap).
-- `Synth(pin=None, sample_rate=22050, buffer_size=2048, music_level=0.4, sfx_level=0.7)` · `.sfx(n)` · `.press(n)` · `.release(n)` · `.music(midi_track)` · `.stop_music()` · `.set_levels(music=None, sfx=None)` · `.mute(on)` · `.available` — self-guarding init: on audio-less firmware **or** a failed init (tight heap, claimed pin) the instance runs as silent no-ops instead of raising; no try/except needed in games.
+- `Synth(pin=None, sample_rate=22050, buffer_size=2048, music_level=0.4, sfx_level=0.7)` · `.sfx(n, priority=0, window=0)` · `.sfx_seq(events, priority=0, window=0)` · `.press(n)` · `.release(n)` · `.music(midi_track)` · `.stop_music()` · `.set_levels(music=None, sfx=None)` · `.mute(on)` · `.available` — self-guarding init: on audio-less firmware **or** a failed init (tight heap, claimed pin) the instance runs as silent no-ops instead of raising; no try/except needed in games.
 - `Drone(synth, waveform=None, amplitude=0.35, attack=0.03, release=0.12)` · `.start()` · `.set(frequency, amplitude=None)` · `.stop()` — a continuously-held note (engine/siren/drone): press once, then feed `set(freq, amp)` each frame so synthio tracks the live pitch/amplitude.
 - `load_midi(path, sample_rate=22050, waveform=None, envelope=None, tempo=120, ppqn=240)` — load a MIDI file into a playable track.
 
@@ -298,4 +306,4 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - `IsoView(ox, oy, tw, th)` (`tw`/`th` = tile half-width/half-height; 2:1 diamond → `th = tw//2`) · `.to_screen(gx, gy, h=0)` · `.depth(gx, gy, h=0)` (back-to-front painter's key) · `.screen_to_grid(sx, sy)` · `.cube_faces(gx, gy, height_px)` (top/right/left faces of a raised block) · `.emit_blocks(cells, tv, tc)` (alloc-free batch: writes flat-shaded cube triangles for many blocks straight into int16/uint16 buffers for ONE `Canvas.fill_triangles` call; returns the triangle count) — the **cheapest pseudo-3D there is**: integer add/shift only, no divide, no C dependency, which is why it runs well on the RP2040. Unlocks iso RPG / strategy / tactics / builder. Static boards: render once + dirty-rect the movers (30 fps); `emit_blocks` is for rebuild-every-frame scenes (~2× faster than a Python `cube_faces` loop). See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).
 
 ### `picogame_ray` — first-person raycaster
-- `Raycaster(world, wall_colors, sky, floor, fov=0.66, stride=2)` · `.cast(px, py, ang, sw, sh)` (once/frame) · `.draw(view, vx, vy, vw, vh)` (StripDraw callback; **row 0 is the top of the VIEW, not the screen** — a layer starting below y=0, e.g. under a reserved HUD band, must pass `vy - band`) · `.solid(x, y)` (wall test) · `.set_cell(x, y, v)` (change ONE world cell at runtime — a door opening, a wall dropping; v = wall type 0-9, 0 = empty; keeps the caster grid, `solid()` and `.map` consistent and re-casts even for a standing camera. For events, not animation — each call forces one full re-cast) · `.attach(sd)` (temporal repaint) · `.project_sprite(sx, sy)` (billboard) — DDA walls via the native `pg.raycast` caster (integer 16.16 C on device, Python in the sim) into a 0-RAM `StripDraw` view (~22-30 fps). `stride` = perf/quality knob; `attach(sd)` + `always_dirty=False` repaints only the changed column band (still/slow ~30 fps). See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).
+- `Raycaster(world, wall_colors, sky, floor, fov=0.66, stride=2)` · `.cast(px, py, ang, sw, sh)` (once/frame) · `.draw(view, vx, vy, vw, vh)` (StripDraw callback; **row 0 is the top of the VIEW, not the screen** — a layer starting below y=0, e.g. under a reserved HUD band, must pass `vy - band`) · `.solid(x, y)` (wall test) · `.set_cell(x, y, v)` (change ONE world cell at runtime — a door opening, a wall dropping; v = wall type 0-9, 0 = empty; keeps the caster grid, `solid()` and `.map` consistent and re-casts even for a standing camera. For events, not animation — each call forces one full re-cast) · `.attach(sd)` (temporal repaint) · `.project_sprite(sx, sy)` (billboard) — DDA walls via the native `pg.raycast` caster (integer 16.16 C on device, Python in the sim) into a 0-RAM `StripDraw` view (~36 fps uncapped at stride 1 full-screen on RP2040, flat across view angles). `stride` = perf/quality knob; `attach(sd)` + `always_dirty=False` repaints only the changed column band (still/slow ~30 fps). See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).

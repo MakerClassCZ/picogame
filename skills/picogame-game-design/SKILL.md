@@ -6,8 +6,8 @@ description: >-
   the task is making, designing, or implementing a small game or example for it, e.g. "make a tiny shooter".
 metadata:
   api_level: 1  # picogame API level this skill was written against
-  validated_engine_commit: f242ee3c3e (MakerClassCZ/circuitpython, branch picogame)
-  last_validated: 2026-08-03
+  validated_engine_commit: a1bc391d43 (MakerClassCZ/circuitpython, branch picogame)
+  last_validated: 2026-09-03
 ---
 
 # picogame game design
@@ -26,8 +26,12 @@ validate with screenshots.
 - **DEFAULT** — measured best practice (State object, loop-in-function, A=confirm/B=cancel, constants
   over settings menus). **Default to it unless the game's stated requirements justify an exception —
   and say so.** A ≤50-line prototype proving a core loop may use 3 bare globals and skip the
-  architecture; graduate it when the loop earns it.
-- **TASTE** — design heuristics (one verb, sawtooth ramp, palette size). Strong guidance, not law.
+  DEFAULT architecture (State object, loop-in-function) — MUSTs still hold; graduate it when the
+  loop earns it.
+- **TASTE** — design heuristics (one verb, ramp shape, palette size, juice set, title layout). Strong
+  guidance, not law — **break any of them for a stated reason.** Rules below are tagged `[MUST]` /
+  `[DEFAULT]` / `[TASTE]` where the voice alone would not tell you; an untagged bold imperative in a
+  design section is TASTE, in an engine section MUST.
 
 The bar for "done" is not "it runs" — it's **fun in the first 10 seconds**. Everything below serves
 that and the **"one more go."**
@@ -62,12 +66,10 @@ seeded random, juice (`picogame_fx`); and a **desktop simulator** so you build w
 - **Paletted art is cheapest** — PAL8 = 1 byte/px; build every color with `pg.rgb565(r,g,b)`.
 
 These limits are your **style engine, not just a budget** — a constraint embraced becomes a
-signature. *Downwell* made its three-color palette (black, white, red) its calling card; *Canabalt*
-built the whole game on a single button (jump only) and black silhouettes; *Thomas Was Alone* turned
-plain colored rectangles into characters you remember. Lean *into* the limits
-(90°-crisp rotation, two-tone palettes, chunky pixels) rather than fighting toward fidelity the device
-can't give. If a design still needs more than the envelope, **cut it down** until it fits — that's the
-craft, not a failure.
+signature (*Downwell*'s three colours, *Canabalt*'s single button, *Thomas Was Alone*'s rectangles —
+three different answers). Pick which limit becomes *this* game's look rather than fighting toward
+fidelity the device can't give. If a design still needs more than the envelope, **cut it down**
+until it fits — that's the craft, not a failure.
 
 ---
 
@@ -75,31 +77,52 @@ craft, not a failure.
 
 ### 1.0 Fantasy before the verb (what the player gets to *be*)
 Before naming the verb, name the **fantasy** — what the player gets to be, or feel they're doing. The
-same verb under a different fantasy is a different game: *catch* = frantic short-order cook / catching
-dying stars before they hit the earth / last-line goalie. Pick the fantasy first and let it bias every
-later choice (palette, sound, name, the one twist). Then write two one-liners *before any code*:
-- **Identity** — "It's *$GENRE*, **and also** ___." If the "and also" doesn't spark curiosity, it's a
-  clone — keep going (one twist, not five).
+same verb under a different fantasy is a different game: *catch* = frantic short-order cook /
+lighthouse keeper hauling in the shipwrecked / last-line goalie. Test: can you say in one line what
+the player will *brag about*? Pick the fantasy first and let it bias every later choice (palette,
+sound, name, the twist). Then write two one-liners *before any code*:
+- **Identity** — either "It's *$GENRE*, **and also** ___" or "It's *$FANTASY*, played through
+  *$VERB*". The test is not "does it sound fresh": the twist must **change a decision the player
+  makes every few seconds, or change what the verb acts on** — if it only changes the skin, it's a
+  clone; keep going (one twist, not five).
 - **Anti-pillars** — 1–2 things this game is **NOT** (your defense against scope- and tone-drift).
+
+### 1.0b Divergence pass (before the brief — two minutes of thinking, no code)
+Write **three** one-line concepts that all satisfy the request, each differing from the others on at
+least one axis: the fantasy, what the verb acts on, or what ends a run; for each, one clause on what
+the player would tell a friend. Rules: none may be the nearest shipped example or a genre exemplar
+with the names changed; at least one must change *what the verb acts on* rather than add a
+mechanic; at least one must fit the RP2040 envelope with room to spare. Choose ONE and write why it
+beat the other two in one sentence — "most fun" is not a reason, "the twist changes a decision the
+player makes every few seconds" is. Record the losers in the brief under *considered*.
+Everything this skill lists after this point — juice touches, ramp shape, palette size, title
+presentation, control map, MVP items — is a **menu you draw from to express THAT concept, not a
+checklist**: for each item you take, be able to say what it does for this game; skip the ones that
+do nothing. If the user already handed you a concept, run the pass on the *twist* (three twists,
+pick one). If the user asked for a faithful clone, say so in the brief and skip the pass.
 
 ### 1.1 Core loop & one verb
 The **core mechanic** is the single verb the player repeats (jump, shoot, steer, match, dodge). The
 **core loop** is the tightest cycle on it: *act → see result → reward → act again, with a twist.*
-- Name the verb in ONE word (Tetris=fit, Snake=grow, Asteroids=thrust+shoot, Flappy=flap). If you
-  can't, the design isn't focused — cut until you can.
-- One game, one idea. Add depth by giving the **same verb new contexts** (Tetris adds speed, never a
-  button), not by adding verbs.
+- Name the verb in ONE word (Tetris=fit, Snake=grow, Asteroids=thrust+shoot, Flappy=flap,
+  Papers Please=inspect — any genre). If you can't, the design isn't focused — cut until you can.
+- One game, one idea. `[TASTE]` Add depth by giving the **same verb new contexts** (Tetris adds speed
+  before it adds a button) before adding a verb; a second verb needs a reason in the brief.
 - The loop must be legible by *watching* for ≤10 s, and **fun with no art and no sound** — prototype
   with generated shapes and prove the loop before adding anything.
 
 ### 1.2 Design backward from a feeling (MDA)
-Decide the **target feeling** first (tense reflexes / cozy puzzle / speed thrill), then **reason
-backward** down the MDA chain — from that feeling (aesthetic) to the dynamics that cause it to the
-mechanics (rules) that produce them.
+Decide the **target feeling** first — name the emotion (the MDA aesthetics: sensation, fantasy,
+challenge, discovery, expression, fellowship, narrative, submission; or plainer: tension, calm,
+curiosity, dread, glee), then **reason backward** down the MDA chain: feeling → the dynamic that
+produces it → the ONE mechanic that creates that dynamic. Worked: *dread* → not knowing what is
+behind you → a limited view cone. Write the chain in the brief; it is what you tune against.
 
 ### 1.3 Game feel & juice (the cheap wins, ranked by fun-per-byte)
 Polish the *response*, not the simulation. On a handheld you own the whole pipeline — act on the
-**same frame** the button is read (≤1–2 frames latency). Then, roughly in value order:
+**same frame** the button is read (≤1–2 frames latency). Then a **menu**, roughly in fun-per-byte
+order — take what expresses the fantasy (a cozy or a dread game may take one item, or none), and
+say what each touch expresses; the numbers are starting ranges:
 1. **Sound on the key action** — the single highest fun-per-byte feedback (see 1.7).
 2. **Hit-flash** — `picogame_fx.Flash(spr)`: `fl.hit(WHITE, 2)` on impact, `fl.tick()` once per frame before `refresh()`. Cheapest visual punch, and the helper exists because the hand-rolled counter is off by one (it counts LOGIC frames, so the sprite lights for one frame instead of two) and because a flash overwrites a tint/dither the sprite may be wearing.
 3. **Screenshake (trauma model)** — keep a scalar `trauma 0..1`; events *add* (small kick +0.6,
@@ -122,7 +145,8 @@ an "effects setting"; no menu needed.
 
 ### 1.4 Difficulty, flow & fairness
 Keep the player in the **flow channel** — challenge tracking rising skill. For a 1–3 min handheld run:
-- **Ramp by speed / density / variety, NOT by more HP.** Tetris speeds up; Pac-Man adds pressure.
+- `[TASTE]` **Prefer ramping by speed / density / variety to HP inflation** (HP is fine when the
+  fantasy is a siege or a boss). Tetris speeds up; Pac-Man adds pressure.
 - **Give the ramp a shape** — don't climb monotonically (flat = boring by minute two). One shape
   that works: a **sawtooth** — build tension 20–40 s → *release* at a milestone (wave clear,
   checkpoint) → re-engage ~10–15 % harder, first real spike around **~60–90 s**, every spike
@@ -157,11 +181,13 @@ Keep the player in the **flow channel** — challenge tracking rising skill. For
 ### 1.5 The "one more go" (retention — ethically)
 Reward **skill** and keep the rules **readable** — the player must know what killed them. No hidden
 probability, no behind-the-scenes difficulty they can't read.
-- **Score chase + personal best**; show a rising, legible score (+1 per X beats opaque scoring).
-- **Near-miss** tension and **peak-end**: a run is remembered by its peak and its end — end on a high
-  (a flourish on death, the score front-and-center).
+- **Give the player a reason to come back that fits the fantasy.** Score chase + personal best
+  (rising, legible: +1 per X beats opaque scoring) is the arcade answer; par, a clear time, secret
+  exits, alternate endings or a place that changes are others.
+- **Near-miss** tension and **peak-end**: a run is remembered by its peak and its end — end on a high,
+  whatever *this* game's flourish is (a death flourish + the score front-and-center is the arcade one).
 - The hook is a **short, self-restarting loop** with escalating stakes — make restarting effortless.
-- **A pass/fail game has no score axis — give it one on purpose.** Level-based designs (puzzle
+- `[TASTE]` **A pass/fail game has no score axis — consider giving it one.** Level-based designs (puzzle
   rooms, escape, "reach the exit") are binary: you cleared it or you didn't, so there is nothing to
   beat and no reason for a second attempt at a level already solved. Add ONE continuous measure over
   the top — optional collectibles placed off the safe route, a clear time, or a move/shot count —
@@ -170,8 +196,12 @@ probability, no behind-the-scenes difficulty they can't read.
 
 ### 1.6 Game-state flow (most of a game's shape)
 Wrap the loop in a small **state machine** — decide the states up front; it's most of the game's
-shape. Canonical: **BOOT → TITLE/attract → PLAY → GAME-OVER → (restart)**, plus **PAUSE** if needed.
-Keep ONE `state` variable; each frame branch on it for what you update and draw. The skeleton:
+shape. The DEFAULT shape: **BOOT → TITLE/attract → PLAY → GAME-OVER → (restart)**, plus **PAUSE** if
+needed — name the states for *your* game (a puzzle has LEVEL-DONE, a story has SCENE). Keep ONE
+`state` variable; each frame branch on it for what you update and draw. How TITLE / the outcome
+screen *present* — a HUD line, an attract loop via `Script`, a diegetic title in the world, straight
+into play with a hint, a score card — is a design choice (§1.8), not the skeleton's; what they carry
+is the name, one line of controls, the best score. The skeleton:
 
 ```python
 import picogame as pg
@@ -223,8 +253,8 @@ main()                                          # module bottom: kick it off (st
   pools/`clock`/`btn`/audio) and cross-run/persistent values (NVM best score) as module globals, not in `State`.
 - **Name things in words — the game code gets read by a human next.** Whoever picks this up did not
   watch you write it, and one- to three-letter names (`tf`, `n`, `on`, `dx` outside a tight math
-  block) force them to re-derive what each holds; observed in the wild, the first thing a new owner
-  does is rename them all. Spend the characters: `tile_flags`, `alive`, `speed`. **Exceptions, all
+  block) force them to re-derive what each holds. Spend the characters: `tile_flags`, `alive`,
+  `speed`. **Exceptions, all
   narrow:** the established module aliases (`import picogame_fx as fx`), loop counters (`i`, `x`, `y`),
   and a local `dx`/`dy` next to the arithmetic that defines them.
 - **Put the per-frame loop in a FUNCTION, not at module scope** (the skeleton above) — a measured
@@ -245,6 +275,9 @@ A beep on the key action confirms what the eye is doing and is the best fun-per-
   `picogame_synth` voices unless the user asked for them (a held engine/siren tone, music) — the
   sim cannot demonstrate those and you cannot judge them. Never state how anything SOUNDS; when a
   game does carry bespoke audio, list it as unverified, like fun.
+- **The sound DESIGN is still yours**: which events are voiced, which Kit voice each gets, and what
+  stays silent — a cozy game may want two sounds, a tense one wants silence broken rarely. Write the
+  event → voice map in the brief; the Kit is the palette, not the plan.
 - Full recipes (chiptune palette, contour semantics, the crisp-not-rich lesson, music guidance):
   **`techniques.md` §Audio recipes**.
 
@@ -254,8 +287,11 @@ The device decides what's possible — design within it:
   **figure/ground contrast**; distinguish things by **shape AND colour** (colourblind-fair, and
   clear at small size) — never colour alone. Keep the screen uncluttered. Readability is also
   **identity**: give the player and each threat a distinct **silhouette** (recognizable as a black
-  shape) and a small **signature palette** (3–5 hues that *are* the game's look) — on this device
-  legibility and visual identity are the same budget, so spend it once, deliberately.
+  shape) and a small **signature palette** (typically 3–5 hues that *are* the game's look; fewer is
+  a style, more needs a reason — one hue is the player, one is danger, the rest is ground; contrast
+  by value first) — on this device legibility and visual identity are the same budget, so spend it
+  once, deliberately, and *decide* it: palette, silhouettes, HUD placement and how the title
+  presents are the "Look & identity" line of the brief, never inherited from the starter template.
 - **Few buttons**: map the whole game to D-pad + A/B (+X/Y). Follow muscle memory — **A = confirm /
   primary action, B = cancel / back** (never swap them); X/Y = secondary. Context-sensitive buttons
   over chords; prefer one-button depth where it fits. On a USB-host board (Fruit Jam) a plugged-in
@@ -264,11 +300,12 @@ The device decides what's possible — design within it:
 - **Short sessions**: instant start, instant restart, no long unskippable intros — "pick up for 2
   minutes."
 - **HUD** in reserved edge zones (`picogame_ui` fixed layer); tiny, legible.
-- **Teach without a manual** — teach by play in 3 beats, all within ~15–30 s of a 90 s run:
-  **(1) safe intro** — one input, no threats, discover the controls exist; **(2) demonstrate → test**
-  — show the mechanic fire once (a harmless enemy walks into a hazard) *before* requiring it;
-  **(3) contextual hint** — a button icon the first time an action unlocks, then gone. No tutorial
-  screen to dismiss; affordances over text.
+- **Teach without a manual** — teach by play, not by a screen. One pattern that works, timed to
+  your run length: **(1) safe intro** — one input, no threats, discover the controls exist; **(2)
+  show it once → require it** — the mechanic fires harmlessly (e.g. a harmless enemy walks into a
+  hazard) *before* the player must use it; **(3) contextual hint** — a button icon the first time an
+  action unlocks, then gone. Puzzle, narrative and card games onboard by their first level/scene/hand
+  instead. No tutorial screen to dismiss; affordances over text.
 
 ### 1.9 Scope discipline
 The smaller, the more likely it's finished and fun.
@@ -301,8 +338,8 @@ enough to recognize the helper:
 | **Camera / scrolling** | world bigger than the screen | `scene.set_view(ox, oy)` follow + clamp; HUD on a fixed layer |
 | **Timing** | same speed on any framerate | `picogame_clock.Clock(fps)` → `dt`; `FixedStep` for deterministic physics |
 
-Most first games = input→move + collision + score/lives + a win/lose state. Get that loop fun first
-(§ workflow), then add animation, juice, and a board.
+Most first games = input → one verb + one collision rule + one outcome state. Get that loop fun
+first (§ workflow), then add animation, juice, and a board.
 
 ---
 
@@ -316,7 +353,7 @@ Don't load everything up front — pull a file only when a step points to it:
 | `api-reference.md` | **the full API — exact signatures** for the native C engine (`pg.Sprite`, `Scene`, `Canvas`, `Tilemap`, `StripDraw`, `Canvas.mode7`, `pg.raycast`, …) and every helper lib. Read it when you need a precise call signature (the C engine has no `.py` source to grep). |
 | `genre-patterns.md` | **genre playbooks** — core loop, the one thing to get right, controls, tuning, pitfalls, MVP. **Read the "Cross-genre rules" header + only your genre's §:** 1 Breakout · 2 Shmup · 3 Asteroids · 4 Platformer · 5 Top-down/RPG · 6 Maze · 7 Puzzle · 8 Racing · 9 Endless/Arcade · 10 Tower defense · 11 Card/roguelite deckbuilder (also management/tycoon) · 12 First-person raycaster/dungeon crawler · 13 Narrative/dialogue adventure. |
 | `debugging.md` | **symptom → first move** triage for typical picogame failures (byte order, stale `.mpy`, `touch()`, pool exhaustion, sim-vs-device gaps, GC churn) + the measurement ladder. Pull the moment something misbehaves — BEFORE guessing. |
-| the repo's `docs/` | **the project's own documentation, in the checkout** — 76 pages including the API reference and `concepts/patterns.md`, whose recipes are executable and tested. Nothing here supersedes it; when the two differ, it wins. |
+| the repo's `docs/` | **the project's own documentation, in the checkout** — ~40 EN pages (plus Czech translations) including the API reference and `concepts/patterns.md`, whose recipes are executable and tested. Nothing here supersedes it; when the two differ, it wins. |
 | `techniques.md` | **cross-genre technique recipes** mapped to picogame — state machines, enemy/AI patterns, parallax, collision, procedural generation, palette/raster effects, level authoring, ghosts. |
 
 Templates in `templates/` (pull when the workflow says): `design-brief.md` — fill at step 1, before coding; `starter_game.py` — the skeleton to start step 7 from.
@@ -328,10 +365,13 @@ Templates in `templates/` (pull when the workflow says): `design-brief.md` — f
 *No-repo environments* (web playground, "write me a code.py" chat): write a **single
 self-contained file** — no sibling imports, inline art — per the playground contract.
 
-1. **Frame the concept** (§1.1–1.2): who plays, how long, what feeling; the one core verb; the loop
-   in one sentence. Fill `templates/design-brief.md`.
-2. **Pick the genre & steal its grammar** → `genre-patterns.md` (read only your genre's §, see Part 2):
-   take the MVP set, the one-thing-to-get-right, the control scheme. State the twist (§1.0) before building.
+1. **Frame the concept** (§1.0–1.2): who plays, how long, how a run *ends* (win / lose / both), what
+   feeling; the one core verb; the loop in one sentence. **1b. Divergence pass** (§1.0b): three
+   concepts, one pick, one reason. Fill `templates/design-brief.md`.
+2. **Read your genre's grammar** → `genre-patterns.md` (read only your genre's § + the header, see Part
+   2): its loop, the one-thing-to-get-right, the universal rules. Decide which MVP items *your* concept
+   needs and which it replaces; take the essential input(s), not the whole map; turn one variation
+   axis on purpose. Write what you are changing versus the classic. State the twist (§1.0) before building.
 3. **Scope for the device** (§1.8–1.9) + the RAM budget in `engine-capabilities.md`.
 4. **Choose engine blocks** → `engine-capabilities.md`: Sprite (+ `picogame_pool` for many), Tilemap
    for boards, StripDraw for full-frame effects, Canvas for rarely-changing panels, `set_view` camera,
@@ -346,7 +386,9 @@ self-contained file** — no sibling imports, inline art — per the playground 
    paint it in the **scene editor** (`tools/editor/` in the public repo; hosted at /editor/ on the docs site) and hand you the exported `scene.json` — which the editor
    can also re-open, so a level can go back and forth. It is turn-taking, not merging: say who is
    holding the file (see `techniques.md §8`).
-5. **Plan assets cheap** (§1.10): generated shapes first.
+5. **Plan assets cheap** (§1.10): generated shapes first — but decide the **look** (§1.8: palette,
+   silhouettes, HUD placement, title presentation) *now*, in the brief, so the placeholders in
+   `starter_game.py` get replaced rather than shipped.
 6. **Structure the loop + state flow** (§1.6): set the state machine and the per-frame loop before
    layering rules.
 7. **Build in the simulator** (start from `templates/starter_game.py`): core loop on screen FIRST,
@@ -377,8 +419,10 @@ self-contained file** — no sibling imports, inline art — per the playground 
    `just_pressed` reads: shoot, jump, confirm) is testable — `40:X:2` taps X for 2 frames at frame 40.
    Shoot at a screenshot a few frames later and you can SEE whether the feature fired. Never report a
    button-driven feature as verified from a run that never pressed the button.
-8. **Feel & fairness pass** (§1.3–1.5, 1.7): add the juice (sound + flash + a little shake), then make
-   it fair (telegraphing, generosity frames, instant restart), then the retention touch (score/peak-end).
+8. **Feel & fairness pass** (§1.3–1.5, 1.7): add the feedback the fantasy calls for — pick from the
+   §1.3 menu and say what each touch expresses (a touch you cannot justify is noise) — then make it
+   fair (telegraphing, your genre's generosity mechanic, instant restart), then the return hook that
+   fits (§1.5).
 9. **Validate against the quality bar** (below) in the simulator.
 
 ---
@@ -415,9 +459,10 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
    ```
    Then drive the `--hold` edge cases: hold-fire 300 f (pool must not exhaust), idle (title must not
    crash), `LEFT,RIGHT` (no NaN/escape), A on frame 1.
-4. Clean **game flow** — title/play/game-over with **instant restart**. Prove it with a 3-shot
-   sequence (`--shot` title → `--hold A` play → `--shot-at <death>` game-over) showing *distinct*
-   states — execution evidence, not just code that compiles.
+4. Clean **game flow** — an entry state, play, an outcome state and a **fast way back in**, named
+   for your game (§1.6). Prove it with a 3-shot sequence (`--shot` entry → `--hold A` play →
+   `--shot-at <outcome>` outcome) showing *distinct* states — execution evidence, not just code
+   that compiles.
 5. It **fits the RAM target** (RP2040 is the primary budget; RP2350/Fruit Jam only adds slack) and uses
    `rgb565()` / `sprite.touch()` correctly. **Measure, don't estimate** — with the right tool for
    each environment:
@@ -438,7 +483,7 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
   *(Slower genres — puzzle, RPG, tower defense, card/roguelite — read "10 seconds" as **hooked/
   curious**, not **scoring**, and "instant restart / 1–3 min run" as a session shape that fits the
   genre, not a literal arcade timer. Don't warp a deckbuilder toward twitch pacing to satisfy the bar.)*
-- At least one **juice** touch lands and **difficulty feels fair** (telegraphing + a generosity mechanic).
+- The **feedback touches you chose** land and **difficulty feels fair** (telegraphing + a generosity mechanic).
 
 **Hand these over as five questions, not as "is it fun?"** — an open ask gets "it's fine", which tells
 you nothing and leaves you guessing. Each question targets a bar item above, so the answer is
@@ -455,14 +500,17 @@ answers in hand it's tempting to fix everything at once and lose track of which 
 **The fun-proxy** (the strongest machine-checkable stand-in until a human plays — verify ALL five
 and report them as the proxy, never as "fun confirmed"): (1) legible in ≤10 s from a screenshot,
 (2) input acts the SAME frame it's read, (3) restart < 0.5 s, (4) every threat telegraphed ≥ 8 frames,
-(5) a stated difficulty ramp with its first spike at ~60-90 s.
+(5) a stated ramp shape with its first spike at a time you chose from your loop length — and one
+sentence why.
 
 To *infer* motion before handing off, drive `--shot-at` across several frames — the live window
 (`--backend pygame`) you can neither launch nor see yourself; offer it to the USER so they can
 actually play, and get the fun/feel verdict from them. Hand off with **numbers, not vibes** — a short list:
-- **juice present**: flash frames, shake `max_off`, hit-stop frames;
+- **feedback chosen**: which touches (and their parameters: flash frames, shake `max_off`, hit-stop
+  frames …) and what each expresses;
 - **generosity mechanic** + its frame count;
-- **difficulty ramp**: spawn/speed curve + when the first threat lands — **flag any reaction window < 8 frames**;
+- **difficulty ramp**: shape + spawn/speed curve + when the first threat and the first spike land —
+  **flag any reaction window < 8 frames**;
 - if it seeds `picogame_rand.Rand(seed)`: a fixed seed + `--hold` gives a reproducible run to judge difficulty.
 
 ---
@@ -471,4 +519,5 @@ actually play, and get the fun/feel verdict from them. Hand off with **numbers, 
 
 Worked examples of the whole loop (racing ×2, endless-arcade Starfall — what the sim screenshots
 revealed and what changed): **`references/case-studies.md`**. Load only when you want a modelled
-end-to-end pass; the workflow above is self-sufficient.
+end-to-end pass; the workflow above is self-sufficient. Their choices are those games' answers to
+Part 1, not the method's defaults.
