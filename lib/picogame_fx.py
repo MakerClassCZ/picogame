@@ -367,15 +367,14 @@ class Tween:
 
 class Camera:
     """A smoothed follow camera. Tracks a world point and produces the scene view offset
-    (centred, optionally clamped to a world size). Compose with Shake by feeding the camera
-    offset into shake.tick(); or call apply() directly when there's no shake.
+    (centred, optionally clamped to a world size). `apply()` sets the view; `apply(shaker)`
+    composes with a Shake (the shake offset rides on top of the camera, one set_view).
 
         cam = Camera(scene, W, H, world_w=MAP_W, world_h=MAP_H)
         cam.follow(player.x, player.y)
         cam.apply()                                  # no shake
         # --- or with shake: ---
-        ox, oy = cam.follow(player.x, player.y).offset()
-        shaker.tick(ox, oy)
+        cam.follow(player.x, player.y).apply(shaker)  # allocation-free
 
     `w`/`h` are the SCREEN size. A scene built with a reserved HUD band (`Scene(top=BAR)` /
     `picogame_game.setup(top=BAR)`) never scrolls those rows, so pass the same band here
@@ -452,15 +451,21 @@ class Camera:
         self.oy = int(oy)
 
     def offset(self):
-        """Return the view offset as a tuple (allocates). To compose with Shake without a per-frame
-        tuple, use `cam.apply()` (no shake) or read `cam.ox`/`cam.oy` after `_compute()`."""
+        """Return the view offset as a tuple (allocates - one tuple per call). Per-frame code
+        should use `cam.apply()` / `cam.apply(shaker)` instead, or read `cam.ox`/`cam.oy`
+        after either of them."""
         self._compute()
         return self.ox, self.oy
 
-    def apply(self):
-        """Update the scene camera directly - allocation-free (no tuple). Returns None."""
+    def apply(self, shake=None):
+        """Update the scene camera directly - allocation-free (no tuple). Returns None.
+        Pass a `Shake` to compose: the shake offset is added on top of the camera and the
+        combined view applied once (`shake.tick(cam.ox, cam.oy)`), so the two never fight."""
         self._compute()
-        self.scene.set_view(self.ox, self.oy)
+        if shake is None:
+            self.scene.set_view(self.ox, self.oy)
+        else:
+            shake.tick(self.ox, self.oy)
 
 
 def _check_band(scene, top, bottom, left, right):

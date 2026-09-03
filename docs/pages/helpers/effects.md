@@ -123,8 +123,8 @@ Tracks a world point and produces the scene view offset, centred and optionally 
 
 - `Camera(scene, w, h, lerp=0.18, world_w=0, world_h=0, top=0, bottom=0, left=0, right=0)` - `w`/`h` are the screen size; `lerp` is the follow smoothing per frame; `world_w`/`world_h` (if non-zero) clamp so the view never shows past the world edge; `top`/`bottom`/`left`/`right` are a reserved HUD band (the same numbers you gave `setup()` or `Scene`), so the camera centres and clamps inside the visible part of the screen instead of under the HUD.
 - `.follow(tx, ty, snap=False)` - move the camera centre toward `(tx, ty)` by `lerp`, or jump there with `snap=True`. Returns `self`, so you can chain.
-- `.apply()` - compute the offset and call `scene.set_view` directly. Allocation-free; returns `None`. Use when there is no shake.
-- `.offset()` - compute and return the offset as an `(ox, oy)` tuple (allocates). Feed this into `Shake.tick(ox, oy)` to compose the two.
+- `.apply(shake=None)` - compute the offset and call `scene.set_view` directly. Allocation-free; returns `None`. Pass a `Shake` (`cam.apply(shaker)`) and the shake offset rides on top of the camera in the same call - one `set_view`, no tuple.
+- `.offset()` - compute and return the offset as an `(ox, oy)` tuple (allocates a tuple per call - fine for setup or a test, not for the frame loop). After `apply()`/`offset()` the ints are also readable as `.ox`/`.oy`.
 
 ```python
 import picogame_fx as fx
@@ -135,7 +135,7 @@ cam.follow(player.x, player.y).apply()
 ```
 
 :::note[Gotchas]
-`apply()` and `Shake` both call `scene.set_view`, so don't run both blind. To combine, take `ox, oy = cam.follow(...).offset()` and pass those into `shaker.tick(ox, oy)` so shake stacks on the camera. See [/scene-format/](/scene-format/) for what `set_view` does to the view.
+`apply()` and `Shake.tick()` both call `scene.set_view`, so don't run both blind - the second overwrites the first. To combine, call `cam.follow(...).apply(shaker)`: the shake stacks on the camera and the view is set once. See [/scene-format/](/scene-format/) for what `set_view` does to the view.
 
 With a HUD band, pass it as `top=`/`bottom=`/… - not by padding `h`. `Camera(scene, W, H + BAR, ...)` recentres correctly but clamps against the padded height, so `BAR` pixels of the world at each edge can never scroll into view. The simulator warns when the camera's band differs from the scene's.
 :::

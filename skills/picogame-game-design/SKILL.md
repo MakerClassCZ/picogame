@@ -417,6 +417,8 @@ self-contained file** — no sibling imports, inline art — per the playground 
    ```
    `--hold` presses for the whole run (movement); `--keys` is a timeline, so a *tap* (what
    `just_pressed` reads: shoot, jump, confirm) is testable — `40:X:2` taps X for 2 frames at frame 40.
+   A bare `40:X` (no duration) HOLDS X until `-X` or the end of the run, and a second press on a
+   button still held is not an edge (the sim warns) — write `40:X:2` for a tap, `40:X,60:-X` for a hold.
    Shoot at a screenshot a few frames later and you can SEE whether the feature fired. Never report a
    button-driven feature as verified from a run that never pressed the button.
 8. **Feel & fairness pass** (§1.3–1.5, 1.7): add the feedback the fantasy calls for — pick from the

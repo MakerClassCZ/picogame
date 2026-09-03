@@ -306,7 +306,14 @@ weights a function of run progress `t∈0..1` (common foes fade, hard foes ramp)
 **Generation algorithms (cheapest first, with RAM cost):**
 - **Chunk stitching** (runners/shmups) — *recommended default.* Hand-author a few fair segments;
   concatenate by weighted pick honoring an entry/exit-height contract so jumps always connect. **RAM:
-  on-screen chunks only** (object-pooled). Mix in rare hand-authored set-pieces.
+  on-screen chunks only** (object-pooled). Mix in rare hand-authored set-pieces. *picogame:* the cheap
+  form keeps the `Tilemap` STATIC (sky/ground) and scrolls only pooled sprites past a fixed-x player
+  (dinorun). A scrolling *tile* world moves the view instead — `set_view`/`Tilemap.move` take int32 px
+  and Sprite x/y is 24.8 fixed (±8 M px), so a run never needs re-basing for range — over a Tilemap
+  2–3 screens wide, and rewrites the columns that just left the screen with the next chunk
+  (`set_tile`) when the camera crosses a chunk. A Tilemap does not wrap: when the map's end nears,
+  shift its cells left by a chunk and move the map + every sprite right by the same px (one hitch of
+  cols×rows `set_tile` calls ≈ a frame at 40×30 — spend it on a set-piece, not mid-jump).
 - **Cellular-automata caves** — fill ~45% wall, then ~4–6 passes of "≥5 wall neighbours → wall," then
   **mandatory flood-fill** to re-wall unreachable cells. **RAM: 2× the grid as byte buffers** (40×30 ≈
   1.2 KB each).

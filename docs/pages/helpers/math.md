@@ -50,11 +50,11 @@ x = m.clamp(x, 8, W - 8)        # keep on screen
 
 ## picogame_rand
 
-This seedable xorshift32 generator supports weighted choices, in-place shuffling, and a shuffle bag. Use a fixed seed for reproducible replays, ghost data, tests, or level layouts. `Rand()` without an argument seeds itself from the clock. `Bag` emits each item once per shuffled cycle, which prevents long streaks caused by independent choices.
+This seedable generator (a combined 30-bit Lehmer: two prime-modulus MLCG streams, period ≈ 2^58; every intermediate is a MicroPython small int, so a draw allocates nothing) supports weighted choices, in-place shuffling, and a shuffle bag. Use a fixed seed for reproducible replays, ghost data, tests, or level layouts. `Rand()` without an argument seeds itself from the clock. `Bag` emits each item once per shuffled cycle, which prevents long streaks caused by independent choices.
 
 `Rand(seed=None)`:
 
-- `Rand(1234)` seeds from an int (reproducible); `Rand()` seeds from the clock. `seed=0` is remapped internally (xorshift cannot start at zero).
+- `Rand(1234)` seeds from an int (reproducible); `Rand()` seeds from the clock. Any int works as a seed, `0` included (the low 30 bits are used).
 - `seed(s)` - reseed an existing generator.
 - `below(n)` - integer in `0 .. n-1`. Returns `0` if `n <= 0`.
 - `randint(a, b)` - integer in `a .. b` inclusive. Raises `ValueError` if `b < a`.

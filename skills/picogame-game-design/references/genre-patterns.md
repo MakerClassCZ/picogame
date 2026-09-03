@@ -422,15 +422,17 @@ view makes paths/obstacles/interactive objects easy to read; the reward is
   talk/examine — no separate examine button.
 Essential: move + one contextual action. The B-item slot and X/Y menus are Zelda's extras.
 
-**CAMERA / WORLD**
-- **Room-based / screen-flip (Zelda 1):** world is a grid of screen-sized rooms;
-  crossing an edge slides to the adjacent room. **Cheapest for RAM** — only the
-  current room (+ neighbor being scrolled in) is resident. Best for tiny hardware.
-- **Follow camera (Link to the Past / Pokémon):** tracks player continuously,
-  confined to region bounds; smoother but needs a streamed map + culling. Bias
-  the camera slightly ahead of facing.
-- **Recommendation for 320×240 + tiny RAM:** start with **flip-screen rooms**
-  sized to the screen.
+**CAMERA / WORLD** — two equal paths on picogame; pick by the *feel* you want, not by RAM:
+- **Follow camera (Link to the Past / Pokémon):** ONE `Tilemap` bigger than the screen +
+  `fx.Camera(scene, W, H, world_w=, world_h=, top=BAR)` → `cam.follow(px, py).apply()` each
+  frame. A Tilemap cell is 1 byte, so a 64×48 world is 3 KB and the engine draws only the tiles
+  in view — no streaming, no culling code. Continuous space, smooth; bias the camera slightly
+  ahead of facing. Costs a full repaint on every scroll frame (fine at ~30 fps).
+- **Room-based / screen-flip (Zelda 1):** the world is a grid of screen-sized rooms; crossing an
+  edge swaps the room (`set_tile`/`fill` from a room table, or one map per room) with a slide or
+  a cut. Discrete rooms read as *places* (landmarks, per-room puzzles), the screen is static
+  between rooms (cheap redraws), and only the current room is resident — the way to go when the
+  world is authored as puzzle rooms or the map won't fit as one Tilemap.
 
 **TILE COLLISION & INTERACTION** — Each tile has a passable/solid flag (plus
 ledge/water/trigger). Movement checks the destination tile's flag. Interactions

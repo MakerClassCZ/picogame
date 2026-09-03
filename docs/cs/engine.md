@@ -206,6 +206,7 @@ Mřížka indexů tilů do `tileset`, tedy bitmapy, jejíž snímky představuj�
 - `fill(value)` — nastaví všechny tily.
 - Čtení `get_tile()` mimo rozsah vrací `0` a `set_tile()` zápis ignoruje (bez výjimky).
 - Vlastnosti jen pro čtení: `x`, `y`, `cols`, `rows`.
+- **Index 0 je tile jako každý jiný** (snímek 0 tilesetu) — žádný implicitně prázdný tile neexistuje. Buňka s indexem `>= tileset.frames` nic nekreslí, takže „prázdná“ buňka je hodnota mimo rozsah (např. `255`); průhledný tile je snímek používající barvu `transparent` tilesetu. Indexy jsou bajty (`value & 0xff`).
 
 **Nekompatibilní změna:** tyhle dvě nahradily `tile(tx, ty[, value])` (firmware po 23. 8. 2026) —
 starý kód spadne na `AttributeError`. Dost nový musí být **firmware**.

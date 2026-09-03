@@ -107,7 +107,7 @@ Widgety s metodou `tick()` vracejí vybraný index nebo buňku po stisku **A**, 
 - `.set(text)` - při změně vymění bitmapu spritu. Prázdný řetězec sprite skryje a scéna překreslí jeho původní dirty region.
 - `.reserve(chars)` - předem rezervuje buffer až pro `chars` znaků. Hodí se pro dlouhý text, který se poprvé zobrazí až po možné fragmentaci heapu. Samo nic nezobrazí. Viz [paměť](/cs/memory/).
 
-**`SceneBox(scene, pg, font, x, y, w, h, fg, bg, nlines=3, key=None, border=None)`** - víceřádkový dialogový nebo stavový panel nad živou scénou. Callback `StripDraw` skládá panel, rám a text bez trvalé pixelové plochy. Parametr `border` přidá vystouplý rám.
+**`SceneBox(scene, pg, font, x, y, w, h, fg, bg, nlines=3, key=None, border=None)`** - víceřádkový dialogový nebo stavový panel nad živou scénou. Callback `StripDraw` skládá panel, rám a text bez trvalé pixelové plochy. Parametr `border` přidá vystouplý rám. Geometrie: 8 px odsazení vlevo i vpravo, 7 px nahoře, řádky po `LINE_H` (12 px) - do řádku se vejde `(w - 16) // 6` znaků vestavěného 6px fontu (`(200 - 16) // 6 = 30`) a box potřebuje `h >= 14 + 12 * nlines`. Delší řádek se **neořízne** - přeteče přes pravý okraj (simulátor upozorní); zalom ho nebo box rozšiř.
 - `.show(lines)` - nastaví řádky a zobrazí panel. Volej při změně obsahu, ne v každém snímku. Vejde se jen prvních `nlines` řádků, další se zahodí (simulátor upozorní) - vytvoř box s větším `nlines`, nebo text rozděl.
 - `.hide()` - udělá panel úplně průhledný a vymaže řádky.
 - `.visible` - `True`, dokud je panel zobrazený; přiřazení ho přepne jako `show()`/`hide()`, ale text nechá být.

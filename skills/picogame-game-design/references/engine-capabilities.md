@@ -356,8 +356,10 @@ cost on-device is name lookup** (`mp_map_lookup` is the single hottest interpret
   compile to `.format`); a `%.2f` float format is ~0.3-0.4 ms/call → format-on-change, never per-frame.
 - **Containers:** `list[i]` beats `array('h')[i]` for speed (arrays only save RAM); `if lst:` is 3× faster
   than `if len(lst) > 0`; `return a, b` (tuple) is fine — out-params aren't faster; avoid `divmod` in hot code.
-- **Pools:** scanning usually-empty pools for `visible` is real money (~0.3-0.5 ms/f); keep a `live` count
-  and guard `if pool.count():` before iterating (there is no `pool.live`; `pool.alive` is the per-slot bytearray, so `if pool.alive:` is a silently always-true guard).
+- **Pools:** scanning usually-empty pools for `visible` is real money (~0.3-0.5 ms/f); guard `if pool.count():`
+  before iterating — a `picogame_pool.Pool` method (O(1) live counter). `pg.Particles` has NO `count()`
+  (its emitters are a C loop; nothing to guard). There is no `pool.live`; `pool.alive` is the per-slot bytearray,
+  so `if pool.alive:` is a silently always-true guard.
 - **Python↔C boundary tax is ~9-14 µs/call**, so a C helper only pays when the Python work it replaces
   costs much more — **scalar C helpers are pointless; batch** (one array-filling call per frame, not per
   element). `math.sin` bound ≈ 9.9 µs (the RP2040 ROM float-trig is nearly free — the CALL is the cost).

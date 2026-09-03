@@ -50,11 +50,11 @@ x = m.clamp(x, 8, W - 8)        # udrží objekt na obrazovce
 
 ## picogame_rand
 
-Tento generátor xorshift32 podporuje vážený výběr, zamíchání seznamu na místě a losovací sáček. Pevná počáteční hodnota vytváří opakovatelnou posloupnost pro záznamy hry, testy nebo generování úrovní. `Rand()` bez argumentu použije aktuální čas. `Bag` v každém zamíchaném cyklu vydá každou položku jednou, takže omezuje dlouhé série stejného výsledku.
+Tento generátor (kombinovaný 30bitový Lehmer: dva MLCG proudy s prvočíselným modulem, perioda ≈ 2^58; každý mezivýsledek je malé celé číslo MicroPythonu, takže losování nic nealokuje) podporuje vážený výběr, zamíchání seznamu na místě a losovací sáček. Pevná počáteční hodnota vytváří opakovatelnou posloupnost pro záznamy hry, testy nebo generování úrovní. `Rand()` bez argumentu použije aktuální čas. `Bag` v každém zamíchaném cyklu vydá každou položku jednou, takže omezuje dlouhé série stejného výsledku.
 
 `Rand(seed=None)`:
 
-- `Rand(1234)` použije pevnou počáteční hodnotu; `Rand()` ji odvodí z hodin. Hodnota `0` se interně nahradí, protože z ní xorshift nemůže začít.
+- `Rand(1234)` použije pevnou počáteční hodnotu; `Rand()` ji odvodí z hodin. Jako seed funguje jakékoli celé číslo včetně `0` (použije se spodních 30 bitů).
 - `seed(s)` - nastaví novou počáteční hodnotu existujícího generátoru.
 - `below(n)` - celé číslo v `0 .. n-1`. Vrátí `0`, pokud `n <= 0`.
 - `randint(a, b)` - celé číslo v `a .. b` včetně. Vyhodí `ValueError`, pokud `b < a`.

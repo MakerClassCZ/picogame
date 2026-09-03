@@ -225,6 +225,11 @@ class SceneBox:
         dlg.show(["Villager:", "Beware the slimes", "in the tall grass."])   # call ONCE
         ...                              # scene.refresh() each frame paints it; no per-frame draw
         dlg.hide()                       # when dismissed
+
+    Geometry: 8 px of padding left/right and 7 px on top, rows LINE_H (12 px) apart - so a line
+    holds (w - 16) // cell_w chars (the built-in 6 px font: (w - 16) // 6) and the box wants
+    h >= 14 + 12 * nlines. Longer lines are NOT clipped (they run past the right edge; the sim
+    warns), extra lines beyond nlines are dropped (the sim warns).
     """
 
     def __init__(self, scene, pg, font, x, y, w, h, fg, bg, nlines=3,
@@ -238,6 +243,7 @@ class SceneBox:
         self.border = border
         self.nlines = nlines
         self._lines = [""] * nlines
+        self._cols = (w - 16) // font.get_bounding_box()[0]   # chars per line (8 px pad each side)
         self._hidden = True
         # On-demand StripDraw (always_dirty=False): repaints only when invalidate()d or overlapped, so
         # a static dialog doesn't re-rasterize+re-push every frame. Every content/visibility change below
@@ -268,9 +274,20 @@ class SceneBox:
                           "dropped. Build it with nlines=%d, or split the text."
                           % (len(lines), self.nlines, len(lines)))
         for i in range(self.nlines):
-            self._lines[i] = _txt(lines[i]) if i < len(lines) else ""
+            self._lines[i] = self._fit(lines[i]) if i < len(lines) else ""
         self._hidden = False
         self._sd.invalidate()
+
+    def _fit(self, text):
+        # The box does not clip: a line wider than w - 16 px runs past the panel's right edge
+        # (Canvas.text draws into the whole strip). Say so in the sim rather than hide it.
+        text = _txt(text)
+        if len(text) > self._cols:
+            _warn_outside("SceneBox line %r is %d chars but the box fits %d per line (w=%d - 16 px "
+                          "of padding, %d px/char) - it runs past the right edge. Widen the box or "
+                          "wrap the text." % (text, len(text), self._cols, self.w,
+                                              self.font.get_bounding_box()[0]))
+        return text
 
     def hide(self):
         self._hidden = True
@@ -293,7 +310,7 @@ class SceneBox:
     def set_line(self, i, text):
         """Update ONE line; invalidate so the next scene.refresh() repaints the box with it."""
         if 0 <= i < self.nlines:
-            self._lines[i] = _txt(text)
+            self._lines[i] = self._fit(text)
             self._sd.invalidate()
 
     def destroy(self):

@@ -62,10 +62,18 @@ def _parse_keys(spec):
     # (it is how you hold a direction), but when the intent was a TAP the run is silently
     # edge-dead: just_pressed fires once at the press and never again, and every later "press"
     # in the tester's head does nothing. Warn - a probe lost 40 minutes to four such runs.
+    # The same trap one step later: a press on a pin that is STILL held ("5:A,40:A:14") is not an
+    # edge either - and its release closes the earlier hold, so the end-of-run note never fires.
     open_holds = {}
     for frame in sorted(events):
         for pin, down in events[frame]:
             if down:
+                if pin in open_holds:
+                    print("[sim] --keys note: %s pressed at frame %d while still held since frame %d "
+                          "- not an edge (just_pressed stays silent); release it first (%d:-%s) or "
+                          "tap with %d:%s:2" % (pin, frame, open_holds[pin], frame,
+                                                pin.replace("SW_", ""), open_holds[pin],
+                                                pin.replace("SW_", "")))
                 open_holds[pin] = frame
             else:
                 open_holds.pop(pin, None)

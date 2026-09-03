@@ -206,6 +206,7 @@ A grid of tile indices into `tileset` (a `Bitmap` whose frames are the tiles).
 - `fill(value)` — set every tile.
 - Out-of-range `get_tile()` reads as `0` and `set_tile()` ignores the write (no exception).
 - Read-only properties: `x`, `y`, `cols`, `rows`.
+- **Index 0 is a tile like any other** (frame 0 of the tileset) — there is no implicit empty tile. A cell whose index is `>= tileset.frames` draws nothing, so an out-of-range value (e.g. `255`) is the "empty" cell; a see-through tile is a frame that uses the tileset's `transparent` colour. Indices are bytes (`value & 0xff`).
 
 **Breaking change:** these two replaced `tile(tx, ty[, value])` (firmware after 2026-08-23) — old
 code raises `AttributeError`. The **firmware** is what must be new enough.
