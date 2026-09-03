@@ -199,7 +199,7 @@ class Buttons:
             self._mapped = 0
             for s in self._sources:
                 self._mapped |= getattr(s, "mapped", ALL)
-            self.state = self.prev = self._pressed = self._released = 0
+            self.state = self.prev = self._down = self._up = 0
             self._frame = 0
             self._stamp = [0] * _NBITS
             return
@@ -250,8 +250,8 @@ class Buttons:
             self._mapped |= bit
         self.state = 0
         self.prev = 0
-        self._pressed = 0
-        self._released = 0
+        self._down = 0                                    # this frame's edges (see just_pressed)
+        self._up = 0
         self._frame = 0                                   # poll counter (wraps; see _FMASK)
         self._stamp = [0] * _NBITS                        # per-button: the poll it went down (for repeat)
         self._keys = None
@@ -339,8 +339,8 @@ class Buttons:
         import keypad
         self.state = 0
         self.prev = 0
-        self._pressed = 0
-        self._released = 0
+        self._down = 0
+        self._up = 0
         self._frame = 0
         self._stamp = [0] * _NBITS
         rows = [_resolve_pin(p) for p in m["rows"]]
@@ -370,19 +370,21 @@ class Buttons:
     def poll(self):
         """Sample all buttons once; returns the current pressed bitmask."""
         self.prev = self.state
+        srcs = self._sources
         if self._keys is not None:                       # --- keypad backend: drain the event queue ---
-            self._pressed = 0
-            self._released = 0
+            self._down = 0                               # queue edges (catch sub-frame taps a level
+            self._up = 0                                 # diff would miss)
             q = self._keys.events
             ev = self._ev
             while q.get_into(ev):
                 bit = self._bits[ev.key_number]
                 if ev.pressed:
                     self._hw |= bit
-                    self._pressed |= bit
+                    self._down |= bit
                 else:
                     self._hw &= ~bit
-                    self._released |= bit
+                    self._up |= bit
+            level_edges = False                          # queue edges stand unless a source is attached
         else:                                            # --- digitalio polling backend (raw) ---
             raw = 0
             active_low = self._active_low
@@ -390,21 +392,32 @@ class Buttons:
                 if ((not io.value) if active_low else io.value):
                     raw |= bit
             self._hw = raw
+            level_edges = True                           # no queue: edges = level diff
         # merge extra sources (USB gamepad, ...) - each holds its own mask, Buttons is the OR
         s = self._hw
-        for src in self._sources:
+        for src in srcs:
             s |= src.read()
+            level_edges = True                           # (a bool: an empty-list truth test costs ~13 us)
         self.state = s
         f = (self._frame + 1) & _FMASK
         self._frame = f
         if self._flush:                      # first poll after clear(): consume this frame's edges so a
             self.prev = s                    # button HELD across the transition doesn't read as a fresh
-            self._pressed = self._released = 0   # press (matters for USB sources, which keep holding it)
+            self._down = self._up = 0        # press (matters for USB sources, which keep holding it)
             self._flush = False
             e = s                            # stamp the held bits one poll BACK, so they read as held
             f -= 1                           # for 2 frames: repeat()'s first-press edge must not fire
         else:                                # either (a menu opened by a held button would move its
             e = s & ~self.prev               # cursor one step)
+            # This frame's edges, decided ONCE here (just_pressed/just_released only mask them). With
+            # extra sources (USB pad) attached: edges come from the COMBINED level diff only. A source
+            # and the keypad can hold the SAME logical bit, so mixing in the keypad's own queue edge
+            # would falsely fire a press/release the other source doesn't agree with (e.g. a release
+            # while the pad still holds it). No sources: the keypad queue edges drained above stand;
+            # the polling backend has no queue, so it takes the level diff too.
+            if level_edges:
+                self._down = e
+                self._up = ~s & self.prev
         # Held-frame counts for repeat() are derived from the poll a button went DOWN, so the idle
         # frame (nothing changed) does no per-button work; only new presses are stamped.
         if e:
@@ -436,7 +449,7 @@ class Buttons:
             pass
 
     def is_pressed(self, mask=ALL):
-        return bool(self.state & mask)
+        return (self.state & mask) != 0
 
     def just_pressed(self, mask=ALL):
         """True if `mask` went down since the last poll(). The edge is STABLE for the whole frame -
@@ -445,32 +458,15 @@ class Buttons:
         the same edge, or the button that ended the game also dismisses the game-over screen before
         it is seen. Branch the states with `elif` (so only one runs per frame), call `clear()` on
         the transition (it flushes the edge, see below), or gate the new state on a frame counter."""
-        # With extra sources (USB pad) attached: edges come from the COMBINED level diff only. A source
-        # and the keypad can hold the SAME logical bit, so mixing in the keypad's own queue edge would
-        # falsely fire a press/release the other source doesn't agree with (e.g. a release while the pad
-        # still holds it). No sources: use the keypad queue (catches sub-frame taps the diff would miss),
-        # else the polling level diff.
-        if self._sources:
-            edge = self.state & ~self.prev
-        elif self._keys is not None:
-            edge = self._pressed
-        else:
-            edge = self.state & ~self.prev
-        return bool(edge & mask)
+        return (self._down & mask) != 0      # edge source decided in poll(); this is just the mask
 
     def just_released(self, mask=ALL):
-        if self._sources:
-            edge = ~self.state & self.prev
-        elif self._keys is not None:
-            edge = self._released
-        else:
-            edge = ~self.state & self.prev
-        return bool(edge & mask)
+        return (self._up & mask) != 0
 
     def has(self, mask=ALL):
         """True if the active profile actually maps (this board physically has) the given button(s).
         Lets a game adapt its controls/UI to boards without shoulders, START/SELECT, etc."""
-        return bool(self._mapped & mask)
+        return (self._mapped & mask) != 0
 
     def repeat(self, button, delay=15, interval=4):
         """Auto-repeat for a SINGLE button: True the frame it's pressed, then every `interval`
@@ -491,7 +487,7 @@ class Buttons:
             self._keys.events.clear()
         # _hw is the keypad/polling level accumulator (separate from state since sources were added) -
         # zero it too, or a held key's level would OR straight back into state on the next poll.
-        self.state = self.prev = self._pressed = self._released = self._hw = 0
+        self.state = self.prev = self._down = self._up = self._hw = 0
         self._flush = True                   # suppress edges on the next poll (a still-held source
         #                                      button must not re-fire as a fresh press after clear)
         #                                      (the held-frame stamps need no reset: state is 0, and
