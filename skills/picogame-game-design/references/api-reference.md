@@ -251,7 +251,7 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - `tone(frequency=440, ms=120, sample_rate=22050, volume=0.6)` — square-wave beep sample.
 
 ### `picogame_synth` — synthio music & SFX
-- Waveforms: `sine()` · `saw()` · `triangle()` · `square()` · `noise()`.
+- Waveforms: the shared read-only tables `SINE` · `SAW` · `TRIANGLE` · `SQUARE` · `NOISE` (512 B each, built on the first read — touch them at startup, not in the loop) + `RAMP` (a 2-sample LFO shape: `pitch_bend(waveform=RAMP)` = straight glide); factories `sine()` · `saw()` · `triangle()` · `square(duty=0.5)` · `noise()` build a private copy.
 - `note(midi, waveform=None, attack=0.005, decay=0.06, sustain=0.0, release=0.08, amplitude=0.6, bend=None, cutoff=None)` — build a reusable instrument note (`midi` 60 = middle C; `cutoff` = low-pass Hz).
 - `pitch_bend(semitones, ms, waveform=None, once=True)` — an LFO for a note's `bend` (slide / laser zap).
 - `Synth(pin=None, sample_rate=22050, buffer_size=2048, music_level=0.4, sfx_level=0.7)` · `.sfx(n)` · `.press(n)` · `.release(n)` · `.music(midi_track)` · `.stop_music()` · `.set_levels(music=None, sfx=None)` · `.mute(on)` · `.available` — self-guarding init: on audio-less firmware **or** a failed init (tight heap, claimed pin) the instance runs as silent no-ops instead of raising; no try/except needed in games.

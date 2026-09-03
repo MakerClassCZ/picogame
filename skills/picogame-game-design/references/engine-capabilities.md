@@ -312,7 +312,7 @@ dominate** the budget. Concrete costs:
 | a Bitmap | `width*height*frames` × (1 B PAL8 / 2 B RGB565) |
 | a 320×960 noise sky | **600 KB as a Canvas** vs **~5 KB as a shade Tilemap** |
 | `Particles(n)` | **≈ 80 B + 18 B per particle** (C pool; 64 → 1.2 KB, 256 → 4.6 KB; measured CP 10.3.0, same on RP2040 and RP2350) |
-| `picogame_synth.Synth()` + `picogame_sfx.Kit` | **≈ 8.3 KB + 6 KB on the PicoPad** (PWM out: Mixer `buffer_size=2048` 2.4 KB + PWM double-buffer 4.1 KB + `Synthesizer` 1.8 KB; the Kit's waveform tables 6 KB). Fruit Jam (I2S) ≈ 4.9 KB + 6 KB. The knob is `Synth(buffer_size=1024)` → Mixer 1.2 KB. Object costs only — module bytecode comes on top; measure the import in YOUR game, not in isolation |
+| `picogame_synth.Synth()` + `picogame_sfx.Kit` | **≈ 8.3 KB + 5.4 KB on the PicoPad** (PWM out, measured CP 10.3.0: the audio buffers cost **3× `buffer_size`** — Mixer 2 × ½ + the port's 2 DMA buffers — 6.1 KB at the 2048 default, + `Synthesizer` 1.8 KB; `Kit(s)` 5.4 KB). The knob is `Synth(buffer_size=1024)` → **5.2 KB** (−3.1 KB, 12–23 ms latency). Fruit Jam (I2S) ≈ 3.9 KB at 1024 (+ the TLV320 codec driver import, once). The five shared waveform tables (`snd.SINE … snd.NOISE`, 512 B each) are **built on first read** (3–23 ms each) — touch the ones your game uses at startup, never mid-loop (`Kit` and `picogame_music.Player` do it for their own shapes). Object costs only — module bytecode comes on top; measure the import in YOUR game, not in isolation |
 
 The **#1 gotcha**: never allocate a big full-frame Canvas. For animated full-frame content use
 **StripDraw** (0 B); for big scrolling fields use a **Tilemap** (1 B/cell). Other rules:
