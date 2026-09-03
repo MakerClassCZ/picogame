@@ -120,7 +120,8 @@ sprite = pg.Sprite(ball, 100, 60)
 `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` pre-allocates `capacity` hidden sprites sharing `bitmap`, sets each `anchor` (if given) and `data = None`, and adds them all to `scene` (`fixed=` passes through to `scene.add`).
 
 - `pool.items` - the underlying list of sprites; iterate it directly for zero-alloc updates.
-- `pool.spawn()` - make the first free (hidden) sprite visible and return it, or None if the pool is full.
+- `pool.spawn()` - make the first free (hidden) sprite visible and return it, or None if the pool is full. The slot comes back in its **baseline look** - blit effect (`flash`/`tint`/`dither`/`shadow`), `scale`/`angle`, `frame` and flips restored to how the sprites looked at the first `spawn()` - so a hit-flash or a death scale-up never leaks into the next life. Set-up right after construction (`for e in enemies.items: e.flip_y = True`) is therefore kept; only `.data` and the position are left to you.
+- `pool.baseline()` - re-snapshot the baseline after reconfiguring the sprites later in the game (bigger rocks on level 3).
 - `pool.free(s)` - hide sprite `s` (return it to the pool).
 - `pool.free_all()` - hide every sprite (use on level reset).
 - `pool.count()` - count of live (visible) sprites; cheap, but iterate `items` for the sprites themselves.

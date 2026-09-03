@@ -120,7 +120,8 @@ frame 0 v `color_frames` je viditelná barva, ale v `tileset_colors` je frame 0 
 `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` předalokuje `capacity` skrytých spritů sdílejících `bitmap`, nastaví každému `anchor` (pokud je zadán) a `data = None` a přidá je všechny do `scene` (`fixed=` se předává přímo do `scene.add`).
 
 - `pool.items` - podkladový seznam spritů. Přímá iterace nevytváří další kolekci.
-- `pool.spawn()` - udělá první volný (skrytý) sprite viditelným a vrátí ho, nebo None, pokud je pool plný.
+- `pool.spawn()` - udělá první volný (skrytý) sprite viditelným a vrátí ho, nebo None, pokud je pool plný. Slot se vrací ve svém **výchozím vzhledu** - blit efekt (`flash`/`tint`/`dither`/`shadow`), `scale`/`angle`, `frame` a flipy se obnoví na to, jak sprity vypadaly při prvním `spawn()` - takže záblesk po zásahu ani zvětšení při smrti neprosákne do dalšího života. Nastavení hned po vytvoření (`for e in enemies.items: e.flip_y = True`) tedy zůstává; na tobě je jen `.data` a pozice.
+- `pool.baseline()` - znovu sejme výchozí vzhled, když sprity přenastavíš později ve hře (větší balvany ve třetím levelu).
 - `pool.free(s)` - skryje sprite `s` (vrátí ho do poolu).
 - `pool.free_all()` - skryje všechny sprity (použij při resetu levelu).
 - `pool.count()` - počet živých (viditelných) spritů; levné, ale pro samotné sprity iteruj `items`.

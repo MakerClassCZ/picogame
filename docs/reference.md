@@ -170,7 +170,7 @@ Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view �
 - `poly_frames(size, points, nframes, color, fill=True)` — bake `nframes` rotations of a polygon.
 
 ### `picogame_pool` — reusable sprite pool
-- `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` · `.spawn() -> sprite | None` · `.free(s)` · `.free_all()` · `.count() -> int`. (`.items` = all sprites.)
+- `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` · `.spawn() -> sprite | None` (the slot comes back in its baseline look: blit effect, scale/angle, frame and flips as at the first `spawn()`; `.data` and position are yours) · `.baseline()` (re-snapshot after a later reconfiguration) · `.free(s)` · `.free_all()` · `.count() -> int`. (`.items` = all sprites.)
 - **`visible` means only "draw this"** — the pool keeps its own in-use bit (`.alive`, one byte per slot), so blinking a pooled sprite through `.visible` is safe: its slot stays taken. `spawn()` shows the sprite it hands out and `free()` hides it again, so `if not s.visible: continue` stays a correct liveness guard. While a sprite is blinked off that guard skips it, so it doesn't move for those frames — guard on `pool.alive[i]` instead if that matters.
 
 ### Sprite collision (native methods)

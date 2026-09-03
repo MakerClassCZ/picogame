@@ -25,9 +25,10 @@
 # dict per slot at start-up and only mutating it keeps a pool allocation-free.
 #
 # A recycled slot comes back in its BASELINE look - the blit effect, scale/angle, frame and
-# flips are restored to how the pool was built, so last life's hit-flash (or a death scale-up)
-# never leaks into the next spawn. Configure the sprites after construction? Call `baseline()`
-# once to re-snapshot; the pool then preserves THAT.
+# flips are restored to how the sprites looked at the FIRST spawn(), so last life's hit-flash
+# (or a death scale-up) never leaks into the next spawn, while the usual set-up right after
+# construction (`for e in enemies.items: e.flip_y = True`) is kept - it happens before anything
+# is spawned. Reconfigure the sprites later? Call `baseline()` once to re-snapshot.
 #
 #   bullets = Pool(scene, bullet_bm, 6, anchor=(0.5, 0.5))
 #   b = bullets.spawn()                  # -> a now-visible sprite, or None if full
@@ -49,13 +50,14 @@ class Pool:
                 s.anchor = anchor
             s.data = None
             scene.add(s, fixed=fixed)
-        self.baseline()                    # what a fresh slot looks like; re-snap with baseline()
-                                           #  if you configure the sprites AFTER construction
+        self._base = None                  # what a fresh slot looks like: snapped at the first
+                                           #  spawn(), so set-up after construction counts
 
     def baseline(self):
-        """Re-snapshot what a FRESH slot looks like - call after configuring the pool's sprites
-        (scale/angle/frame/a permanent tint). `spawn()` restores this snapshot, so a slot never
-        comes back wearing the last user's hit-flash."""
+        """Snapshot what a FRESH slot looks like (scale/angle/frame/flips/a permanent tint).
+        `spawn()` restores this snapshot, so a slot never comes back wearing the last user's
+        hit-flash. Taken by itself at the first spawn(); call this to re-snapshot after
+        reconfiguring the sprites later in the game."""
         self._base = [(s.flash, s.tint, s.dither, s.shadow, s.scale, s.angle,
                        s.frame, s.flip_x, s.flip_y) for s in self.items]
         return self
@@ -64,12 +66,14 @@ class Pool:
         """Take the first free slot, show it and return its sprite (or None if full).
 
         The slot is handed back in its BASELINE look (see `baseline()`): the blit effect,
-        scale/angle, frame and flips are restored to what they were when the pool was built,
+        scale/angle, frame and flips are restored to what they were at the first spawn(),
         so a rock recycled from an exploding one is not still flashing white. Only `.data`
         and position are the caller's to set."""
         al = self.alive
         if self._live == len(al):          # full: skip the scan (the usual case for a spammed
             return None                    #  bullet pool, and the slowest one before this)
+        if self._base is None:
+            self.baseline()
         for i in range(len(al)):
             if not al[i]:
                 al[i] = 1
