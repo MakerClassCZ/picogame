@@ -640,18 +640,22 @@ class InvertFlash:
         # PicoPad); a custom-board launcher sets that from its INVERT, so games need not pass `normal`.
         self.display = display
         self.frames = frames
+        # A RAM framebuffer target - a bare `pg.Framebuffer` (WASM playground) or a displayio
+        # FramebufferDisplay over one (Fruit Jam DVI: what picogame_game.display() returns there) -
+        # has NO panel INVON/INVOFF. Decide it HERE, from the object, and never hand such a target to
+        # pg.invert: the C binding rejects a non-BusDisplay through a NULL cast, which on RP2040 is a
+        # (caught) TypeError but on RP2350 is a HARD FAULT (the qstr read lands at 0xF0000006).
+        # Same duck test as picogame_game.target(): a framebuffer display carries `.framebuffer`.
+        is_fb = type(display).__name__ == "Framebuffer" or getattr(display, "framebuffer", None) is not None
         if normal is not None:
             self.normal = normal
-        elif type(display).__name__ == "Framebuffer":
-            # A RAM framebuffer (RP2350 DVI / Fruit Jam / the WASM playground) has NO panel INVON, so
-            # its resting state is un-inverted - regardless of PANEL_INVERTED, which tracks an ST7789
-            # panel's init (INVON). Without this a framebuffer board would "restore" to invert-on.
-            self.normal = False
+        elif is_fb:
+            self.normal = False       # resting state is un-inverted; PANEL_INVERTED tracks an ST7789 init
         else:
             self.normal = PANEL_INVERTED
         self.t = 0
-        self._ok = True       # cleared if the target has no hardware invert (a Framebuffer/DVI panel
-                              # or the WASM playground) -> pulse() degrades to a silent no-op there
+        self._ok = not is_fb  # False = no hardware invert -> pulse()/tick() are silent no-ops; also
+                              # cleared later if the panel turns out to lack INVON (the TypeError path)
 
     def pulse(self, frames=None):
         if not self._ok:
