@@ -139,6 +139,7 @@ class Story:
         """Replay the level's effect rules whose condition holds. Call after every load and
         after every flag change (the Director does the latter through on_flag)."""
         self.view = view
+        self.d.view = view                # scripts reach the level through d.view
         if view is None:
             return
         d = self.d

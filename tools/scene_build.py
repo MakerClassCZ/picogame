@@ -139,6 +139,7 @@ def load_any(path):
         src = _upgrade_v1(src, stem)
     _slugify(src)
     _asciify(src)
+    _tidy(src)
     return src
 
 
@@ -288,6 +289,14 @@ def _rows_from_grid(grid, legend):
     return ["".join(char_of[v] for v in row) for row in grid]
 
 
+def _tidy(p):
+    """Drop empty tables an editor may emit (animations: {}, props: {})."""
+    for a in p.get("assets", {}).values():
+        for k in ("animations", "props"):
+            if k in a and not a[k]:
+                del a[k]
+
+
 def _asciify(p):
     """Every tilemap layer as ASCII rows over its asset's legend - the one authoring form. A grid
     stays only when a layer uses more distinct tiles than the alphabet holds."""
@@ -375,6 +384,12 @@ def _is_scalar_list(v):
     return isinstance(v, list) and all(not isinstance(x, (dict, list)) for x in v)
 
 
+def _is_inline_list(v):
+    """Numbers (a position, a colour, a bounds box) stay on one line; strings (map rows,
+    dialogue lines) go one per line so a map reads as a picture."""
+    return _is_scalar_list(v) and all(not isinstance(x, str) for x in v)
+
+
 def canonical(obj, kind="project", ind=0):
     """The one text form of a project: fixed key order, indent 1, scalar arrays on one line
     (a map row per line, a point on one line), integral floats as ints, UTF-8 as is."""
@@ -392,8 +407,10 @@ def canonical(obj, kind="project", ind=0):
     if isinstance(obj, list):
         if not obj:
             return "[]"
-        if _is_scalar_list(obj):
+        if _is_inline_list(obj):
             return "[" + ", ".join(_scalar(x) for x in obj) + "]"
+        if _is_scalar_list(obj):
+            return "[\n" + ",\n".join(pad + " " + _scalar(x) for x in obj) + "\n" + pad + "]"
         return "[\n" + ",\n".join(pad + " " + canonical(x, kind, ind + 1) for x in obj) + "\n" + pad + "]"
     return _scalar(obj)
 
@@ -584,8 +601,16 @@ def validate(project, base=None, story=None):
                     errs.append("%s: hide/show names unknown sprite %r" % (p, n))
     if story:
         import re
-        for m in re.finditer(r"d\.set\(\s*[\"']([^\"']+)[\"']", story):
+        for m in re.finditer(r"d\.(?:ev_)?set\(\s*[\"']([^\"']+)[\"']", story):
             setflags.add(m.group(1))
+        # bodies written for the old compiled runner reached its globals; a story.py only sees d
+        code = "\n".join(l.split("#", 1)[0] for l in story.split("\n"))   # comments are not code
+        for pat, fix in ((r"(?<![\w.\"'])view\.", "d.view."), (r"(?<![\w.\"'])player\b(?![\"'])", 'd.view.named["player"]'),
+                         (r"(?<![\w.\"'])goto\(", "yield from d.goto("), (r"(?<![\w.\"'])apply_effects\(", "d.set(flag) replays effects")):
+            for m in re.finditer(pat, code):
+                line = code.count("\n", 0, m.start()) + 1
+                errs.append("story.py:%d: %s is not defined in a story script - use %s" % (line, m.group(0).rstrip("(."), fix))
+                break
     for flag in sorted(tested - setflags):
         warn.append("flag %r is tested but nothing sets it" % flag)
     return errs, warn

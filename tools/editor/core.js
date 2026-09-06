@@ -172,8 +172,8 @@
       } else if (a.type === "tileset_color") {
         e.tile = [a.fw, a.fh]; e.colors = a.colors;
       }
-      if (a.props) e.props = a.props;
-      if (a.animations) e.animations = a.animations;
+      if (a.props && Object.keys(a.props).length) e.props = a.props;
+      if (a.animations && Object.keys(a.animations).length) e.animations = a.animations;
       out[id] = e;
     }
     return out;
@@ -555,6 +555,9 @@
   function isScalarList(v) {
     return Array.isArray(v) && v.every(function (x) { return x === null || typeof x !== "object"; });
   }
+  // numbers (a position, a colour, a bounds box) stay on one line; strings (map rows, dialogue
+  // lines) go one per line so a map reads as a picture
+  function isInlineList(v) { return isScalarList(v) && v.every(function (x) { return typeof x !== "string"; }); }
   function canonical(obj, kind, ind) {
     const pad = " ".repeat(ind || 0);
     if (obj && typeof obj === "object" && !Array.isArray(obj)) {
@@ -566,7 +569,8 @@
     }
     if (Array.isArray(obj)) {
       if (!obj.length) return "[]";
-      if (isScalarList(obj)) return "[" + obj.map(scalar).join(", ") + "]";
+      if (isInlineList(obj)) return "[" + obj.map(scalar).join(", ") + "]";
+      if (isScalarList(obj)) return "[\n" + obj.map(function (x) { return pad + " " + scalar(x); }).join(",\n") + "\n" + pad + "]";
       return "[\n" + obj.map(function (x) { return pad + " " + canonical(x, kind, (ind || 0) + 1); }).join(",\n") + "\n" + pad + "]";
     }
     return scalar(obj);

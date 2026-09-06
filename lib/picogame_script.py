@@ -80,6 +80,7 @@ class Director:
         self.pending = None      # (level, point) a script asked to travel to; the game loop loads
         self.zone_runner = None  # dict -> generator (picogame_story.Story installs itself here)
         self.on_flag = None      # callable(flag) run after set(): replays level effects
+        self.view = None         # the current picogame_scene.View (picogame_story keeps it fresh)
 
     # -- registry / lifecycle -------------------------------------------------
     def on(self, name, genfunc):

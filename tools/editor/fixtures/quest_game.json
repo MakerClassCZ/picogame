@@ -60,7 +60,12 @@
      "kind": "tilemap",
      "asset": "tiles",
      "pos": [0, 0],
-     "rows": ["##########", "#........#", "#..=..G..#", "##########"]
+     "rows": [
+      "##########",
+      "#........#",
+      "#..=..G..#",
+      "##########"
+     ]
     },
     {
      "kind": "sprite",
@@ -110,10 +115,16 @@
       "say": [
        {
         "if": "gate_open",
-        "lines": ["Elder:", "Go on."]
+        "lines": [
+         "Elder:",
+         "Go on."
+        ]
        },
        {
-        "lines": ["Elder:", "Pull the lever."]
+        "lines": [
+         "Elder:",
+         "Pull the lever."
+        ]
        }
       ]
      }
@@ -126,9 +137,13 @@
      "h": 16,
      "data": {
       "ask": {
-       "lines": ["Pull the lever?"],
+       "lines": [
+        "Pull the lever?"
+       ],
        "set": "gate_open",
-       "done": ["Already pulled."]
+       "done": [
+        "Already pulled."
+       ]
       }
      }
     },
@@ -139,9 +154,14 @@
      "w": 16,
      "h": 32,
      "data": {
-      "goto": ["cave", "entry"],
+      "goto": [
+       "cave",
+       "entry"
+      ],
       "if": "gate_open",
-      "denied": ["The gate is shut."]
+      "denied": [
+       "The gate is shut."
+      ]
      }
     },
     {
@@ -167,7 +187,9 @@
      "if": "gate_open",
      "swap": [7, 0],
      "unsolid": [7],
-     "hide": ["gate_npc"]
+     "hide": [
+      "gate_npc"
+     ]
     }
    ]
   },
@@ -179,7 +201,11 @@
      "kind": "tilemap",
      "asset": "tiles",
      "pos": [0, 0],
-     "rows": ["####", "#..#", "####"]
+     "rows": [
+      "####",
+      "#..#",
+      "####"
+     ]
     },
     {
      "kind": "sprite",
