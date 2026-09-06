@@ -138,6 +138,7 @@ def load_any(path):
     if int(src.get("version", 1)) < 2:
         src = _upgrade_v1(src, stem)
     _slugify(src)
+    _asciify(src)
     return src
 
 
@@ -259,6 +260,57 @@ def _upgrade_v1(p, stem):
     if "start" not in p and p.get("levels"):
         p["start"] = p["levels"][0].get("name")
     return p
+
+
+# The ASCII alphabet for map rows - the editor's LEGEND_CHARS, character for character, so both
+# tools give a new tile the same letter. '.' is tile 0; " and \ are excluded (JSON-hostile).
+LEGEND_CHARS = ("#o=+*xXOA BCDEFGHIJKLMNPQRSTUVWYZabcdefghijklmnpqrstuvwyz0123456789"
+                "!$%&()<>?@[]^_{|}~;:,'`/").replace(" ", "")
+
+
+def _rows_from_grid(grid, legend):
+    """int grid -> rows over `legend` (mutated append-only, like the editor's asciiRows), or None
+    when the alphabet runs out."""
+    legend.setdefault(".", 0)
+    char_of = {}
+    for ch, v in legend.items():
+        char_of.setdefault(v, ch)
+    missing = sorted({v for row in grid for v in row if v not in char_of})
+    ci = 0
+    for v in missing:
+        while ci < len(LEGEND_CHARS) and LEGEND_CHARS[ci] in legend:
+            ci += 1
+        if ci >= len(LEGEND_CHARS):
+            return None
+        legend[LEGEND_CHARS[ci]] = v
+        char_of[v] = LEGEND_CHARS[ci]
+        ci += 1
+    return ["".join(char_of[v] for v in row) for row in grid]
+
+
+def _asciify(p):
+    """Every tilemap layer as ASCII rows over its asset's legend - the one authoring form. A grid
+    stays only when a layer uses more distinct tiles than the alphabet holds."""
+    assets = p.get("assets", {})
+    for lv in p.get("levels", []):
+        for layer in lv.get("layers", []):
+            if layer.get("kind") != "tilemap" or "grid" not in layer:
+                continue
+            a = assets.get(layer.get("asset"))
+            if a is None:
+                continue
+            legend = a.setdefault("legend", {})
+            if layer.get("legend"):
+                for ch, v in layer["legend"].items():
+                    legend.setdefault(ch, v)
+            rows = _rows_from_grid(layer["grid"], legend)
+            if rows is None:
+                continue
+            layer["rows"] = rows
+            del layer["grid"]
+            layer.pop("legend", None)
+            layer.pop("cols", None)
+            layer.pop("rows_", None)
 
 
 def _slugify(p):
