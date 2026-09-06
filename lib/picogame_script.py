@@ -227,7 +227,7 @@ class Director:
             import picogame_fx
             w, h = self._screen()
             self._fade = picogame_fx.Fade(self.scene, w, h)
-            if self._box is not None and hasattr(self._box, "lift"):
+            if self._box is not None:
                 # Insertion order is z-order: a box built earlier now sits UNDER the fade and a
                 # dim() would stipple the dialogue away - lift it back on top (one-off repaint).
                 self._box.lift()
