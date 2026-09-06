@@ -1992,7 +1992,7 @@ if ($("btnExportProj")) $("btnExportProj").onclick = async function () {
 // substitute them with coloured placeholder BLOCKS (after a warning) so the level still runs: a PNG
 // sprite becomes a rect of the same size (distinct colour per asset), a PNG tileset becomes a
 // tileset_color (a distinct colour per used tile index). Cancel keeps the clean decline. This is a pure
-// editor-side transform on the EXPORTED COPY -- the real project is never touched, and scene_bake.py /
+// editor-side transform on the handed-over COPY -- the real project is never touched, and the baker /
 // the runner / the playground need no changes (rect + tileset_color are already supported).
 // Transport: stash the (colour-only) scene JSON in localStorage (same-origin, no URL-size limit) and
 // open the playground with ?from=editor; editor.js reads the key, wraps it in a short runner, Runs.
@@ -2091,7 +2091,7 @@ function inlinePngAssets(scene, pngIds) {
 // story outgrows data. The compiler lives with the playground (one source).
 function storyCompiler() {
   var base = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";
-  return import(base + "vendor/runner_stubs.mjs?v=rs4");
+  return import(base + "vendor/runner_stubs.mjs?v=rs5");
 }
 // ---- Zone story form (opens in a MODAL - room the side panel lacks) --------
 // say / ask / goto edit as FIELDS (flags autocomplete, level+point dropdowns);

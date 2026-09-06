@@ -490,7 +490,8 @@ def load_json(pg, path, display=None, strip_h=None, font=None, bank=None, releas
     `release=True` drops the baker module afterwards (~3.6 kB). Pass False when loading several
     levels in a row, then release it yourself after the last one.
 
-    Colour-tileset levels only (see picogame_scenebake); PNG-backed art must be pre-baked.
+    A game.json given here is opened through Game (its start level is returned); PNG art comes
+    from the .pal8 sidecars next to the file.
     """
     import json
     import picogame_scenebake

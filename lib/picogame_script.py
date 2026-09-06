@@ -10,11 +10,9 @@
 #         yield from d.text(["Old man:", "The gate is stuck.", "Try the lever."])
 #         yield from d.ask(["Pull it now?"])
 #         if d.answer:
-#             view.set_tile_prop(GATE_TILE, "solid", False)
-#             d.ev_set("gate_open")
-#             yield from d.fade_out()
-#             # ... switch maps here ...
-#             yield from d.fade_in()
+#             d.view.set_tile_prop(GATE_TILE, "solid", False)   # d.view = the level (picogame_story)
+#             d.set("gate_open")                                # sets the flag + replays effects
+#             yield from d.goto("cave", "entry")               # fade out, swap level, fade in
 #
 #     d = picogame_script.Director(pg, view.scene, btns, terminalio.FONT)
 #     d.on("intro", intro)
