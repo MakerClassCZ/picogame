@@ -77,22 +77,52 @@ class Director:
         self._fade = None
         self.answer = False      # set by ask()
         self.events = set()      # story flags; persist via your save schema
+        self.pending = None      # (level, point) a script asked to travel to; the game loop loads
+        self.zone_runner = None  # dict -> generator (picogame_story.Story installs itself here)
+        self.on_flag = None      # callable(flag) run after set(): replays level effects
 
     # -- registry / lifecycle -------------------------------------------------
     def on(self, name, genfunc):
         self._scripts[name] = genfunc
         return self
 
+    def has(self, name):
+        return name in self._scripts
+
     def start(self, script):
-        """Start a script: a registered name, a generator function, or a
-        generator. A script already running is NOT interrupted (returns False)."""
+        """Start a script: story DATA (a dict from a zone, needs picogame_story), a registered
+        name, a generator function, or a generator. A script already running is NOT
+        interrupted (returns False)."""
         if not self._seq.done:
             return False
-        g = self._scripts.get(script, script)
-        if callable(g):
-            g = g(self)
+        if isinstance(script, dict):
+            if self.zone_runner is None:
+                raise TypeError("zone data needs picogame_story.Story to run it")
+            g = self.zone_runner(script)
+            if g is None:
+                return False
+        else:
+            g = self._scripts.get(script, script)
+            if callable(g):
+                g = g(self)
         self._seq.start(g)
         return True
+
+    def goto(self, level, at=None):
+        """Travel: fade out, ask the game loop to load `level` (it sees d.pending and calls
+        game.load + d.retarget), then fade back in on the new scene. Use with `yield from`."""
+        yield from self.fade_out(4.0)
+        self.pending = (level, at)
+        yield                     # the loop swaps the level between these two steps
+        while self.pending is not None:
+            yield
+        yield from self.fade_in(4.0)
+
+    def set(self, name):
+        """Set a story flag AND replay the level's effects (a lever opens a gate now)."""
+        self.events.add(name)
+        if self.on_flag is not None:
+            self.on_flag(name)
 
     def retarget(self, scene):
         """Point the Director at a NEW scene after a map load. The dialog box

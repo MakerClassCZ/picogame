@@ -396,16 +396,18 @@ of argued. The declarative scene format accepts the same thing natively — a ti
 `"legend": {char: tile}` + `"rows": [str, …]` instead of `"grid": [[int…]…]`, and `tools/scene_build.py`
 bakes both to the identical `bytes` — so ASCII is not a lesser path, it is the *authoring* path.
 
-**Who owns the level file (agent vs the editor).** The web editor round-trips an authoring
-`scene.json`: it can export the ASCII form and **open an exported scene back**, so a level can pass
-between you and the user — you do the bulk/systematic passes, they draw and polish. It is turn-taking,
-NOT merging by itself — but if the level is in git, **git merges it**: in the ASCII form one map row
-is one line, so your ceiling (top rows) and their floor (bottom rows) merge with no conflict, and only
-edits to the SAME row collide (git then leaves both versions as two readable map rows). So: commit the
-level before a bulk pass, and say which of you is holding the file. Two practical notes —
-the editor resolves art by filename from the folder it saves into, so keep the level's PNGs beside it;
-and a scene has no level name of its own (the file name becomes it). Full schema: `docs/scene-format.md`
-(published at `/scene-format/`).
+**Who owns the level file (agent vs the editor).** The web editor saves ONE `game.json` per game and
+opens it back, so a level passes between you and the user — you do the bulk/systematic passes, they
+draw and polish. The tileset's `legend` is the alphabet of every map row: append a character for a
+new tile, never re-letter existing ones, or the diff stops being a picture and the user's mnemonics
+vanish. Before handing back run `python3 tools/scene_build.py check` (dangling ids, legend typos,
+rows of unequal length, unknown `goto` targets, flags never set) and `fmt` (the canonical text the
+editor also writes, so whitespace never fights). Tile flags mean what the runner reads: `solid`,
+`coin`, `goal`, `hazard` (plus names the game defines) — `transparent` is the asset's transparent
+colour index, NOT a flag, and a "transparent wall" is a bug, not a feature. If the level is in git,
+**git merges it**: one map row is one line, so your ceiling (top rows) and their floor (bottom rows)
+merge with no conflict, and only edits to the SAME row collide (git then leaves both versions as two
+readable map rows). With a folder chosen in the editor, your write shows up there within 2 s.
 
 **Difficulty is data + one ramp formula, not branching code.** Keep tuning numbers in module-level
 tuples indexed by level (lines-to-advance, fruit/scatter/frighten timers), and ramp continuous

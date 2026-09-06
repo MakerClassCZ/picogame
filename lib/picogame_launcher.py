@@ -133,6 +133,18 @@ def _read_json(path):
         return None
 
 
+def _game_json(path):
+    try:
+        os.stat(path)
+    except OSError:
+        return None
+    try:
+        import picogame_scenebake
+        return picogame_scenebake.head(path, ("name", "icon", "launcher"))
+    except Exception:
+        return {}                       # present but unreadable: still a game, folder name as title
+
+
 def _players(d):
     try:
         return int(d.get("players", 1))
@@ -157,6 +169,13 @@ def _apps_in(folder, tag=""):
     if isinstance(mj, dict):
         return [App(folder, mj.get("entry", "code.py"), mj.get("title", name), mj.get("icon"),
                     mj.get("author", ""), mj.get("category", tag), _players(mj), mj.get("desc", ""))]
+    gj = _game_json(folder + "/game.json")
+    if gj is not None:
+        # a data-driven game: name/icon + an optional "launcher" block live in game.json itself,
+        # read with the streaming walker (a few hundred bytes, the levels are never parsed)
+        lb = gj.get("launcher") if isinstance(gj.get("launcher"), dict) else {}
+        return [App(folder, lb.get("entry", "code.py"), gj.get("name") or name, gj.get("icon"),
+                    lb.get("author", ""), lb.get("category", tag), _players(lb), lb.get("desc", ""))]
     try:
         os.stat(folder + "/code.py")
         return [App(folder, "code.py", name, category=tag)]

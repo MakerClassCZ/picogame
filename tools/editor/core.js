@@ -186,15 +186,16 @@
   const LEGEND_CHARS = "#o=+*xXOA BCDEFGHIJKLMNPQRSTUVWYZabcdefghijklmnpqrstuvwyz0123456789" +
     "!$%&()<>?@[]^_{|}~;:,'`/".replace(/ /g, "");
 
-  // A tilemap layer in one of the two forms scene_build.py accepts: the int `grid` (compact,
-  // what a machine reads) or `legend` + `rows` (the same map as an ASCII picture — reviewable
-  // in a diff, editable by hand or by an agent). Falls back to the grid when a map needs more
-  // distinct values than the alphabet has characters.
-  function tilemapLayer(tm, ascii) {
+  // A tilemap layer in one of the two forms the baker accepts: the int `grid` (compact, what a
+  // machine reads) or `rows` over a legend (the same map as an ASCII picture — reviewable in a
+  // diff, editable by hand or by an agent). In game.json (v2) the legend lives in the ASSET and
+  // is shared by every layer that paints with it; a v1 scene carries it on the layer. Falls back
+  // to the grid when a map needs more distinct values than the alphabet has characters.
+  function tilemapLayer(tm, ascii, assetLegend) {
     const L = { kind: "tilemap", asset: tm.asset, pos: tm.pos.slice() };
-    const rows = ascii ? asciiRows(tm.grid) : null;
+    const rows = ascii ? asciiRows(tm.grid, assetLegend) : null;
     if (rows) {
-      L.legend = rows.legend;
+      if (!assetLegend) L.legend = rows.legend;      // v1 form: legend on the layer
       L.rows = rows.rows;
     } else {
       L.grid = tm.grid.map(function (r) { return r.slice(); });
@@ -205,46 +206,69 @@
 
   // The int grid of a tilemap layer in EITHER authoring form — the one place that knows both,
   // so every consumer (the baker below, importers, tests) reads a grid and nothing else has to
-  // branch. Mirrors bake_tilemap() in tools/scene_build.py.
-  function layerGrid(L) {
+  // branch. Mirrors _bake_tilemap() in picogame_scenebake. `assets` supplies the v2 asset legend.
+  function layerGrid(L, assets) {
     if (L.grid) return L.grid;
-    const legend = L.legend || {};
+    const legend = L.legend || (assets && assets[L.asset] && assets[L.asset].legend) || {};
     return (L.rows || []).map(function (row) {
       return row.split("").map(function (ch) { return legend[ch] || 0; });
     });
   }
 
   // grid -> {legend: {char: value}, rows: [str]}, or null if it doesn't fit the alphabet.
+  // The legend is APPEND-ONLY: chars already in `legend` keep their value (so a map's diff stays
+  // a picture and an agent's mnemonic letters survive a Save), new values get the next free
+  // char in ascending-value order. `legend` is MUTATED (it is the asset's persistent legend).
   // A cell value may carry orientation in bits 8-10; the legend value carries it too, so an
   // oriented tile is just its own legend entry.
-  function asciiRows(grid) {
-    const seen = [];
+  function asciiRows(grid, legend) {
+    legend = legend || {};
+    if (!(("." in legend) && legend["."] === 0)) legend["."] = 0;
+    const charOf = {};
+    for (const ch in legend) if (!(legend[ch] in charOf)) charOf[legend[ch]] = ch;
+    const missing = [];
     grid.forEach(function (r) {
-      r.forEach(function (v) { if (v !== 0 && seen.indexOf(v) < 0) seen.push(v); });
+      r.forEach(function (v) { if (!(v in charOf) && missing.indexOf(v) < 0) missing.push(v); });
     });
-    if (seen.length > LEGEND_CHARS.length) return null;
-    seen.sort(function (a, b) { return a - b; });
-    const legend = { ".": 0 }, charOf = { 0: "." };
-    seen.forEach(function (v, i) { legend[LEGEND_CHARS[i]] = v; charOf[v] = LEGEND_CHARS[i]; });
+    missing.sort(function (a, b) { return a - b; });
+    let ci = 0;
+    for (const v of missing) {
+      while (ci < LEGEND_CHARS.length && (LEGEND_CHARS[ci] in legend)) ci++;
+      if (ci >= LEGEND_CHARS.length) return null;
+      legend[LEGEND_CHARS[ci]] = v; charOf[v] = LEGEND_CHARS[ci]; ci++;
+    }
     return { legend: legend, rows: grid.map(function (r) {
       return r.map(function (v) { return charOf[v]; }).join("");
     }) };
   }
 
   // ordered layers (bg tilemaps -> sprites/groups/particles -> fg tilemaps -> hud)
-  // + camera/zones/points/music for one level.
-  function buildLevel(level, ascii) {
+  // + camera/zones/points/music for one level. `assets` (v2) = the project's assets, whose
+  // legends the ASCII rows use; a tagged entity that also carries a name, data, frame or anim is
+  // exported as a sprite WITH a tag (the loader still files it under its group), so nothing of it
+  // is lost in the group fold.
+  function buildLevel(level, ascii, assets) {
     const bg = [], mid = [], fg = [], hud = [];
-    (level.tilemaps || []).forEach(function (tm) { (tm.fg ? fg : bg).push(tilemapLayer(tm, ascii)); });
+    (level.tilemaps || []).forEach(function (tm) {
+      const a = assets && assets[tm.asset];
+      if (a && ascii) a.legend = a.legend || {};
+      (tm.fg ? fg : bg).push(tilemapLayer(tm, ascii, a ? a.legend : null));
+    });
     const byTag = {};
     (level.entities || []).forEach(function (en) {
-      if (en.tag) {
+      const plain = en.tag && !en.name && !en.data && !en.frame && !en.angle;
+      if (plain) {
         const g = byTag[en.tag] = byTag[en.tag] ||
           { asset: en.asset, anchor: en.anchor, anim: en.anim, insts: [] };
         g.insts.push([en.x, en.y]);
       } else {
-        const L = { kind: "sprite", asset: en.asset, name: en.name || null,
-          pos: [en.x, en.y], anchor: (en.anchor || [0, 0]).slice(), frame: en.frame || 0 };
+        const L = { kind: "sprite", asset: en.asset };
+        if (en.name) L.name = en.name;
+        if (en.tag) L.tag = en.tag;
+        L.pos = [en.x, en.y];
+        const an = en.anchor || [0, 0];
+        if (an[0] || an[1]) L.anchor = an.slice();
+        if (en.frame) L.frame = en.frame;
         if (en.anim) L.anim = en.anim;
         if (en.data) L.data = en.data;
         if (en.angle) L.angle = en.angle;
@@ -253,8 +277,10 @@
     });
     for (const tag in byTag) {
       const g = byTag[tag];
-      const L = { kind: "group", asset: g.asset, tag: tag,
-        anchor: (g.anchor || [0, 0]).slice(), instances: g.insts };
+      const L = { kind: "group", asset: g.asset, tag: tag };
+      const ga = g.anchor || [0, 0];
+      if (ga[0] || ga[1]) L.anchor = ga.slice();
+      L.instances = g.insts;
       if (g.anim) L.anim = g.anim;
       mid.push(L);
     }
@@ -276,6 +302,8 @@
       out.zones = level.zones.map(function (z) { return Object.assign({}, z); });
     if (level.points && level.points.length)
       out.points = level.points.map(function (p) { return Object.assign({}, p); });
+    if (level.effects && level.effects.length)
+      out.effects = level.effects.map(function (r) { return Object.assign({}, r); });
     if (level.music) out.music = level.music;
     return out;
   }
@@ -297,6 +325,22 @@
   // it saved itself, so a level someone else touched - a person with a text editor, an agent doing
   // a bulk pass - leaves the editor for good. Pixels are NOT in the export (assets carry a `src`
   // filename), so the caller supplies them afterwards; everything else round-trips.
+  const ASSET_KEYS = ["type", "src", "frame", "tile", "size", "frames", "transparent", "color",
+    "colors", "legend", "props", "animations"];
+  const LEVEL_KEYS = ["name", "title", "background", "worldSize", "layers", "camera", "zones",
+    "points", "effects", "music"];
+  const GAME_KEYS = ["format", "version", "name", "icon", "size", "start", "launcher", "assets",
+    "sounds", "scripts", "levels"];
+
+  // Keys this editor does not model are kept aside (`extra`) and written back on export, so a
+  // file that an agent or a newer tool extended survives a round trip through here untouched.
+  function keepExtra(obj, known) {
+    const extra = {};
+    let any = false;
+    for (const k in obj || {}) if (known.indexOf(k) < 0) { extra[k] = obj[k]; any = true; }
+    return any ? extra : null;
+  }
+
   function importAssets(assets) {
     const out = {};
     for (const id in assets || {}) {
@@ -313,28 +357,35 @@
       }
       if (e.props) a.props = e.props;
       if (e.animations) a.animations = e.animations;
+      if (e.legend) a.legend = Object.assign({}, e.legend);
+      const extra = keepExtra(e, ASSET_KEYS);
+      if (extra) a.extra = extra;
       out[id] = a;
     }
     return out;
   }
 
-  // One exported level ({layers, camera, zones, points, music}) -> an editor level.
-  function importLevel(src, name) {
+  // One exported level ({layers, camera, zones, points, music}) -> an editor level. `assets` =
+  // the exported assets (v2 rows read their legend from them).
+  function importLevel(src, name, assets) {
     const lv = newLevel(name || "level");
     // The export carries no world extent (only the device screen), so drop newLevel's default
     // one-screen worldSize and let deserialize() derive it from the content - the same path old
     // projects take. Keeping the default would shrink a scrolling level's world to one screen,
     // and with it the camera bounds.
     delete lv.worldSize;
+    if (src.worldSize && src.worldSize.length === 2) lv.worldSize = src.worldSize.slice();
+    if (src.title) lv.title = src.title;
     if (src.background) lv.background = src.background.slice();
     (src.layers || []).forEach(function (L) {
       if (L.kind === "tilemap") {
-        const grid = layerGrid(L).map(function (r) { return r.slice(); });
+        const grid = layerGrid(L, assets).map(function (r) { return r.slice(); });
         lv.tilemaps.push({ asset: L.asset, cols: grid[0] ? grid[0].length : 0, rows: grid.length,
           grid: grid, pos: (L.pos || [0, 0]).slice(), fg: !!L.fg });
       } else if (L.kind === "sprite") {
         const en = { asset: L.asset, name: L.name || null, x: (L.pos || [0, 0])[0],
           y: (L.pos || [0, 0])[1], anchor: (L.anchor || [0, 0]).slice(), frame: L.frame || 0 };
+        if (L.tag) en.tag = L.tag;
         if (L.anim) en.anim = L.anim;
         if (L.data) en.data = L.data;
         if (L.angle) en.angle = L.angle;
@@ -358,26 +409,212 @@
     if (src.camera) lv.camera = Object.assign({}, src.camera);
     if (src.zones) lv.zones = src.zones.map(function (z) { return Object.assign({}, z); });
     if (src.points) lv.points = src.points.map(function (p) { return Object.assign({}, p); });
+    if (src.effects) lv.effects = src.effects.map(function (r) { return Object.assign({}, r); });
     if (src.music) lv.music = src.music;
+    const extra = keepExtra(src, LEVEL_KEYS);
+    if (extra) lv.extra = extra;
     return lv;
   }
 
-  // An exported scene OR project -> a project. `name` names the single level of a scene (the
-  // export has no level name - it was the file name). deserialize() then fills in everything
-  // the export does not carry: worldSize comes from contentBounds, exactly as it does for
-  // projects that predate the field.
+  // An exported scene OR project (v1 scene.json / project.json, v2 game.json) -> a project.
+  // `name` names the single level of a scene (the export has no level name - it was the file
+  // name). deserialize() then fills in everything the export does not carry: worldSize comes
+  // from contentBounds, exactly as it does for projects that predate the field.
   function importExported(obj, name) {
     const p = { size: (obj.size || [320, 240]).slice(), assets: importAssets(obj.assets),
       sounds: obj.sounds || {}, levels: [], current: 0 };
+    if (obj.name) p.name = obj.name;
+    if (obj.icon) p.icon = obj.icon;
+    if (obj.launcher) p.launcher = Object.assign({}, obj.launcher);
+    if (obj.scripts) p.scripts = Object.assign({}, obj.scripts);   // v1 project.json carried Python bodies
     if (obj.format === "picogame-project" || obj.levels) {
       p.levels = (obj.levels || []).map(function (lv, i) {
-        return importLevel(lv, lv.name || ("level" + (i + 1)));
+        return importLevel(lv, lv.name || ("level" + (i + 1)), obj.assets);
+      });
+      if (obj.start) p.start = obj.start;
+      // a v1 project put the legend on each layer: pull them up into the assets (append-only)
+      (obj.levels || []).forEach(function (lv) {
+        (lv.layers || []).forEach(function (L) {
+          if (L.kind !== "tilemap" || !L.legend || !p.assets[L.asset]) return;
+          const a = p.assets[L.asset];
+          a.legend = a.legend || {};
+          for (const ch in L.legend) if (!(ch in a.legend)) a.legend[ch] = L.legend[ch];
+        });
       });
     } else {
-      p.levels = [importLevel(obj, name || "level1")];
+      p.levels = [importLevel(obj, name || "level1", obj.assets)];
     }
     if (!p.levels.length) p.levels = [newLevel("level1")];
+    const extra = keepExtra(obj, GAME_KEYS);
+    if (extra) p.extra = extra;
     return deserialize(p);
+  }
+
+  // ---------------------------------------------------------------- game.json (v2) export
+  // ONE file for the whole game: name/size/start, the assets table (references + legends +
+  // props, never pixels), sounds and every level with ASCII rows. Unknown keys a tool or an agent
+  // added ride through untouched (see keepExtra). This is what Save writes, what the device and
+  // scene_build.py read, and what an agent edits.
+  // level names are identifiers (module suffixes on the device, keys everywhere): the same rule
+  // as scene_build.py's _slug, so both tools agree on the name a level gets
+  function slugName(name) {
+    let s = String(name == null ? "" : name).replace(/[^A-Za-z0-9_]/g, "_").toLowerCase();
+    if (!s || /^[0-9]/.test(s)) s = "l_" + s;
+    return s;
+  }
+
+  function exportGame(project) {
+    const assets = exportAssets(project);
+    for (const id in assets) {
+      const a = project.assets[id];
+      if (a.legend) assets[id].legend = a.legend;       // the same object: buildLevel appends to it
+      if (a.extra) Object.assign(assets[id], a.extra);
+    }
+    // legends are shared objects between the model asset and the export: append-only growth
+    for (const id in assets) if (assets[id].legend) { project.assets[id].legend = assets[id].legend; }
+    const out = { format: "picogame-project", version: 2 };
+    if (project.name) out.name = project.name;
+    if (project.icon) out.icon = project.icon;
+    out.size = project.size.slice();
+    const startLv = project.levels.find(function (l) { return l.name === project.start; }) || project.levels[0];
+    if (startLv) out.start = startLv.name;
+    if (project.launcher) out.launcher = Object.assign({}, project.launcher);
+    out.assets = assets;
+    out.sounds = Object.assign({}, project.sounds || {});
+    const ren = {};
+    project.levels.forEach(function (l) { const sl = slugName(l.name); if (sl !== l.name) ren[l.name] = sl; });
+    if (out.start in ren) out.start = ren[out.start];
+    out.levels = project.levels.map(function (l) {
+      const o = buildLevel(l, true, assets);
+      const e = { name: ren[l.name] || l.name };
+      if (l.title) e.title = l.title; else if (ren[l.name]) e.title = l.name;
+      (o.zones || []).forEach(function (z) {          // goto targets follow the rename
+        const d = z.data; if (!d || !d.goto) return;
+        if (Array.isArray(d.goto)) { if (d.goto[0] in ren) { d.goto = d.goto.slice(); d.goto[0] = ren[d.goto[0]]; } }
+        else if (d.goto in ren) d.goto = ren[d.goto];
+      });
+      e.background = l.background.slice();
+      // worldSize is written only when it says more than the content does (a level whose world
+      // equals its painted extent round-trips without the key, as it was authored)
+      const cb = contentBounds(project, l);
+      if (l.worldSize && (l.worldSize[0] !== cb[0] || l.worldSize[1] !== cb[1])) e.worldSize = l.worldSize.slice();
+      e.layers = o.layers;
+      if (o.camera) e.camera = o.camera;
+      if (o.zones) e.zones = o.zones;
+      if (o.points) e.points = o.points;
+      if (o.effects) e.effects = o.effects;
+      if (o.music) e.music = o.music;
+      if (l.extra) Object.assign(e, l.extra);
+      return e;
+    });
+    if (project.extra) for (const k in project.extra) if (!(k in out)) out[k] = project.extra[k];
+    return out;
+  }
+
+  // ---------------------------------------------------------------- canonical text
+  // The ONE text form of a game.json, byte-identical to `scene_build.py fmt` (key order from the
+  // shared tables, indent 1, scalar arrays on one line = a map row per line, integral floats as
+  // ints, UTF-8 as is, trailing newline). Both writers are golden-tested against the same fixture,
+  // so an agent's `fmt` and the editor's Save never fight over whitespace.
+  const ORDER = {
+    project: GAME_KEYS,
+    asset: ASSET_KEYS,
+    level: LEVEL_KEYS,
+    layer: ["kind", "asset", "name", "tag", "pos", "anchor", "frame", "anim", "angle", "data",
+      "instances", "fg", "bg", "capacity", "size", "gravity", "fade", "legend", "rows", "grid"],
+    zone: ["tag", "x", "y", "w", "h", "data"],
+    point: ["name", "x", "y", "data"],
+    camera: ["mode", "target", "axis", "bounds"],
+  };
+  function childKind(kind, key) {
+    if (kind === "project") return { assets: "assets", levels: "level" }[key] || null;
+    if (kind === "assets") return "asset";
+    if (kind === "level") return { layers: "layer", zones: "zone", points: "point", camera: "camera" }[key] || null;
+    return null;
+  }
+  function orderedKeys(obj, kind) {
+    const keys = Object.keys(obj);
+    if (kind === "assets") return keys.slice().sort();   // the assets table: by id, like fmt
+    if (kind && ORDER[kind]) {
+      const known = ORDER[kind].filter(function (k) { return k in obj; });
+      const rest = keys.filter(function (k) { return ORDER[kind].indexOf(k) < 0; }).sort();
+      return known.concat(rest);
+    }
+    // a plain dict: digit keys first in numeric order, then the others as they came (what both
+    // JS objects and Python dicts can promise)
+    const num = keys.filter(function (k) { return /^-?\d+$/.test(k); }).sort(function (a, b) { return a - b; });
+    return num.concat(keys.filter(function (k) { return !/^-?\d+$/.test(k); }));
+  }
+  function scalar(v) {
+    if (v === true) return "true";
+    if (v === false) return "false";
+    if (v == null) return "null";
+    if (typeof v === "number") return Number.isFinite(v) ? String(v) : "null";
+    return JSON.stringify(v);
+  }
+  function isScalarList(v) {
+    return Array.isArray(v) && v.every(function (x) { return x === null || typeof x !== "object"; });
+  }
+  function canonical(obj, kind, ind) {
+    const pad = " ".repeat(ind || 0);
+    if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+      const keys = orderedKeys(obj, kind);
+      if (!keys.length) return "{}";
+      return "{\n" + keys.map(function (k) {
+        return pad + " " + JSON.stringify(k) + ": " + canonical(obj[k], childKind(kind, k), (ind || 0) + 1);
+      }).join(",\n") + "\n" + pad + "}";
+    }
+    if (Array.isArray(obj)) {
+      if (!obj.length) return "[]";
+      if (isScalarList(obj)) return "[" + obj.map(scalar).join(", ") + "]";
+      return "[\n" + obj.map(function (x) { return pad + " " + canonical(x, kind, (ind || 0) + 1); }).join(",\n") + "\n" + pad + "]";
+    }
+    return scalar(obj);
+  }
+  function canonicalJson(game) { return canonical(game, "project", 0) + "\n"; }
+
+  // ---------------------------------------------------------------- .pal8 sidecars
+  // The device reads pixels from <stem>.pal8 next to game.json (picogame_scene.read_pal8):
+  // "PAL8" | ver u8 | flags u8 (bit0: index 0 transparent) | fw u16 | fh u16 | frames u16 |
+  // ncol u16 | reserved u16 (16 bytes, little-endian) | ncol x u16 wire-RGB565 | fw*frames*fh indices.
+  function encodePal8(data, fw, fh, frames, palette, transparent) {
+    if (data.length !== fw * frames * fh) throw new Error("pal8 data is " + data.length + " bytes, expected " + fw * frames * fh);
+    const out = new Uint8Array(16 + palette.length * 2 + data.length);
+    const dv = new DataView(out.buffer);
+    out[0] = 0x50; out[1] = 0x41; out[2] = 0x4C; out[3] = 0x38;      // "PAL8"
+    out[4] = 1; out[5] = transparent === 0 ? 1 : 0;
+    dv.setUint16(6, fw, true); dv.setUint16(8, fh, true); dv.setUint16(10, frames, true);
+    dv.setUint16(12, palette.length, true); dv.setUint16(14, 0, true);
+    palette.forEach(function (c, i) { dv.setUint16(16 + i * 2, c, true); });
+    out.set(data, 16 + palette.length * 2);
+    return out;
+  }
+  function decodePal8(u8) {
+    if (u8.length < 16 || u8[0] !== 0x50 || u8[1] !== 0x41 || u8[2] !== 0x4C || u8[3] !== 0x38) throw new Error("not a .pal8 file");
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const fw = dv.getUint16(6, true), fh = dv.getUint16(8, true), frames = dv.getUint16(10, true), ncol = dv.getUint16(12, true);
+    const palette = [];
+    for (let i = 0; i < ncol; i++) palette.push(dv.getUint16(16 + i * 2, true));
+    const data = u8.subarray(16 + ncol * 2, 16 + ncol * 2 + fw * frames * fh);
+    return { fw: fw, fh: fh, frames: frames, palette: palette, data: data, transparent: (u8[5] & 1) ? 0 : null };
+  }
+  // wire-order RGB565 -> [r, g, b] (the inverse of w565, for showing a .pal8 in the editor)
+  function fromW565(w) {
+    const c = ((w & 0xFF) << 8) | (w >> 8);
+    const r = (c >> 11) & 31, g = (c >> 5) & 63, b = c & 31;
+    return [(r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)];
+  }
+  // a decoded .pal8 -> RGBA bytes of the whole strip (index 0 transparent)
+  function pal8ToRGBA(p) {
+    const w = p.fw * p.frames, h = p.fh, out = new Uint8ClampedArray(w * h * 4);
+    const rgb = p.palette.map(fromW565);
+    for (let i = 0; i < w * h; i++) {
+      const v = p.data[i];
+      if (!v) continue;
+      const c = rgb[v] || [255, 0, 255];
+      out[i * 4] = c[0]; out[i * 4 + 1] = c[1]; out[i * 4 + 2] = c[2]; out[i * 4 + 3] = 255;
+    }
+    return { rgba: out, w: w, h: h };
   }
 
   function exportScene(project, idx, ascii) {
@@ -658,34 +895,29 @@
   }
   function bakePal8(rgba, w, h) {
     // rgba: Uint8ClampedArray/array of length w*h*4 -> { data: Uint8Array(w*h), palette: [wire565...] }
-    const hist = {};
-    for (let i = 0; i < w * h; i++) {
-      if (rgba[i * 4 + 3] < 128) continue;
-      const k = (rgba[i * 4] << 16) | (rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
-      hist[k] = (hist[k] || 0) + 1;
-    }
-    let colors = Object.keys(hist).map(function (k) { k = +k; return [k >> 16, (k >> 8) & 255, k & 255, hist[k]]; });
-    // preserve first-seen order for the exact case (deterministic, matches a scan of the strip)
-    let reps = colors.length <= 255 ? colors.map(function (c) { return [c[0], c[1], c[2]]; }) : medianCut(colors, 255);
-    const idxOf = {};                        // exact colour -> palette index (1-based)
-    reps.forEach(function (c, i) { idxOf[(c[0] << 16) | (c[1] << 8) | c[2]] = i + 1; });
-    function nearest(r, g, b) {
-      let bi = 1, bd = 1e12;
-      for (let i = 0; i < reps.length; i++) {
-        const dr = reps[i][0] - r, dg = reps[i][1] - g, db = reps[i][2] - b;
-        const d = dr * dr + dg * dg + db * db;
-        if (d < bd) { bd = d; bi = i + 1; }
-      }
-      return bi;
-    }
+    // Palette = the distinct opaque colours in FIRST-SEEN order scanning the strip row by row -
+    // exactly what scene_build.py's quantize_png does, so both write byte-identical .pal8 files.
+    // More than 255 colours or a soft alpha is an error (pixel art has neither; two quantizers
+    // could never agree): run tools/png2picogame.py once on such art.
     const data = new Uint8Array(w * h);
-    for (let i = 0; i < w * h; i++) {
-      if (rgba[i * 4 + 3] < 128) continue;
-      const k = (rgba[i * 4] << 16) | (rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
-      data[i] = idxOf[k] || nearest(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]);
-    }
+    const idxOf = {};
     const palette = [0];
-    reps.forEach(function (c) { palette.push(w565(c[0], c[1], c[2])); });
+    for (let i = 0; i < w * h; i++) {
+      const a = rgba[i * 4 + 3];
+      if (a < 128) {
+        if (a !== 0) throw new Error("soft alpha at pixel " + (i % w) + "," + ((i / w) | 0) + " - picogame art is hard-edged (flatten it, or run tools/png2picogame.py)");
+        continue;
+      }
+      if (a !== 255) throw new Error("soft alpha at pixel " + (i % w) + "," + ((i / w) | 0) + " - picogame art is hard-edged (flatten it, or run tools/png2picogame.py)");
+      const k = (rgba[i * 4] << 16) | (rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
+      let idx = idxOf[k];
+      if (idx === undefined) {
+        if (palette.length > 255) throw new Error("more than 255 colours - quantize it once with tools/png2picogame.py");
+        idx = idxOf[k] = palette.length;
+        palette.push(w565(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]));
+      }
+      data[i] = idx;
+    }
     return { data: data, palette: palette };
   }
   function bytesToBase64(u8) {
@@ -845,8 +1077,10 @@
     layerGrid: layerGrid, asciiRows: asciiRows,
     importExported: importExported, importLevel: importLevel, importAssets: importAssets,
     findConflictMarkers: findConflictMarkers,
-    exportProject: exportProject, serialize: serialize, deserialize: deserialize, clone: clone,
-    importTiled: importTiled, TILED_ORIENT: TILED_ORIENT,
+    exportProject: exportProject, exportGame: exportGame, canonicalJson: canonicalJson,
+    encodePal8: encodePal8, decodePal8: decodePal8, pal8ToRGBA: pal8ToRGBA, fromW565: fromW565,
+    serialize: serialize, deserialize: deserialize, clone: clone,
+    importTiled: importTiled, TILED_ORIENT: TILED_ORIENT, slugName: slugName,
     bakePal8: bakePal8, inlinePal8Asset: inlinePal8Asset, w565: w565,
     bakeScene: bakeScene, sceneModule: sceneModule, pyRepr: pyRepr, PyTuple: PyTuple, PyBytes: PyBytes, PyFloat: PyFloat };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -383,9 +383,14 @@ self-contained file** — no sibling imports, inline art — per the playground 
    editor's int grid (identical after baking) and `techniques.md §8` does the same for a plain Tilemap.
    Then the geometry is visible to both of you: the user answers "that column, not that one" instead of
    re-describing, and the diff of a level change is a picture. For a big scrolling world the user can
-   paint it in the **scene editor** (`tools/editor/` in the public repo; hosted at /editor/ on the docs site) and hand you the exported `scene.json` — which the editor
-   can also re-open, so a level can go back and forth. It is turn-taking, not merging: say who is
-   holding the file (see `techniques.md §8`).
+   paint it in the **level editor** (`tools/editor/` in the public repo; hosted at /editor/ on the docs
+   site). The editor saves **one `game.json` per game** (`docs/scene-format.md`): every level with map
+   rows over the tileset's legend, the assets table, zone story data, effects. That file is yours to
+   edit directly, and the device runs it as is (`picogame_scene.Game`). Rules: keep the legend's
+   characters (append, never re-letter), run `python3 tools/scene_build.py check` and `fmt` before
+   handing the file back, `art` after changing a PNG, never touch `.pal8` files or `build/`; story
+   logic goes in `story.py` (`def name(d)`), not in the JSON. With a folder chosen the editor reloads
+   your edit within two seconds, and in git one map row is one line (see `techniques.md §8`).
 5. **Plan assets cheap** (§1.10): generated shapes first — but decide the **look** (§1.8: palette,
    silhouettes, HUD placement, title presentation) *now*, in the brief, so the placeholders in
    `starter_game.py` get replaced rather than shipped.

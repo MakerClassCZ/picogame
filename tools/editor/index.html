@@ -35,15 +35,16 @@
     </details>
     <button id="btnNew" class="mini opt">New</button>
     <button id="btnFolder" class="mini opt" title="Choose a folder to save into (Chrome/Edge) instead of downloading">&#128193; Folder…</button>
-    <button id="btnSave" class="mini opt">Save</button>
-    <button id="btnLoad" class="mini opt">Load</button>
+    <button id="btnSave" class="mini opt" title="Write game.json (+ .pal8 art into the chosen folder)">Save</button>
+    <button id="btnLoad" class="mini opt" title="Open game.json (pick its PNG / .pal8 / story.py too), an old scene/project/pgproj, or a Tiled map">Open</button>
     <button id="btnTryPlay" class="mini" title="Open this level running in the playground">&#9654; Try in playground</button>
     <details id="storyD" class="dd">
       <summary class="mini" title="Script bodies for zone stories (picogame_script)">Story &#9662;</summary>
       <div class="ddmenu" style="min-width:560px">
-        <div class="hint">Bodies for named zone scripts (<code>{"script": "name"}</code> in a zone's data) &mdash;
-          the inside of <code>def name(d):</code>, handed to the playground on Try. Declarative zones
-          (<code>say</code> / <code>ask</code> / <code>goto</code> data) compile on their own and need nothing here.
+        <div class="hint">Named zone scripts (<code>{"script": "name"}</code>) run <code>def name(d)</code> from
+          <b>story.py</b>, a Python file next to game.json that you (or your coding agent) own. Bodies typed here are
+          written to story.py on the first Save and travel with Play; an existing story.py is never overwritten.
+          Declarative zones (<code>say</code> / <code>ask</code> / <code>goto</code> data) need no code at all.
           Level <b>effects</b> (the gate-opening rules) are edited in the <b>Level panel</b> &mdash; click empty map space.</div>
         <div style="display:flex;gap:6px;margin:4px 0">
           <select id="storySel" style="flex:1"></select>
@@ -56,23 +57,18 @@
           globals in scope: <code>view</code>, <code>player</code>, <code>goto()</code>, <code>apply_effects()</code>&hellip;</div>
       </div>
     </details>
-    <details id="exportD" class="dd">
-      <summary class="mini">Export ▾</summary>
+    <details id="buildD" class="dd">
+      <summary class="mini">Build ▾</summary>
       <div class="ddmenu">
-        <button id="btnExportBaked">Python module &mdash; <code>&lt;name&gt;_scene.py</code> &middot; run on the device</button>
-        <button id="btnExport">Level &mdash; <code>&lt;name&gt;.scene.json</code> &middot; edit anywhere, diff in git</button>
-        <button id="btnExportProj">Whole game &mdash; <code>game.project.json</code> &middot; every level + shared art</button>
-        <hr class="ddsep">
-        <button id="btnSaveMenu">Editor project &mdash; <code>project.pgproj.json</code> &middot; working copy with art</button>
-        <div class="hint">Tilemaps export as an ASCII picture (<code>legend</code> + <code>rows</code>),
-          so a change shows up in a diff and a person or an agent can edit it by hand. A layer with more
-          distinct tiles than the legend holds keeps the number grid instead; the export says so.</div>
-        <label class="hint"><input type="checkbox" id="optGrid"> Always use number grids</label>
-        <div class="hint">Keep the PNGs next to it, then run <code>tools/scene_build.py</code>.</div>
+        <button id="btnBuildArt">Art for the device &mdash; <code>&lt;name&gt;.pal8</code> &middot; one per PNG asset</button>
+        <button id="btnExportBaked">Baked module (this level) &mdash; <code>&lt;name&gt;_scene.py</code></button>
+        <div class="hint"><b>Save</b> writes <code>game.json</code>, the one file you edit, share and copy to the
+          board; with a folder chosen it also writes the <code>.pal8</code> art next to it. Ship with
+          <code>tools/scene_build.py build --mpy</code>, or run from <code>game.json</code> as is.</div>
       </div>
     </details>
     <input type="file" id="file" accept="image/png" hidden>
-    <input type="file" id="projfile" accept=".json,.pgproj,.tmj,.tmx,.tsx,.tsj,.png,application/json" multiple hidden>
+    <input type="file" id="projfile" accept=".json,.pgproj,.tmj,.tmx,.tsx,.tsj,.png,.pal8,.py,application/json" multiple hidden>
   </header>
 
   <div id="main">

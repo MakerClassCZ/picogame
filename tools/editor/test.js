@@ -400,3 +400,55 @@ section("git conflict markers are detected, ASCII map rows are not mistaken for 
 ok();
 
 console.log("\neditor/test.js: ALL OK");
+
+// ---------------------------------------------------------------- game.json (v2)
+(function () {
+  const fs = require("fs"), path = require("path");
+  const text = fs.readFileSync(path.join(__dirname, "fixtures", "quest_game.json"), "utf8");
+  const game = JSON.parse(text);
+  // the canonical writer matches scene_build.py fmt byte for byte (the fixture came from it)
+  assert.strictEqual(E.canonicalJson(game), text, "canonicalJson == scene_build.py fmt");
+  // a full round trip through the editor model changes nothing
+  const proj = E.importExported(game, "quest");
+  assert.strictEqual(proj.levels.length, 2);
+  assert.strictEqual(proj.start, "village");
+  assert.strictEqual(proj.launcher.category, "demo");
+  const tagged = proj.levels[0].entities.find(function (e) { return e.name === "gate_npc"; });
+  assert.strictEqual(tagged.tag, "foes", "a tagged single sprite keeps its tag and name");
+  assert.strictEqual(proj.levels[0].tilemaps[0].grid[2][6], 7, "rows decoded through the ASSET legend");
+  assert.deepStrictEqual(proj.levels[0].effects[0].swap, [7, 0]);
+  const back = E.exportGame(proj);
+  assert.strictEqual(E.canonicalJson(back), text, "import -> export round trip is byte-identical");
+  // the legend is append-only: painting a new tile adds a char, old chars keep their values
+  const lv = proj.levels[0];
+  lv.tilemaps[0].grid[1][1] = 2;                      // '=' exists already
+  lv.tilemaps[0].grid[1][2] = 5;                      // a value with no char yet
+  const g2 = E.exportGame(proj);
+  assert.strictEqual(g2.assets.tiles.legend["G"], 7, "existing legend chars keep their value");
+  assert.strictEqual(g2.assets.tiles.legend["="], 2);
+  const newChar = Object.keys(g2.assets.tiles.legend).find(function (c) { return g2.assets.tiles.legend[c] === 5; });
+  assert.ok(newChar && newChar !== "." && ".#=G".indexOf(newChar) < 0, "a new value gets a new char");
+  assert.strictEqual(g2.levels[0].layers[0].rows[1][2], newChar);
+  // unknown keys ride through untouched
+  const ext = JSON.parse(text); ext.custom = { x: 1 }; ext.levels[1].note = "hi"; ext.assets.hero.author = "me";
+  const rt = E.exportGame(E.importExported(ext, "quest"));
+  assert.deepStrictEqual(rt.custom, { x: 1 }); assert.strictEqual(rt.levels[1].note, "hi"); assert.strictEqual(rt.assets.hero.author, "me");
+  // .pal8 codec round trip
+  const data = new Uint8Array([0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]);
+  const blob = E.encodePal8(data, 4, 4, 2, [0, 0xF8, 0xE007, 0x1F00], 0);
+  assert.strictEqual(blob.length, 16 + 8 + 32);
+  const dec = E.decodePal8(blob);
+  assert.deepStrictEqual([dec.fw, dec.fh, dec.frames, dec.transparent], [4, 4, 2, 0]);
+  assert.deepStrictEqual(Array.from(dec.data), Array.from(data));
+  assert.deepStrictEqual(dec.palette, [0, 0xF8, 0xE007, 0x1F00]);
+  assert.deepStrictEqual(E.fromW565(0xF8), [255, 0, 0], "wire 565 red decodes to red");
+  // bakePal8: first-seen palette order, transparent index 0, soft alpha refused
+  const rgba = new Uint8ClampedArray(4 * 4);
+  rgba.set([0, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 0]);
+  const q = E.bakePal8(rgba, 4, 1);
+  assert.deepStrictEqual(Array.from(q.data), [1, 2, 1, 0]);
+  assert.deepStrictEqual(q.palette, [0, E.w565(0, 255, 0), E.w565(255, 0, 0)]);
+  const soft = new Uint8ClampedArray([1, 2, 3, 200]);
+  assert.throws(function () { E.bakePal8(soft, 1, 1); }, /soft alpha/);
+})();
+ok();

@@ -36,6 +36,23 @@ class View:
         self._props = {}         # asset_id -> {prop: bytes}
         self._cur = {}           # the primary tilemap's prop table (see _bind)
         self._solid = None       # ... and its "solid" table, or None
+        self.effects = []        # story rules [{if, swap, solid, unsolid, hide, show}] (data)
+        self.world = None        # (w, h) authored world size, or None
+
+    def swap_tiles(self, a, b):
+        """Replace every cell holding tile `a` with tile `b` on the primary tilemap - the LOOK
+        half of a story effect (a gate opens: the gate tile becomes floor)."""
+        tm = self.tilemap
+        if tm is None or a == b:
+            return 0
+        n = 0
+        cols, rows = self._tm[2], self._tm[3]
+        for ty in range(rows):
+            for tx in range(cols):
+                if tm.get_tile(tx, ty) == a:
+                    tm.set_tile(tx, ty, b)
+                    n += 1
+        return n
 
     @property
     def tile_size(self):
@@ -111,16 +128,49 @@ class View:
         return bool(b[self.tilemap.get_tile(tx, ty)])
 
 
+def read_pal8(path):
+    """Read a .pal8 sidecar (see picogame_scenebake.encode_pal8).
+    -> (palette array('H'), index bytes, fw, fh, frames, transparent_or_None).
+    The index bytes are read with readinto, so the only allocation is the bitmap itself."""
+    import struct
+    with open(path, "rb") as f:
+        hdr = f.read(16)
+        if len(hdr) < 16 or hdr[:4] != b"PAL8":
+            raise ValueError("%s is not a .pal8 file" % path)
+        _, ver, flags, fw, fh, frames, ncol, _ = struct.unpack("<4sBBHHHHH", hdr)
+        if ver != 1:
+            raise ValueError("%s: unsupported .pal8 version %d" % (path, ver))
+        pal = array.array("H", struct.unpack("<%dH" % ncol, f.read(2 * ncol)))
+        data = bytearray(fw * frames * fh)
+        got = f.readinto(data)
+        if got != len(data):
+            raise ValueError("%s: truncated (%d of %d index bytes)" % (path, got, len(data)))
+    return pal, data, fw, fh, frames, (0 if flags & 1 else None)
+
+
 def _build_bitmaps(pg, assets):
     bm = {}
-    for aid, (fmt, hexdata, bw, bh, frames, transp, pal) in assets.items():
-        if fmt != "pal8":
+    for aid, (fmt, data, bw, bh, frames, transp, pal) in assets.items():
+        if fmt == "pal8f":
+            # a .pal8 sidecar: the file is self-describing, game.json says what it expects
+            pal, data, fw, fh, fr, ftransp = read_pal8(data)
+            if (fw, fh, fr) != (bw, bh, frames):
+                raise ValueError("%s is %dx%dx%d, game.json says %dx%dx%d for %r: Save in the "
+                                 "editor or run scene_build.py art"
+                                 % (assets[aid][1], fw, fh, fr, bw, bh, frames, aid))
+            if transp is None:
+                transp = ftransp
+            palette = pal
+        elif fmt == "pal8":
+            palette = array.array("H", pal)
+            if isinstance(data, str):             # older baked modules carry hex text
+                data = bytes.fromhex(data)
+        else:
             # this loader only knows how to rebuild PAL8 atlases; anything else
             # would be silently misinterpreted (wrong stride/format) - refuse.
             raise ValueError("asset %r: format %r not supported by this loader (PAL8 only)"
                              % (aid, fmt))
-        palette = array.array("H", pal)
-        bm[aid] = pg.Bitmap(bytes.fromhex(hexdata), bw, bh, format=pg.PAL8,
+        bm[aid] = pg.Bitmap(data, bw, bh, format=pg.PAL8,
                             palette=palette, frames=frames, stride=bw * frames,
                             transparent=transp)
     return bm
@@ -155,7 +205,7 @@ def load_bank(pg, bank):
             "audio": audio, "sounds": sounds}
 
 
-def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
+def load(pg, scene, display=None, strip_h=None, font=None, bank=None, bufs=None):
     # Shared platform logic (board.DISPLAY / supervisor display / Framebuffer unwrap /
     # busdisplay) lives in picogame_game.resolve_display - ONE resolver for both entry points.
     import picogame_game
@@ -177,8 +227,11 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
         except (AttributeError, TypeError):
             pass
         w = backend.width
-        v.bufA = bytearray(w * strip_h * 2)
-        v.bufB = bytearray(w * strip_h * 2)
+        if bufs is not None:                  # strip buffers shared across levels (Game)
+            v.bufA, v.bufB = bufs
+        else:
+            v.bufA = bytearray(w * strip_h * 2)
+            v.bufB = bytearray(w * strip_h * 2)
         if getattr(pg, "FAST_DISPLAY_SUPPORTED", hasattr(pg, "Display")):
             backend = pg.Display(backend)
         v.scene = pg.Scene(backend, v.bufA, v.bufB, background=scene["bg"])
@@ -237,6 +290,8 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
             v.scene.add(s)
             if name:
                 v.named[name] = s
+            if len(layer) > 11 and layer[11]:     # a tagged single sprite joins its group
+                v.groups.setdefault(layer[11], []).append(s)
             _animate(s, aid, anim)
         elif kind == "group":
             _, aid, tag, ax, ay, insts = layer[:6]
@@ -249,7 +304,7 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
                 lst.append(s)
                 _animate(s, aid, anim)
             if tag:
-                v.groups[tag] = lst
+                v.groups.setdefault(tag, []).extend(lst)   # tagged singles may already be here
         elif kind == "particles":
             _, name, cap, size, gravity, fade = layer
             p = pg.Particles(cap, size=size, gravity=gravity, fade=fade)
@@ -284,8 +339,141 @@ def load(pg, scene, display=None, strip_h=None, font=None, bank=None):
     if music and v.audio and v.sounds.get(music):
         v.audio.music(v.sounds[music])
     v.camera = scene.get("camera")
+    v.effects = scene.get("effects", [])
+    v.world = scene.get("world")
     v._bind()
     return v
+
+
+class Game:
+    """A whole game's levels from ONE source: game.json (streamed, baked at boot) or a baked
+    bank module (`scene_build.py build --mpy`). One call site either way:
+
+        game = picogame_scene.Game(pg, "game.json", font=terminalio.FONT)
+        view = game.load(game.start)          # ... later: view = game.load("cave", "entry")
+
+    JSON mode bakes EVERY level at boot on a clean heap (measured 42-58 ms and ~4.5 kB per level
+    on an RP2040) and then releases the baker; lazy=True keeps only the bank and bakes a level
+    when it is loaded (skipping the others costs their parse time, not RAM). Module mode imports
+    `<src>` for the BANK and `level_<name>` per load, dropping it from sys.modules afterwards, so
+    only the current level stays resident. The strip buffers are allocated once and shared."""
+
+    def __init__(self, pg, src, display=None, strip_h=None, font=None, lazy=False):
+        self.pg = pg
+        self.display = display
+        self.strip_h = strip_h
+        self.font = font
+        self.levels = []          # level names in file order
+        self.start = None
+        self.size = (320, 240)
+        self.name = None
+        self.bank = None
+        self._baked = {}          # name -> LEVEL (json mode, not lazy)
+        self._offsets = {}        # name -> byte offset in game.json (lazy mode)
+        self._bufs = None
+        self._mod = None
+        if src.endswith(".json"):
+            self._path = src
+            self._base = src.rsplit("/", 1)[0] if "/" in src else None
+            self._lazy = lazy
+            self._build_json()
+        else:
+            self._path = None
+            self._mod = src
+            self._build_module()
+
+    # -- json mode ---------------------------------------------------------
+    def _build_json(self):
+        import picogame_scenebake as sb
+        top = {}
+        pending = []
+
+        def on_level(lv, i, pos):
+            name = lv.get("name") or "level%d" % (i + 1)
+            self.levels.append(name)
+            if self._lazy:
+                self._offsets[name] = pos         # seek straight here later: no re-parse
+                return
+            if "assets" in top and "size" in top:
+                # canonical order (small keys first): bake now and drop the tree at once
+                self._baked[name] = sb.bake_level(lv, top["size"], top["assets"])
+            else:
+                pending.append((name, lv))        # levels before assets: bake after the walk
+
+        with open(self._path, "rb") as f:
+            sb.walk(f, on_level, None, top)
+        self.size = tuple(top.get("size", self.size))
+        self.name = top.get("name")
+        self.start = top.get("start")
+        assets = top.get("assets", {})
+        for name, lv in pending:
+            self._baked[name] = sb.bake_level(lv, self.size, assets)
+        pending = None
+        self.bank = load_bank(self.pg, sb.bake_bank(assets, top.get("sounds"), self._base))
+        self._top_assets = assets if self._lazy else None
+        if not self.start and self.levels:
+            self.start = self.levels[0]
+        if not self._lazy:
+            import sys
+            sys.modules.pop("picogame_scenebake", None)
+
+    _top_assets = None
+
+    def _find_level(self, name):
+        """Lazy mode: seek to the level's remembered byte offset and bake just that one."""
+        import picogame_scenebake as sb
+        if name not in self._offsets:
+            raise KeyError("game.json has no level %r (have %s)" % (name, self.levels))
+        with open(self._path, "rb") as f:
+            return sb.level_at(f, self._offsets[name], self.size, self._top_assets)
+
+    # -- module mode -------------------------------------------------------
+    def _build_module(self):
+        mod = __import__(self._mod)
+        bank = mod.BANK
+        self.levels = list(bank.get("levels", ()))
+        self.start = bank.get("start") or (self.levels[0] if self.levels else None)
+        self.size = tuple(bank.get("size", self.size))
+        self.name = bank.get("name")
+        self.bank = load_bank(self.pg, bank)
+        import sys
+        sys.modules.pop(self._mod, None)
+
+    def _level_module(self, name):
+        import sys
+        modname = "level_" + name
+        mod = __import__(modname)
+        lv = mod.LEVEL
+        sys.modules.pop(modname, None)
+        return lv
+
+    # -- loading -----------------------------------------------------------
+    def level(self, name):
+        """The baked LEVEL dict for `name` (json: from the boot bake or a lazy walk; module:
+        imported on demand)."""
+        if self._mod is not None:
+            return self._level_module(name)
+        if name in self._baked:
+            return self._baked[name]
+        if self._lazy:
+            return self._find_level(name)
+        raise KeyError("no level %r (have %s)" % (name, self.levels))
+
+    def load(self, name=None, at=None):
+        """Build the View for level `name` (default: start). Drop every reference to the previous
+        View (and call gc.collect()) BEFORE this, so its scene is freed first."""
+        name = name or self.start
+        lv = self.level(name)
+        v = load(self.pg, lv, display=self.display, strip_h=self.strip_h, font=self.font,
+                 bank=self.bank, bufs=self._bufs)
+        if self._bufs is None and v.bufA is not None:
+            self._bufs = (v.bufA, v.bufB)
+        v.name = name
+        if at:
+            p = v.point(at)
+            if p and "player" in v.named:
+                v.named["player"].move(p[0], p[1])
+        return v
 
 
 def load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True):
@@ -307,7 +495,12 @@ def load_json(pg, path, display=None, strip_h=None, font=None, bank=None, releas
     import json
     import picogame_scenebake
     with open(path) as f:
-        scene = picogame_scenebake.bake(json.load(f))
+        src = json.load(f)
+    if "levels" in src:                       # a game.json project: first (start) level via Game
+        src = None
+        return Game(pg, path, display=display, strip_h=strip_h, font=font).load()
+    base = path.rsplit("/", 1)[0] if "/" in path else None
+    scene = picogame_scenebake.bake(src, base)
     if release:
         import sys
         del sys.modules["picogame_scenebake"]

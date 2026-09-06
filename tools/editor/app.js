@@ -75,7 +75,9 @@ function h3(t) { return mk("h3", null, t); }
 function hint(t) { const d = mk("div", "hint"); d.innerHTML = t; return d; }
 
 // undo checkpoint: call BEFORE a mutation
-function snapshot() { history.push(project); scheduleAutosave(); }
+let dirtySince = 0;            // set by every mutation, cleared by Save / a reload from disk
+let lastSavedText = "";        // the game.json text we last wrote or read (folder watch)
+function snapshot() { history.push(project); dirtySince = Date.now(); scheduleAutosave(); }
 
 // ---------------------------------------------------------------- session autosave
 // Every mutation (snapshot/undo/redo/load) schedules a debounced dump of the full
@@ -1306,6 +1308,99 @@ if ($("btnAddLevel")) $("btnAddLevel").onclick = function () {
 if ($("btnNew")) $("btnNew").onclick = function () { if (confirm("New project? Unsaved work is lost.")) { loadProject(E.newProject()); renderPanel(); refreshChrome(); } };
 
 function download(name, text) { const b = new Blob([text], { type: "application/json" }); const a = mk("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
+function downloadBytes(name, u8) { const b = new Blob([u8], { type: "application/octet-stream" }); const a = mk("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
+function dataURLBytes(dataURL) {
+  const bin = atob(dataURL.slice(dataURL.indexOf(",") + 1));
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+function bytesB64(u8) { let b = ""; for (let i = 0; i < u8.length; i += 0x8000) b += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(b); }
+// bytes of a file in the chosen folder, or null
+async function folderRead(name) {
+  if (!dirHandle) return null;
+  try { return new Uint8Array(await (await (await dirHandle.getFileHandle(name)).getFile()).arrayBuffer()); }
+  catch (e) { return null; }
+}
+async function saveBytes(name, u8) {
+  if (!dirHandle) { downloadBytes(name, u8); return "downloaded"; }
+  try {
+    const fh = await dirHandle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(u8);
+    await w.close();
+    rememberFile(name, await fh.getFile());
+    return dirHandle.name + "/";
+  } catch (e) { downloadBytes(name, u8); toast("Folder write failed (" + e.message + ") - downloaded instead", "err"); return "downloaded"; }
+}
+// The PAL8 strip of a loaded image asset (the same bytes scene_build.py art writes).
+function pal8Of(id) {
+  const img = images[id], a = project.assets[id];
+  if (!img || !img.complete || !img.naturalWidth || !a) return null;
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const fw = a.fw || 16, fh = a.fh || 16, frames = a.frames || 1;
+  const sw = fw * frames, sh = fh;
+  if (c.width < sw || c.height < sh) throw new Error(id + ": image is " + c.width + "x" + c.height + ", needs " + sw + "x" + sh);
+  const rgba = ctx.getImageData(0, 0, sw, sh).data;
+  const q = E.bakePal8(rgba, sw, sh);
+  return E.encodePal8(q.data, fw, fh, frames, q.palette, 0);
+}
+function pal8Name(a) { return String(a.src || "art.png").replace(/\.[^.\/]*$/, "") + ".pal8"; }
+// Write every PNG asset's .pal8 (and a missing source PNG) into the folder; `force` downloads
+// them when there is no folder (Build > Art). Returns [names written].
+async function writeArt(force) {
+  const done = [];
+  for (const id in project.assets) {
+    const a = project.assets[id];
+    if (!E.isImg(a)) continue;
+    let blob;
+    try { blob = pal8Of(id); } catch (e) { toast("Art: " + e.message, "err"); continue; }
+    if (!blob) continue;
+    const name = pal8Name(a);
+    if (dirHandle) {
+      const old = await folderRead(name);
+      if (!old || old.length !== blob.length || !old.every(function (b, i) { return b === blob[i]; })) {
+        await saveBytes(name, blob); done.push(name);
+      }
+      if (a.src && artURLs[id] && !(await folderRead(a.src)) && /^data:image\/png/.test(artURLs[id])) {
+        await saveBytes(a.src, dataURLBytes(artURLs[id])); done.push(a.src);
+      }
+    } else if (force) { downloadBytes(name, blob); done.push(name); }
+  }
+  return done;
+}
+// story.py text from the legacy in-editor script bodies (project.scripts)
+function storyText() {
+  const names = Object.keys(project.scripts || {}).filter(function (k) { return (project.scripts[k] || "").trim(); });
+  if (!names.length) return "";
+  let out = "# story.py - picogame story scripts: a zone {\"script\": \"name\"} starts def name(d)\n";
+  names.forEach(function (nm) {
+    const body = String(project.scripts[nm]).replace(/\r/g, "").split("\n");
+    while (body.length && !body[body.length - 1].trim()) body.pop();
+    out += "\n\ndef " + nm.replace(/\W/g, "_") + "(d):\n" + (body.length ? body.map(function (l) { return l.trim() ? "    " + l : ""; }).join("\n") : "    yield") + "\n";
+  });
+  return out;
+}
+// story.py -> {name: body} (best effort: top-level `def name(d):` blocks)
+function parseStory(text) {
+  const out = {};
+  const lines = String(text).replace(/\r/g, "").split("\n");
+  let cur = null, body = [];
+  function flush() { if (cur) out[cur] = body.join("\n").replace(/\n+$/, ""); cur = null; body = []; }
+  lines.forEach(function (l) {
+    const m = /^def\s+(\w+)\s*\(\s*\w+\s*\)\s*:/.exec(l);
+    if (m) { flush(); cur = m[1]; return; }
+    if (cur) {
+      if (/^\S/.test(l)) { flush(); return; }
+      body.push(l.replace(/^    /, ""));
+    }
+  });
+  flush();
+  return out;
+}
 
 // ---------------------------------------------------------------- save in place (a folder)
 // Pick a project folder once (File System Access) and every export WRITES THERE instead of
@@ -1404,19 +1499,59 @@ async function saveText(name, text) {
 
 if ($("btnFolder")) $("btnFolder").onclick = pickFolder;
 restoreFolder();
+// With a folder bound, watch game.json: an agent's edit shows up here within 2 s. Reloaded
+// silently when nothing is unsaved in the editor; otherwise you are told once and Save asks.
+let watchWarned = false;
+async function checkFolder() {
+  if (!dirHandle) return;
+  let f;
+  try { f = await (await dirHandle.getFileHandle("game.json")).getFile(); } catch (e) { return; }
+  const st = stampOf(f);
+  if (st === fileStamps.get("game.json")) return;
+  const text = await f.text();
+  if (text === lastSavedText) { rememberFile("game.json", f); return; }   // our own write
+  if (dirtySince) {
+    if (!watchWarned) { watchWarned = true; toast("game.json changed on disk (an agent or another tool). Save will ask before overwriting; Open reloads it.", "info"); }
+    return;
+  }
+  let obj;
+  try { obj = JSON.parse(text); } catch (e) { return; }       // still being written
+  watchWarned = false;
+  try { await importExportedFiles(obj, f, []); toast("Reloaded game.json - it changed on disk", "ok"); }
+  catch (e) { console.warn("reload", e); }
+}
+setInterval(function () { checkFolder().catch(function () {}); }, 2000);
 // Save has two entry points - the header button and the last item of the Export
 // menu, which lists the editor project alongside the exports so every file the
 // editor can produce is findable in one place.
+// Save writes the ONE source file, game.json (canonical text: what scene_build.py fmt writes,
+// what an agent edits, what the device reads), plus - into a chosen folder - the .pal8 art
+// sidecars and any source PNG the folder lacks. Legacy script bodies (project.scripts, from an
+// old .pgproj) go to story.py once; the editor never rewrites an existing story.py.
 async function saveProject() {
-  const s = E.serialize(project);
-  s.art = artURLs;
-  const w = await saveText("project.pgproj.json", JSON.stringify(s));
-  toast("Saved " + (w === "downloaded" ? "project.pgproj.json" : w + "project.pgproj.json"), "ok");
+  let game;
+  try { game = E.exportGame(project); }
+  catch (e) { toast("Could not build game.json: " + (e.message || e), "err"); console.error(e); return; }
+  const text = E.canonicalJson(game);
+  const art = await writeArt(false);
+  let storyNote = "";
+  const st = storyText();
+  if (st) {
+    if (dirHandle && await folderRead("story.py")) storyNote = " - story.py exists, scripts from the panel were NOT written";
+    else { await saveText("story.py", st); storyNote = " + story.py"; }
+  }
+  const w = await saveText("game.json", text);
+  lastSavedText = text; dirtySince = 0;
+  toast("Saved " + (w === "downloaded" ? "game.json" : w + "game.json") +
+        (art.length ? " + " + art.length + " art file" + (art.length === 1 ? "" : "s") : "") + storyNote +
+        (w === "downloaded" && Object.keys(project.assets).some(function (id) { return E.isImg(project.assets[id]); })
+          ? " (Build > Art downloads the .pal8 files the device needs)" : ""), "ok");
 }
 if ($("btnSave")) $("btnSave").onclick = saveProject;
-if ($("btnSaveMenu")) $("btnSaveMenu").onclick = function () {
-  const d = $("exportD"); if (d) d.open = false;
-  saveProject();
+if ($("btnBuildArt")) $("btnBuildArt").onclick = async function () {
+  const d = $("buildD"); if (d) d.open = false;
+  const done = await writeArt(true);
+  toast(done.length ? "Art: " + done.join(", ") : "No image assets to bake (colour tilesets need no art files)", done.length ? "ok" : "info");
 };
 if ($("btnLoad")) $("btnLoad").onclick = function () { $("projfile").click(); };
 function loadSave(obj) {
@@ -1610,7 +1745,10 @@ async function importExportedFiles(obj, sceneFile, files) {
   const picked = {};
   (files || []).forEach(function (f) { if (/\.png$/i.test(f.name)) picked[f.name.toLowerCase()] = f; });
 
-  const art = {}, missing = [];
+  const pal8s = {};
+  (files || []).forEach(function (f) { if (/\.pal8$/i.test(f.name)) pal8s[f.name.toLowerCase()] = f; });
+  const storyFile = (files || []).find(function (f) { return /^story\.py$/i.test(f.name); });
+  const art = {}, missing = [], recovered = [];
   for (const id in proj.assets) {
     const a = proj.assets[id];
     if (!E.isImg(a) || !a.src) continue;
@@ -1623,12 +1761,33 @@ async function importExportedFiles(obj, sceneFile, files) {
         dataURL = await readFile(await fh.getFile(), "dataurl");
       } catch (e) { /* not in the folder */ }
     }
+    if (!dataURL) {
+      // no PNG: a device pack carries only the .pal8 - decode it (lossless for pixel art)
+      const pn = base.replace(/\.[^.]*$/, "") + ".pal8";
+      let bytes = pal8s[pn.toLowerCase()] ? new Uint8Array(await pal8s[pn.toLowerCase()].arrayBuffer()) : await folderRead(pn);
+      if (bytes) {
+        try {
+          const dec = E.pal8ToRGBA(E.decodePal8(bytes));
+          const c = document.createElement("canvas"); c.width = dec.w; c.height = dec.h;
+          c.getContext("2d").putImageData(new ImageData(dec.rgba, dec.w, dec.h), 0, 0);
+          dataURL = c.toDataURL("image/png"); recovered.push(base);
+        } catch (e) { console.warn("pal8 decode", pn, e); }
+      }
+    }
     if (dataURL) art[id] = dataURL; else missing.push(base);
+  }
+  if (storyFile) proj.scripts = Object.assign(proj.scripts || {}, parseStory(await readFile(storyFile, "text")));
+  else if (dirHandle) {
+    const sb = await folderRead("story.py");
+    if (sb) proj.scripts = Object.assign(proj.scripts || {}, parseStory(new TextDecoder().decode(sb)));
   }
 
   loadProject(proj);                              // resets images/artURLs - fill AFTER
   for (const id in art) { artURLs[id] = art[id]; images[id] = await loadImageFromDataURL(art[id]); }
+  dirtySince = 0;
+  try { lastSavedText = E.canonicalJson(E.exportGame(project)); } catch (e) { lastSavedText = ""; }
   renderPanel(); refreshChrome();
+  if (recovered.length) toast("Pixels recovered from .pal8 for: " + recovered.join(", ") + " (565 colours, hard alpha)", "info");
   const n = proj.levels.length;
   toast("Imported " + sceneFile.name + " (" + n + (n === 1 ? " level" : " levels") + ")", "ok");
   if (missing.length)
@@ -1688,7 +1847,7 @@ if ($("projfile")) $("projfile").onchange = function (ev) {
     importTiledFiles(files).catch(function (e) { toast("Tiled import: " + e.message, "err"); console.error(e); });
     return;
   }
-  const f = files[0];
+  const f = files.find(function (x) { return /\.json$/i.test(x.name); }) || files[0];
   const fr = new FileReader();
   fr.onload = function () {
     let obj;
@@ -2065,7 +2224,7 @@ function storyForm(box, z, rerender) {
     ni.onfocus = function () { snapshot(); };
     ni.onchange = function () { z.data.script = ni.value.trim(); };
     add(nr, ni); box.appendChild(nr);
-    box.appendChild(hint("The body is Python edited under <b>Story ▾</b> in the toolbar."));
+    box.appendChild(hint("Runs <code>def name(d)</code> from <b>story.py</b> next to game.json (a Python file you own); the Story panel holds legacy bodies until they are saved there."));
   } else if (kind === "json") {
     fieldData(box, z, "data (JSON) - free-form; script keys: script / say / ask / goto / if / denied:");
   }
@@ -2324,47 +2483,71 @@ function ejectZoneScript(z) {
 }
 
 if ($("btnTryPlay")) $("btnTryPlay").onclick = function () {
-  // Hand over the WHOLE project - every level + script bodies - so the playground
-  // program is a complete game (goto() travels between the levels), not one map.
-  var levels = {}, scenes = [], handoffNames = [], pngIds = null, missing = null, inlined = 0;
-  for (var i = 0; i < project.levels.length; i++) {
-    var scene;
-    try { scene = E.exportScene(project, i); }
-    catch (e) { toast("Could not export level " + (project.levels[i].name || i + 1), "err"); return; }
-    if (project.levels[i].effects) scene.effects = project.levels[i].effects;   // story world-changes
-    if (pngIds === null) pngIds = Object.keys(scene.assets || {}).filter(function (id) {
-      var t = scene.assets[id].type; return t === "sprite" || t === "tileset" || t === "bitmap";
-    });
-    if (pngIds.length) {
-      var res;
-      try { res = inlinePngAssets(scene, pngIds); }
-      catch (e) { toast("Couldn't bake an image asset: " + (e.message || e), "err"); return; }
-      inlined = res.inlined.length;
-      if (missing === null) missing = res.missing;         // assets are project-wide: ask ONCE
-    }
-    scenes.push(scene);
-    var lname = project.levels[i].name || ("level" + (i + 1));
-    while (levels[lname]) lname += "_2";                   // names must be unique keys
-    levels[lname] = scene;
-    handoffNames.push(lname);
+  // Hand over the WHOLE game the way the device gets it: game.json (start = the level you are
+  // looking at), the .pal8 art baked from the loaded PNGs, and story.py. The playground stages
+  // them next to the runner, which opens game.json through picogame_scene.Game.
+  var game;
+  try { game = E.exportGame(project); }
+  catch (e) { toast("Could not build game.json: " + (e.message || e), "err"); console.error(e); return; }
+  game.start = L().name;
+  var files = {}, missing = [];
+  for (var id in game.assets) {
+    if (!E.isImg(project.assets[id])) continue;
+    var blob = null;
+    try { blob = pal8Of(id); } catch (e) { toast("Art: " + e.message, "err"); return; }
+    if (blob) files[pal8Name(project.assets[id])] = bytesB64(blob);
+    else missing.push(id);
   }
-  if (missing && missing.length) {
+  if (missing.length) {
     var ok = window.confirm(
       "No image data for: " + missing.join(", ") + ".\n\n" +
       "Open the playground with coloured placeholder blocks for those assets?\n\n" +
       "OK = run with placeholders   \u00b7   Cancel = don't open");
     if (!ok) { toast("Cancelled", "info"); return; }
-    for (var j = 0; j < scenes.length; j++) {
-      try { substitutePngAssets(scenes[j], missing); }
-      catch (e) { toast("Couldn't substitute an image asset: " + (e.message || e), "err"); return; }
-    }
+    try { substitutePngAssetsGame(game, missing); }
+    catch (e) { toast("Couldn't substitute an image asset: " + (e.message || e), "err"); return; }
   }
-  handoffScene({ format: "picogame-project-handoff",
-                 start: handoffNames[project.current],
-                 levels: levels, scripts: project.scripts || {} });
-  if (inlined) toast("Baked " + inlined + " image asset(s) to PAL8 for the playground", "ok");
-  if (missing && missing.length) toast("Substituted " + missing.length + " asset(s) with placeholder blocks", "info");
+  handoffScene({ format: "picogame-game-handoff", start: game.start, game: game, files: files, story: storyText() });
+  if (missing.length) toast("Substituted " + missing.length + " asset(s) with placeholder blocks", "info");
 };
+
+// Placeholder blocks for PNG assets the editor has no pixels for, on a game.json copy: a sprite
+// becomes a rect of its frame size, a tileset a tileset_color with one colour per used tile.
+function substitutePngAssetsGame(game, ids) {
+  var ci = 0;
+  var nextColor = function () { return PLACEHOLDER_COLORS[ci++ % PLACEHOLDER_COLORS.length]; };
+  ids.forEach(function (id) {
+    var a = game.assets[id];
+    if (a.type === "sprite" || a.type === "bitmap") {
+      var fr = a.frame || a.size || [8, 8];
+      game.assets[id] = { type: "rect", size: [fr[0], fr[1]], color: nextColor() };
+    } else if (a.type === "tileset") {
+      var used = {};
+      (game.levels || []).forEach(function (lv) {
+        (lv.layers || []).forEach(function (Ly) {
+          if (Ly.kind === "tilemap" && Ly.asset === id) {
+            E.layerGrid(Ly, game.assets).forEach(function (row) { row.forEach(function (v) { if (v & 0xFF) used[v & 0xFF] = 1; }); });
+          } else if ((Ly.kind === "sprite" || Ly.kind === "group") && Ly.asset === id) used[Ly.frame || 0] = 1;
+        });
+      });
+      var colors = {};
+      Object.keys(used).map(Number).sort(function (x, y) { return x - y; }).forEach(function (v) { colors[String(v)] = nextColor(); });
+      if (!Object.keys(colors).length) colors["1"] = nextColor();
+      var repl = { type: "tileset_color", tile: [(a.tile || a.frame || [16, 16])[0], (a.tile || a.frame || [16, 16])[1]], colors: colors };
+      if (a.props) repl.props = a.props;
+      if (a.legend) repl.legend = a.legend;
+      game.assets[id] = repl;
+    } else throw new Error("can't substitute asset '" + id + "' (type " + a.type + ")");
+  });
+  (game.levels || []).forEach(function (lv) {
+    (lv.layers || []).forEach(function (Ly) {
+      if ((Ly.kind === "sprite" || Ly.kind === "group") && ids.indexOf(Ly.asset) >= 0) {
+        if (game.assets[Ly.asset].type === "rect" && Ly.frame) Ly.frame = 0;
+        if (Ly.anim) delete Ly.anim;
+      }
+    });
+  });
+}
 
 // nav buttons in top bar (if present)
 ["btnFit", "btnZoom100", "btnZoomIn", "btnZoomOut"].forEach(function (id) { /* wired below if present */ });

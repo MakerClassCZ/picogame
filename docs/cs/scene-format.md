@@ -8,101 +8,126 @@ logika, například pohyb, AI a podmínky výhry, zůstává v Pythonu.
 ## Postup převodu
 
 ```text
-*.scene.json  ──tools/scene_build.py──▶  <name>_scene.py  ──mpy-cross──▶  <name>_scene.mpy
-(úprava v editoru nebo ručně)            (převedený modul)                (kopie do CIRCUITPY)
+game.json  (+ hero.png ...)  ──Save v editoru / scene_build.py art──▶  hero.pal8 (grafika pro desku)
+                             ──picogame_scene.Game(pg, "game.json")──▶  běží rovnou (streamem, upečeno při startu)
+                             ──scene_build.py build --mpy───────────▶  build/game_bank.mpy + level_*.mpy (ship)
 ```
 
-- **Zdrojový JSON** (`*.scene.json`) může upravovat člověk i editor. Barvy zapisuje jako
-  `[r, g, b]` a mapy jako mřížky.
-- **Převedený modul Pythonu** (`SCENE = {...}`) obsahuje barvy RGB565 ve wire order,
-  mřížku tilů jako `bytes` s jedním bajtem na buňku a grafiku převedenou na atlasy PAL8.
-  Pro zařízení jej zkompiluj do `.mpy`.
-- **Stejné načítání na obou cílech:** `picogame_scene.load(pg, SCENE, ...)` sestaví
-  `pg.Scene` přes veřejné API picogame. Použití popisuje stránka
-  [Sestavování scén](/cs/helpers/building-scenes/).
-
-Zapečení:
+- **Zdroj = jeden JSON na hru** (`game.json`): všechny úrovně, tabulka prostředků, zvuky a
+  příběhová data zón. Čitelný v diffu, editovatelný ručně, editor i `scene_build.py fmt` ho
+  zapisují v jednom kanonickém tvaru. Barvy jako `[r, g, b]`, mapy jako řádky ASCII.
+- **Pixely v JSON nikdy nejsou.** PNG prostředek má vedle sebe sidecar `.pal8`
+  (`hero.png` → `hero.pal8`), který zapíše Save v editoru nebo `scene_build.py art`; deska ho čte
+  přímo do bitmapy. Barevné tilesety a obdélníkové zástupce žádný soubor nepotřebují.
+- **Deska čte game.json sama.** `picogame_scene.Game` prochází soubor po jednotlivých úrovních
+  (`json.load` v CircuitPythonu vrací první úplnou hodnotu), při startu každou upeče a pekaře
+  uvolní: změřeno na RP2040 40–60 ms a ~4,5 kB na úroveň, bez nástroje na hostu.
+- **Ship = upečené moduly.** `scene_build.py build --mpy` zapíše `build/game_bank.mpy`, jeden
+  `level_<name>.mpy` na úroveň a `code.py`, který otevře banku místo JSON; v RAM zůstává jen
+  aktuální úroveň. Stejný loader, stejný herní kód.
+- **Kód zůstává v Pythonu.** `code.py` je tvůj (editor ho vytvoří jednou), `story.py` drží
+  příběhové skripty `def name(d)`, na které se zóna odkáže jménem. Z JSON se žádný kód negeneruje.
 
 ```bash
-python3 tools/scene_build.py examples/levels/world1.scene.json
-# -> examples/levels/world1_scene.py   (atribut modulu SCENE)
-tools/build_mpy.sh                     # případně přelož modul pro zařízení přes mpy-cross
+python3 tools/scene_build.py check          # validace game.json (id, legendy, zóny, efekty)
+python3 tools/scene_build.py fmt            # kanonický text (totéž zapisuje editor)
+python3 tools/scene_build.py art            # PNG -> sidecary .pal8
+python3 tools/scene_build.py build --mpy    # ship: build/ s moduly .mpy
+python3 tools/scene_build.py migrate old.scene.json   # v1 scéna / projekt / .pgproj -> game.json
 ```
+
+Starší `*.scene.json` (jedna úroveň, prostředky uvnitř) a v1 `project.json` všechny nástroje i
+deska dál čtou; `migrate` je přepíše na `game.json` a originál přesune do `legacy/`.
 
 ## Zdrojové schéma (verze 2)
 
 ```jsonc
 {
-  "format": "picogame-scene", "version": 2,
-  "size": [320, 240],
-  "background": [8, 10, 24],            // při převodu -> RGB565 ve wire order
+  "format": "picogame-project", "version": 2,
+  "name": "Quest", "icon": "icon.bmp",   // titulek a ikona pro launcher (volitelné)
+  "size": [320, 240],                     // obrazovka zařízení
+  "start": "world1",                      // úvodní úroveň (výchozí: první)
 
-  "assets": {                            // sdílená banka, položky se odkazují přes id
-    "hero":  { "type": "sprite",  "src": "hero.png", "frames": 6, "transparent": 0,
+  "assets": {                             // jedna tabulka pro celou hru; id jsou identifikátory
+    "hero":  { "type": "sprite",  "src": "hero.png", "frame": [12, 16], "frames": 6, "transparent": 0,
                "animations": { "walk": { "frames": [0,1,2,1], "fps": 8, "loop": true } } },
     "tiles": { "type": "tileset", "src": "tiles.png", "tile": [16, 16], "frames": 5,
+               "legend": { ".": 0, "#": 1, "o": 2, "G": 3 },        // abeceda řádků ASCII
                "props": { "1": {"solid": true}, "2": {"coin": true}, "3": {"goal": true} } },
-    "flag":  { "type": "rect", "size": [8, 16], "color": [255, 220, 60] }
+    "flag":  { "type": "rect", "size": [8, 16], "color": [255, 220, 60] },
+    "grass": { "type": "tileset_color", "tile": [16, 16], "colors": { "1": [40, 120, 60] },
+               "legend": { ".": 0, "g": 1 } }
   },
   "sounds": { "jump": { "src": "jump.wav" } },
 
-  "layers": [                            // pořadí zdola nahoru
-    { "kind": "tilemap", "asset": "tiles", "cols": 80, "rows": 15, "pos": [0, 0],
-      "grid": [[0,0,1,1,0], [1,1,1,1,1]] },   // nebo "rows" + "legend", viz níže
-    { "kind": "sprite", "asset": "hero", "name": "player",
-      "pos": [40, 208], "anchor": [0.5, 1.0], "anim": "walk", "data": { "lives": 3 } },
-    { "kind": "group", "asset": "goomba", "anchor": [0.5, 1.0],
-      "instances": [[224, 208], [480, 208], [704, 208]], "tag": "enemies" },
-    { "kind": "tilemap", "asset": "tiles", "fg": true, "cols": 80, "rows": 15,
-      "legend": { ".": 0, "#": 1, "o": 2 },       // fg: true kreslí nad sprity
-      "rows": ["....o....", "###...###"] },
-    { "kind": "particles", "capacity": 64, "size": 2, "gravity": 0.5, "fade": true,
-      "name": "fx" },
-    { "kind": "hudlabel", "name": "score", "pos": [4, 4],
-      "fg": [255,255,255], "bg": [0,0,0] }   // bez vlivu kamery (fixed je odvozené)
-  ],
-
-  "zones":  [ { "tag": "door", "x": 300, "y": 180, "w": 20, "h": 40 } ],
-  "points": [ { "name": "spawn", "x": 40, "y": 208 } ],
-  "camera": { "mode": "follow", "target": "player", "axis": "x",
-              "bounds": [0, 0, 1280, 240] },
-  "music": "theme",
-  "meta": { "editor": { "grid": 16, "name": "World 1-1" } }   // runtime tuto část ignoruje
+  "levels": [
+    { "name": "world1", "title": "World 1-1",   // name = identifikátor; title = pro lidi
+      "background": [8, 10, 24],               // při převodu -> RGB565 ve wire order
+      "worldSize": [1280, 240],                // jen když je svět větší než namalovaný obsah
+      "layers": [                              // pořadí zdola nahoru
+        { "kind": "tilemap", "asset": "tiles", "pos": [0, 0],
+          "rows": ["....o....", "###...###"] },                 // znaky z legendy prostředku
+        { "kind": "sprite", "asset": "hero", "name": "player",
+          "pos": [40, 208], "anchor": [0.5, 1], "anim": "walk", "data": { "lives": 3 } },
+        { "kind": "sprite", "asset": "goomba", "tag": "foes", "name": "gate_npc", "pos": [224, 208] },
+        { "kind": "group", "asset": "goomba", "tag": "foes", "anchor": [0.5, 1],
+          "instances": [[480, 208], [704, 208]] },
+        { "kind": "tilemap", "asset": "tiles", "fg": true, "rows": ["....", "...."] },   // nad sprity
+        { "kind": "particles", "name": "fx", "capacity": 64, "size": 2, "gravity": 0.5, "fade": true },
+        { "kind": "hudlabel", "name": "score", "pos": [4, 4], "fg": [255,255,255], "bg": [0,0,0] }
+      ],
+      "camera": { "mode": "follow", "target": "player", "axis": "x", "bounds": [0, 0, 1280, 240] },
+      "zones": [
+        { "tag": "elder", "x": 96, "y": 160, "w": 48, "h": 48,
+          "data": { "say": [{ "if": "gate_open", "lines": ["Jdi dál."] }, { "lines": ["Zatáhni za páku."] }] } },
+        { "tag": "lever", "x": 200, "y": 160, "w": 40, "h": 40,
+          "data": { "ask": { "lines": ["Zatáhnout za páku?"], "set": "gate_open", "done": ["Už je zataženo."] } } },
+        { "tag": "exit", "x": 600, "y": 160, "w": 32, "h": 64,
+          "data": { "goto": ["cave", "entry"], "if": "gate_open", "denied": ["Brána je zavřená."] } },
+        { "tag": "boss", "x": 300, "y": 100, "w": 64, "h": 64, "data": { "script": "boss_fight" } }
+      ],
+      "points": [ { "name": "spawn", "x": 40, "y": 208 } ],
+      "effects": [ { "if": "gate_open", "swap": [3, 0], "unsolid": [3], "hide": ["gate_npc"] } ],
+      "music": "theme"
+    },
+    { "name": "cave", "background": [10, 10, 30], "layers": [ "..." ] }
+  ]
 }
 ```
 
 Poznámky k polím:
 
-- **assets** — typy `sprite` / `tileset` / `bitmap` (`src` PNG + `frames`, `tile`,
-  `transparent`), `rect`, `tileset_color`; tileset může připojit **props** pro jednotlivé
-  tily (`solid`/`coin`/`goal`/`hazard`/vlastní) a sprite může deklarovat **animations**
-  (`{name: {frames, fps, loop}}`).
-- **druhy vrstev** — `tilemap` (povoleno několik; jedna může mít `fg: true`, aby kreslila
-  přes sprity), `sprite` (`name`/`anchor`/`frame`/`anim`/`data`, volitelně `angle` ve
-  stupních — nastaví nativní `sprite.angle`), `group` (mnoho instancí jedné bitmapy,
-  adresovatelných přes `tag`), `particles`, `hudlabel` (nezávislý na kameře).
-  Jakákoli vrstva může nastavit `"fixed": true`.
-- **grid tilemapy dvěma zaměnitelnými způsoby** — `"grid"`: obdélníkové 2-D pole indexů
-  dlaždic, **jeden vnitřní seznam na ŘÁDEK** (`grid[y][x]`, takže `len(grid)` je `rows` a
-  `len(grid[0])` je `cols`; délky řádků musí odpovídat deklarovaným `cols`/`rows`). Nebo
-  `"legend"` + `"rows"`: mapa `{znak: index dlaždice}` a jeden string na řádek — tatáž mapa jako
-  ASCII obrázek. Baker bere obojí a vyrobí identický výstup, takže volíš podle toho, kdo to
-  edituje: `grid` pro editor, `rows` pro cokoli, co člověk čte v diffu nebo agent upravuje ručně
-  (zeď je viditelně sloupec `#` a „o tři dlaždice vlevo" je vidět, ne popsané). Editor umí obojí —
-  v `Export ▾` je zaškrtávátko **ASCII map**. Hodnota v legendě může nést i orientaci, takže
-  otočená dlaždice je prostě vlastní znak; znak, který v legendě chybí, se zapeče jako dlaždice 0
-  a baker to ohlásí jako chybu.
-- **orientace dlaždic** — hodnota v gridu tilemapy může v bitech 8–10 nést nativní
-  orientaci dlaždice: `value = tile | flipX<<8 | flipY<<9 | transpose<<10` (všech
-  8 orientací — 4 rotace × zrcadlení). Obyčejné hodnoty zůstávají obyčejné; baker
-  přibalí orientační rovinu, jen když ji nějaká buňka používá.
-- **zones / points** — pojmenované obdélníky a pozice, na které se hra ptá za běhu
-  (`view.in_zone`, `view.point`). Obojí může nést volný objekt `data` (např. importované
-  Tiled custom properties): u zóny je pak v tuple na indexu 5, data pointu čteš
-  z `view.pdata[name]`.
-- **camera** obsahuje nastavení, které hra může použít přes `set_view`; kameru může řídit
-  také vlastní logikou.
-- **meta** je volný prostor pro editor; načítání za běhu neznámé klíče ignoruje.
+- **assets** — typy `sprite` / `tileset` / `bitmap` (`src` PNG + `frame` nebo `tile`, `frames`,
+  `transparent`), `rect`, `tileset_color`; tileset může připojit **props** pro jednotlivé tily
+  (`solid`/`coin`/`goal`/`hazard`/vlastní) a sprite může deklarovat **animations**
+  (`{name: {frames, fps, loop}}`). **legend** tilesetu je abeceda jeho řádků ASCII, společná pro
+  všechny vrstvy, které jím malují; jen se rozšiřuje — editor ji nikdy nepřepisuje, takže diff
+  mapy zůstává obrázkem a znaky, které jsi zvolil ty nebo agent, přežijí uložení.
+- **levels** — `name` je identifikátor (stane se modulem `level_<name>` a klíčem pro `goto`);
+  `title` je jméno pro lidi; `worldSize` se zapisuje jen tehdy, když je svět větší než namalovaný
+  obsah.
+- **druhy vrstev** — `tilemap` (povoleno několik; jedna může mít `fg: true`, aby kreslila přes
+  sprity), `sprite` (`name`/`anchor`/`frame`/`anim`/`data`, volitelně `angle` ve stupních,
+  volitelně `tag`, aby pojmenovaný sprite patřil i do skupiny), `group` (mnoho instancí jedné
+  bitmapy, adresovatelných přes `tag`), `particles`, `hudlabel` (nezávislý na kameře).
+- **tilemapa dvěma zaměnitelnými způsoby** — `"rows"`: jeden string na řádek nad legendou
+  prostředku (výchozí; tvar, který člověk čte v diffu a agent upravuje ručně). Nebo `"grid"`:
+  obdélníkové 2-D pole indexů dlaždic, jeden vnitřní seznam na řádek. Obojí se upeče do stejných
+  bajtů. Hodnota v legendě může nést i orientaci, takže otočená dlaždice je prostě vlastní znak;
+  znak, který v legendě chybí, se upeče jako dlaždice 0 a `check` to ohlásí.
+- **orientace dlaždic** — hodnota v gridu může v bitech 8–10 nést nativní orientaci dlaždice:
+  `value = tile | flipX<<8 | flipY<<9 | transpose<<10`. Baker přibalí orientační rovinu, jen když
+  ji nějaká buňka používá.
+- **zones** — obdélníky, na které se hra ptá (`view.in_zone`); jejich `data` jsou buď
+  **příběhová data** (`say` s variantami podle flagu, `ask` se `set`/`done`/`yes`/`no`,
+  `goto [úroveň, bod]` s `if`/`denied`), která interpretuje `picogame_story`, nebo
+  `{"script": "jmeno"}` → `def jmeno(d)` v tvém `story.py`. **points** jsou pojmenované pozice
+  (`view.point`); obojí může nést volný objekt `data`.
+- **effects** — pravidla úrovně přehraná po každém načtení a po každé změně flagu: `swap` dvou
+  dlaždic, `solid`/`unsolid` dlaždic, `hide`/`show` pojmenovaných spritů, vše pod `if`.
+- **camera** obsahuje nastavení, které hra může použít přes `set_view`; kameru může řídit také
+  vlastní logikou.
+- Neznámé klíče zůstávají: editor i `fmt` je zapíší zpět, loader je ignoruje.
 
 ### Import map z Tiled
 
@@ -119,22 +144,22 @@ python3 tools/tiled2scene.py map.tmj --follow player
 python3 tools/scene_build.py map_scene.json
 ```
 
-### Dvě podoby nejvyšší úrovně
+### Jeden soubor a starší podoby
 
-- `"format": "picogame-scene"` — jedna samostatná scéna s grafikou uvnitř → převedená do jednoho
-  modulu `<name>_scene`.
-- `"format": "picogame-project"` — **banka** sdílených prostředků + `levels[]` → převedeno do jednoho modulu
-  `_bank` plus jednoho modulu `_level` na úroveň; načti přes
-  `bank = picogame_scene.load_bank(pg, BANK)` a pak `load(..., bank=bank)`, takže se sdílená
-  grafika nestaví znovu pro každou úroveň.
+- `"format": "picogame-project"`, `"version": 2` — **game.json**, tvar výše: to, co editor ukládá
+  a co čte `scene_build.py` i deska.
+- `"format": "picogame-scene"` (v1) — jedna samostatná scéna s prostředky uvnitř; všechny nástroje
+  ji dál čtou, starší volání `scene_build.py x.scene.json` ji upeče do jednoho modulu `<name>_scene`.
+- v1 `project.json` — banka prostředků + `levels[]` s legendami na vrstvách; čte se a v paměti
+  povýší (legendy se přesunou k prostředkům). `scene_build.py migrate` zapíše soubor v2.
 
 ### Validace
 
-Při neznámém typu prostředku nebo vrstvy skončí převod s `ValueError`, která označí
-problematickou položku. Chybějící nebo vadný soubor PNG vyvolá původní chybu převodníku.
-Načítání toleruje neznámé klíče na nejvyšší úrovni, ale n-tice vrstev používají pevné pozice.
-Modul vytvořený novější verzí `scene_build.py` proto může vyžadovat odpovídající verzi
-`picogame_scene`.
+`scene_build.py check` hlásí s cestou v souboru: neexistující id prostředků, indexy dlaždic mimo
+tileset, řádky různé délky, znaky chybějící v legendě, neexistující cíle `goto`, flagy testované
+a nikdy nenastavené, jména `script` bez `def` ve `story.py` a `transparent` použité jako příznak
+dlaždice. Deska umí méně: rozbitý JSON skončí na `game.json: level 2 (byte 1234): syntax error`,
+proto validuj na hostu, než soubor zkopíruješ.
 
 ## Převedený modul pro zařízení
 
@@ -164,28 +189,42 @@ Vrstvy a prostředky jsou n-tice místo slovníků, aby modul `.mpy` zůstal mal
 rozbaluje podle pozice. Mřížka a tabulky vlastností tilů jsou `bytes`, každá v jedné
 alokaci. Pixelová data jsou hexadecimální řetězec dekódovaný přes `bytes.fromhex(...)`.
 
-Přímé načítání JSON na zařízení by pro mřížku vytvořilo seznam samostatných Python čísel
-(v měřené verzi přibližně 28 B na číslo): mapa 28×18 spotřebuje asi 14 KB jen za tento seznam,
-navíc k textu JSON. Stejná mřížka jako
-`bytes` literál v `.mpy` má ~500 B a jednu alokaci.
+JSON umí přečíst i deska: `picogame_scene.Game` prochází `game.json` po jednotlivých úrovních a
+každou při startu upeče do těchto n-tic (RP2040: 40–60 ms a ~4,5 kB rezidentně na úroveň, celý
+třílevelový ukázkový projekt nastartuje za 0,2 s), takže ladění úrovně znamená upravit jeden
+textový soubor na CIRCUITPY a stisknout reset. Upečená podoba `.mpy` zůstává formátem pro ship:
+žádné parsování a v RAM jen aktuální úroveň.
 
 ## API načítání za běhu
 
 ```python
 import picogame_scene as pgs, terminalio
-view = pgs.load(pg, world1_scene.SCENE, font=terminalio.FONT)
+game = pgs.Game(pg, "game.json", font=terminalio.FONT)   # při startu projde a upeče všechny úrovně
+game = pgs.Game(pg, "game_bank")                          # ...nebo shipnutá banka + moduly level_*
+game.levels, game.start, game.size                        # co soubor deklaruje
+view = game.load(game.start)                              # View jedné úrovně
+view = game.load("cave", "entry")                         # jiná úroveň, hráč na pojmenovaném bodu
+
 view.scene                  # naplněná a seřazená picogame.Scene
 view.named["player"]        # objekt Sprite
-view.group("enemies")       # list of Sprites
+view.group("enemies")       # seznam Spritů (včetně pojmenovaných se stejným tagem)
 view.tick(dt)               # posune automatické animace jednou za snímek
 view.is_solid(tx, ty)       # vlastnost tilu v první hlavní mapě
 view.tile_has(tx, ty, "coin")
 view.tile_xy(px, py)        # pixel světa -> (tx, ty) v hlavní mapě
-view.in_zone(x, y, "door")  # first zone containing (x, y), or None
-view.point("spawn")         # named point (x, y), or None
-view.play("jump")           # play a loaded sound by id
+view.in_zone(x, y, "door")  # první zóna obsahující (x, y), nebo None
+view.point("spawn")         # pojmenovaný bod (x, y), nebo None
+view.play("jump")           # přehraje načtený zvuk podle id
 view.camera                 # (režim, cíl, osa, hranice), které hra použije pro kameru
+view.effects, view.world    # příběhová pravidla úrovně a autorská velikost světa
+view.swap_tiles(a, b)       # každá buňka s dlaždicí a se změní na b (co dělá efekt)
 ```
+
+Příběh: `picogame_script.Director` spouští skripty po jednom kroku za snímek a
+`picogame_story.Story(d, game, story_module)` mu předává data zón a `story.py`:
+`tale.enter(view, x, y)` spustí zónu při vstupu, `tale.effects(view)` přehraje pravidla,
+`yield from d.goto(level, point)` požádá herní smyčku o výměnu úrovně mezi dvěma kroky. Smyčku
+ukazují šablony runneru z editoru; `load()` / `load_bank()` zůstávají pro upečené slovníky SCENE.
 
 Úplné chování a omezení načítání popisuje stránka
 [Sestavování scén](/cs/helpers/building-scenes/).

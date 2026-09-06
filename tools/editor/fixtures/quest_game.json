@@ -1,0 +1,201 @@
+{
+ "format": "picogame-project",
+ "version": 2,
+ "name": "Quest",
+ "size": [320, 240],
+ "start": "village",
+ "launcher": {
+  "author": "picogame",
+  "category": "demo",
+  "players": 1,
+  "desc": "fixture game"
+ },
+ "assets": {
+  "goomba": {
+   "type": "rect",
+   "size": [14, 14],
+   "color": [200, 60, 60]
+  },
+  "hero": {
+   "type": "rect",
+   "size": [12, 16],
+   "color": [40, 120, 220]
+  },
+  "tiles": {
+   "type": "tileset_color",
+   "tile": [16, 16],
+   "colors": {
+    "1": [120, 80, 40],
+    "2": [90, 90, 90],
+    "7": [200, 40, 40]
+   },
+   "legend": {
+    ".": 0,
+    "#": 1,
+    "=": 2,
+    "G": 7
+   },
+   "props": {
+    "1": {
+     "solid": true
+    },
+    "2": {
+     "solid": true
+    },
+    "7": {
+     "solid": true
+    }
+   }
+  }
+ },
+ "sounds": {},
+ "levels": [
+  {
+   "name": "village",
+   "title": "Village",
+   "background": [90, 150, 230],
+   "worldSize": [640, 240],
+   "layers": [
+    {
+     "kind": "tilemap",
+     "asset": "tiles",
+     "pos": [0, 0],
+     "rows": ["##########", "#........#", "#..=..G..#", "##########"]
+    },
+    {
+     "kind": "sprite",
+     "asset": "hero",
+     "name": "player",
+     "pos": [40, 48],
+     "anchor": [0.5, 1]
+    },
+    {
+     "kind": "sprite",
+     "asset": "goomba",
+     "name": "gate_npc",
+     "tag": "foes",
+     "pos": [96, 48]
+    },
+    {
+     "kind": "group",
+     "asset": "goomba",
+     "tag": "foes",
+     "instances": [
+      [120, 48],
+      [136, 48]
+     ]
+    },
+    {
+     "kind": "hudlabel",
+     "name": "score",
+     "pos": [4, 4],
+     "fg": [255, 255, 255],
+     "bg": [0, 0, 0]
+    }
+   ],
+   "camera": {
+    "mode": "follow",
+    "target": "player",
+    "axis": "x",
+    "bounds": [0, 0, 640, 240]
+   },
+   "zones": [
+    {
+     "tag": "elder",
+     "x": 16,
+     "y": 16,
+     "w": 16,
+     "h": 16,
+     "data": {
+      "say": [
+       {
+        "if": "gate_open",
+        "lines": ["Elder:", "Go on."]
+       },
+       {
+        "lines": ["Elder:", "Pull the lever."]
+       }
+      ]
+     }
+    },
+    {
+     "tag": "lever",
+     "x": 48,
+     "y": 32,
+     "w": 16,
+     "h": 16,
+     "data": {
+      "ask": {
+       "lines": ["Pull the lever?"],
+       "set": "gate_open",
+       "done": ["Already pulled."]
+      }
+     }
+    },
+    {
+     "tag": "exit",
+     "x": 128,
+     "y": 16,
+     "w": 16,
+     "h": 32,
+     "data": {
+      "goto": ["cave", "entry"],
+      "if": "gate_open",
+      "denied": ["The gate is shut."]
+     }
+    },
+    {
+     "tag": "boss",
+     "x": 64,
+     "y": 16,
+     "w": 16,
+     "h": 16,
+     "data": {
+      "script": "boss_fight"
+     }
+    }
+   ],
+   "points": [
+    {
+     "name": "spawn",
+     "x": 40,
+     "y": 48
+    }
+   ],
+   "effects": [
+    {
+     "if": "gate_open",
+     "swap": [7, 0],
+     "unsolid": [7],
+     "hide": ["gate_npc"]
+    }
+   ]
+  },
+  {
+   "name": "cave",
+   "background": [10, 10, 30],
+   "layers": [
+    {
+     "kind": "tilemap",
+     "asset": "tiles",
+     "pos": [0, 0],
+     "rows": ["####", "#..#", "####"]
+    },
+    {
+     "kind": "sprite",
+     "asset": "hero",
+     "name": "player",
+     "pos": [16, 32],
+     "anchor": [0.5, 1]
+    }
+   ],
+   "points": [
+    {
+     "name": "entry",
+     "x": 24,
+     "y": 32
+    }
+   ]
+  }
+ ]
+}
