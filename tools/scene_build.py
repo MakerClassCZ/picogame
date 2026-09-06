@@ -458,10 +458,21 @@ def _cond_flags(c, out):
         out.add(str(one).lstrip("!"))
 
 
-def validate(project, base=None, story=None):
-    """-> list of 'path: problem' strings; empty = valid. story = the story.py text if present."""
+def bake_tilemap(layer, assets=None):
+    """One tilemap layer (grid or rows+legend) -> the runtime tuple; the lib does the work."""
+    return sb._bake_tilemap(layer, assets)
+
+
+def validate(project, base=None, story=None, warnings=None):
+    """-> list of 'path: problem' strings; empty = valid. Non-fatal findings go into `warnings`
+    when a list is given. `story` = the story.py text if present. A bare v1 scene (layers at the
+    top) is checked as a one-level project."""
+    if "levels" not in project and "layers" in project:
+        project = dict(project, levels=[{"name": "scene", "layers": project.get("layers", []),
+                                         "zones": project.get("zones", []), "points": project.get("points", []),
+                                         "effects": project.get("effects", [])}])
     errs = []
-    warn = []
+    warn = warnings if warnings is not None else []
     assets = project.get("assets", {})
     frames = {}
     if project.get("format") not in (FORMAT, None):
@@ -497,8 +508,13 @@ def validate(project, base=None, story=None):
         for ch, v in (a.get("legend") or {}).items():
             if len(ch) != 1:
                 errs.append("assets[%r].legend[%r]: legend keys are single characters" % (aid, ch))
-            if f is not None and (v & 0xFF) >= f:
-                errs.append("assets[%r].legend[%r]: tile %d >= frames (%d)" % (aid, ch, v & 0xFF, f))
+            t, o = v & 0xFF, v >> 8
+            if o > 7:
+                errs.append("assets[%r].legend[%r]: bad orientation bits %d (value %d; bits 8-10 only)" % (aid, ch, o, v))
+            elif o and t == 0:
+                errs.append("assets[%r].legend[%r]: orientation bits on an empty cell (value %d)" % (aid, ch, v))
+            if f is not None and t >= f:
+                errs.append("assets[%r].legend[%r]: tile %d >= frames (%d)" % (aid, ch, t, f))
 
     names = [lv.get("name") for lv in project.get("levels", [])]
     for n in names:
@@ -544,8 +560,15 @@ def validate(project, base=None, story=None):
                     if len(row) != cols0:
                         errs.append("%s.grid[%d]: row length %d != %d" % (p, ry, len(row), cols0))
                     for cx, v in enumerate(row):
-                        if f is not None and (v & 0xFF) >= f:
-                            errs.append("%s.grid[%d][%d]: tile %d >= frames (%d)" % (p, ry, cx, v & 0xFF, f))
+                        t, o = v & 0xFF, v >> 8
+                        if o > 7:
+                            errs.append("%s.grid[%d][%d]: bad orientation bits %d (value %d; bits 8-10 only)"
+                                        % (p, ry, cx, o, v))
+                        elif o and t == 0:
+                            errs.append("%s.grid[%d][%d]: orientation bits on an empty cell (value %d)"
+                                        % (p, ry, cx, v))
+                        if f is not None and t >= f:
+                            errs.append("%s.grid[%d][%d]: tile %d >= frames (%d)" % (p, ry, cx, t, f))
             elif "rows" in layer:
                 rows = layer["rows"]
                 cols0 = len(rows[0]) if rows else 0
@@ -617,7 +640,7 @@ def validate(project, base=None, story=None):
                 break
     for flag in sorted(tested - setflags):
         warn.append("flag %r is tested but nothing sets it" % flag)
-    return errs, warn
+    return errs
 
 
 def check(path, verbose=True):
@@ -625,7 +648,8 @@ def check(path, verbose=True):
     base = os.path.dirname(os.path.abspath(path))
     story_path = os.path.join(base, "story.py")
     story = open(story_path, encoding="utf-8").read() if os.path.exists(story_path) else None
-    errs, warn = validate(project, base, story)
+    warn = []
+    errs = validate(project, base, story, warn)
     for aid, a in png_assets(project):
         if not os.path.exists(os.path.join(base, a["src"])):
             errs.append("assets[%r]: %s missing next to game.json" % (aid, a["src"]))
@@ -671,7 +695,7 @@ def find_mpy_cross():
 def build(path, out_dir=None, mpy=False):
     project = load_any(path)
     base = os.path.dirname(os.path.abspath(path))
-    errs, _ = validate(project, base)
+    errs = validate(project, base)
     if errs:
         for e in errs:
             sys.stderr.write("scene_build: %s\n" % e)
@@ -748,7 +772,7 @@ def bake_legacy(src):
             write_module(os.path.join(base, safe + "_level.py"), "LEVEL",
                          sb.bake_level(lv, size, scene["assets"]))
         return
-    errs, _ = validate(load_any(src), base)
+    errs = validate(load_any(src), base)
     if errs:
         for e in errs:
             sys.stderr.write("scene_build: %s\n" % e)
