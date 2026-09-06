@@ -605,8 +605,12 @@ def validate(project, base=None, story=None):
             setflags.add(m.group(1))
         # bodies written for the old compiled runner reached its globals; a story.py only sees d
         code = "\n".join(l.split("#", 1)[0] for l in story.split("\n"))   # comments are not code
-        for pat, fix in ((r"(?<![\w.\"'])view\.", "d.view."), (r"(?<![\w.\"'])player\b(?![\"'])", 'd.view.named["player"]'),
-                         (r"(?<![\w.\"'])goto\(", "yield from d.goto("), (r"(?<![\w.\"'])apply_effects\(", "d.set(flag) replays effects")):
+        for name, pat, fix in (("view", r"(?<![\w.\"'])view\.", "d.view."),
+                               ("player", r"(?<![\w.\"'])player\b(?![\"'])", 'd.view.named["player"]'),
+                               ("goto", r"(?<![\w.\"'])goto\(", "yield from d.goto("),
+                               ("apply_effects", r"(?<![\w.\"'])apply_effects\(", "d.set(flag) replays effects")):
+            if re.search(r"^\s*(def\s+)?%s\b\s*[=(]" % name, code, re.M):
+                continue                                  # the script defines it itself: fine
             for m in re.finditer(pat, code):
                 line = code.count("\n", 0, m.start()) + 1
                 errs.append("story.py:%d: %s is not defined in a story script - use %s" % (line, m.group(0).rstrip("(."), fix))
