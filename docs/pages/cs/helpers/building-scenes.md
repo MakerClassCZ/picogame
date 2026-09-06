@@ -13,6 +13,22 @@ Loader převede připravený slovník `SCENE` na `pg.Scene` a sadu pojmenovanýc
 
 `load_bank(pg, bank)` vytvoří sdílené bitmapy, zvuky a animace. Výsledek předej jako `load(..., bank=...)` při načtení každé úrovně, aby se společné prostředky nevytvářely znovu.
 
+### Z game.json
+
+Celá hra je jeden `game.json` (viz [formát scény](/cs/scene-format/)); `Game` ho otevře stejně jako
+deska, při startu projde a upeče všechny úrovně, a `load(name, at)` postaví `View` jedné úrovně:
+
+```python
+import picogame_scene as pgs, terminalio
+game = pgs.Game(pg, "game.json", font=terminalio.FONT)   # nebo Game(pg, "game_bank") po build --mpy
+view = game.load(game.start)
+# později při goto: zahoď starý view, gc.collect(), pak
+view = game.load("cave", "entry")
+```
+
+Příběhy zón a efekty úrovní ze souboru běží přes `picogame_story.Story` nad `Directorem` — z JSON
+se žádný kód negeneruje.
+
 **Vlastnosti dlaždic přicházejí se scénou.** Po načtení scény nesahej po `picogame_tiles` — `View` na dotazy k jednotlivým dlaždicím odpovídá sám: `view.is_solid(tx, ty)` a `view.tile_has(tx, ty, "název")` pro libovolný další příznak. Název je ten, který jsi namaloval v editoru, takže nejsi omezený na čtyři výchozí: přidej v editoru příznak `glass` a hra ho přečte jako `view.tile_has(tx, ty, "glass")`. Sáhnout tu po bitovém poli znamená znovu odvozovat data, která loader už má.
 
 **`view.camera` jsou data, ne chování.** Loader ti podá `(mode, target, axis, x, y, w, h)` a hra to aplikuje — nic hráče samo nesleduje. `axis` je `"x"`, `"y"` nebo `"xy"`; respektuj ho při volání `scene.set_view()`, jinak level navržený na svislé rolování tiše rolovat nebude.

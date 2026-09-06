@@ -190,10 +190,16 @@ Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný 
 - `TileFlags(flags=None, tile_px=8)` — `flags` = `{tile_index: bitfield}` nebo seznam. `.get(tile, bit=None)` · `.set(tile, bit, value=True)` · `.at(tilemap, tx, ty, bit)` · `.at_px(tilemap, px, py, bit)` (kolize jedním řádkem). Klíčováno tile indexem (sdíleno všemi buňkami, které ho používají).
 
 ### `picogame_script` — příběhové skripty jako generátory (Director)
-- `Director(pg, scene, buttons, font, box=None, nlines=3, fg=0xFFFF, bg=0x0000)` — pouští JEDEN příběhový skript nad živou scénou; `box` = obdélník dialogového panelu (výchozí: spodní pruh dle `screen()`).
-- `.on(name, genfunc)` (registrace) · `.start(script)` (jméno nebo generátor) · `.active` · `.tick() -> bool` — volej jednou za snímek **po** `buttons.poll()`; vrací True dokud skript běží VČETNĚ posledního kroku (stisk A, který zavřel poslední dialog, tak nepropadne do vstupu hry v témže snímku).
-- Čekací primitivy (uvnitř skriptu přes `yield from`): `.text(lines)` (stránka dialogu, A posouvá) · `.ask(lines) -> nastaví .answer` (volba A/B) · `.wait(frames)` · `.fade_out(speed)` / `.fade_in(speed)`.
-- Příběhové vlajky: `.ev(name)` / `.ev_set(name)` v `.events` (set — persistuj přes své save schéma). `.retarget(scene)` přepojí Directora po změně mapy.
+- `Director(pg, scene, buttons, font, box=None, nlines=3, fg=0xFFFF, bg=0x0000)` — spouští JEDEN příběhový skript nad živou scénou; `box` = obdélník dialogového panelu (výchozí: pruh dole podle `picogame_game.screen()`).
+- `.on(name, genfunc)` (registrace) · `.has(name)` · `.start(script)` (jméno, generátor, nebo slovník s příběhovými DATY zóny, když je připojený `picogame_story`) · `.active` · `.tick() -> bool` — jednou za snímek **po** `buttons.poll()`; vrací True, dokud skript běží, VČETNĚ posledního kroku.
+- Čekací primitiva (ve skriptu s `yield from`): `.text(lines)` (stránka dialogu, A pokračuje) · `.ask(lines) -> nastaví .answer` (volba A/B) · `.wait(frames)` · `.fade_out(speed)` / `.fade_in(speed)` · `.goto(level, point=None)` (fade out, nastaví `.pending`, počká, až herní smyčka vymění úroveň, fade in).
+- Příběhové flagy: `.ev(name)` / `.set(name)` (nastaví A přehraje efekty úrovně přes `.on_flag`) / `.ev_set(name)` (jen nastaví) / `.ev_clear(name)`, uložené v `.events` (množina — ulož ji vlastním save schématem). `.view` = aktuální View (udržuje `picogame_story`). `.retarget(scene)` přesměruje Director po výměně mapy; `.pending` = `(level, point)`, o které skript požádal.
+
+### `picogame_story` — příběhová data z game.json přes Director
+- `Story(director, game=None, module=None)` — připojí se k Directoru; `module` = tvůj `story.py` (skripty `def name(d)`, na které zóna odkazuje přes `{"script": "name"}`; chybějící def ukáže viditelný stub).
+- `.enter(view, x, y) -> bool` — volej při pohybu hráče: spustí příběh zóny, do které PRÁVĚ vstoupil (hranový spouštěč, bez restartu při stání v ní). `.leave()` po výměně úrovně.
+- `.zone(data) -> generátor` — co hrají data zóny: `say` (seznam řádků, nebo varianty `{if, lines, set}` — vyhrává první shoda), `ask` (`lines`, `set`, `done`, `yes`, `no`), `goto [úroveň, bod]` s `if` / `denied`, `script`.
+- `.effects(view)` — přehraje pravidla `effects` úrovně, jejichž `if` platí (`swap [a, b]`, dlaždice `solid` / `unsolid`, `hide` / `show` pojmenovaných spritů); volá se po každém načtení a přes `Director.set` po každé změně flagu.
 
 ### `picogame_seq` — sekvence řízené generátory (coroutine vzor)
 - `wait(frames)` · `over(frames, fn)` (fn(t), t 0..1) · `move_over(sprite, x, y, frames)` — vše jsou generátory; skládej je přes `yield from`.
@@ -261,15 +267,16 @@ Kolize je přímo na `Sprite`: bez alokace, anchor/scale/rotace aware (žádný 
 - `Watch(scene, clock=None, every=30, x=2, y=2)` · `.step()` každý frame · `.hide()/.show()` · `.remove()` — rohový overlay `FPS 30 FREE 31k` (jedna živá text bitmapa, re-render jen při změně). Předej svůj `Clock` jako `clock=` pro skutečné FPS; `every`/`x`/`y` jsou keyword argumenty.
 
 ### `picogame_scene` — deklarativní loader levelů
-- `load(pg, scene, display=None, strip_h=None, font=None, bank=None) -> View` — vytvoří scénu z připraveného slovníku `SCENE`; na SPI backendu má `View` dva strip buffery, na framebufferu jsou `view.bufA` a `view.bufB` rovny `None`.
-- `load_bank(pg, bank)` — postaví sdílenou asset banku jednou (znovupoužitelnou napříč levely).
-- `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`. · `.set_tile_prop(tile, prop, on=True)` — přepni příznak TYPU dlaždice za běhu: každá buňka s tou dlaždicí změní význam najednou (páka zprůchodní všechny brány, led roztaje). Doplňuje nativní `Tilemap.set_tile`, který mění JEDNU buňku; tabulky se kopírují per `load()`, takže změny neprosáknou do jiných úrovní sdílejících bank.
-- `load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True) -> View` — zapeče scene JSON levelu přímo na desce a načte ho, bez kroku přes `scene_build.py`. Na ITERACI levelu; hotovou hru posílej se zapečeným modulem. Jen barevné tilesety.
+- `Game(pg, src, display=None, strip_h=None, font=None, lazy=False)` — celá hra z JEDNOHO zdroje: `src` = `"game.json"` (čte se po jednotlivých úrovních a peče při startu: RP2040 40–60 ms, ~4,5 kB na úroveň, pak se pekař uvolní; `lazy=True` peče úroveň až při načtení) nebo jméno upečeného modulu banky (`"game_bank"` z `scene_build.py build`, úrovně se importují při načtení a zase zahodí). `.levels` · `.start` · `.size` · `.name` · `.bank`.
+- `Game.load(name=None, at=None) -> View` — postaví View úrovně (výchozí: startovní); `at` = jméno bodu, kam se přesune hráč. Před dalším voláním zahoď všechny odkazy na předchozí View a zavolej `gc.collect()` (šablony runneru ukazují dvoufázové goto). Strip buffery se alokují jednou a sdílí napříč úrovněmi.
+- `load(pg, scene, display=None, strip_h=None, font=None, bank=None, bufs=None) -> View` — vytvoří scénu z upečeného slovníku SCENE / LEVEL. `load_bank(pg, bank)` — postaví sdílenou banku jednou. `read_pal8(path)` — paleta a indexy ze sidecaru `.pal8`.
+- `View`: `.tile_xy(px, py)` · `.group(tag)` (včetně pojmenovaných spritů s tagem) · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)` · `.set_tile_prop(tile, prop, on=True)` · `.swap_tiles(a, b)` · `.effects` (příběhová pravidla) · `.world` (autorská velikost světa) · `.name`.
+- `load_json(pg, path, ...) -> View` — starší vstup pro jednu scénu; `game.json` zde vrátí startovní úroveň přes `Game`.
 
-### `picogame_scenebake` — baker scén na desce
-- `bake(scene) -> SCENE` — z (už naparsovaného) scene JSONu editoru udělá runtime SCENE dict, byte-identicky s `tools/scene_build.py`. Assety z PNG vyhodí `NotImplementedError` (median-cut kvantizace zůstává na desktopu).
-- Radši `picogame_scene.load_json()`: drží text JSONu i parse strom jako lokály, což je přesně to, co dělá tu ~17 kB špičku přechodnou. Bakuj BRZO, dokud je heap souvislý.
-- Zabírá ~3,6 kB, dokud je importovaný; `load_json(..., release=True)` ho po posledním levelu zahodí.
+### `picogame_scenebake` — pekař na desce (jediný pekař; `scene_build.py` je CLI nad ním)
+- `bake_bank(assets, sounds=None, base=None) -> BANK` · `bake_level(level, size, assets) -> LEVEL` · `bake(scene) -> SCENE` (samostatná scéna v1). Barevné prostředky se generují; PNG prostředek se stane odkazem `pal8f` na svůj sidecar `<name>.pal8` (na desce není PIL); `pal8_inline` (handoff do playgroundu) prochází beze změny.
+- `walk(f, on_level=None, stop_after=None, top=None)` — přečte nejvyšší úroveň `game.json` po jednotlivých hodnotách (`json.load` na každou, jeden bajt lookaheadu se vrátí seekem); `levels[]` tečou do `on_level(level, index, byte_offset)`. `head(path, want)` — jen malé klíče (co čte launcher, ~3 ms). `level_at(f, offset, size, assets)` — jedna úroveň ze zapamatovaného offsetu.
+- `encode_pal8(data, fw, fh, frames, palette, transparent) -> bytes` — soubor `.pal8` (16bajtová hlavička, paleta, indexy). Zabírá ~3 kB, dokud je importovaný; `Game` ho po startu zahodí.
 
 ### `picogame_mode7` — Mode-7 perspektivní podlaha
 - `Camera(fov=0.66)` · `.draw(canvas, texture, x, y, angle, horizon, height, y_off=0)` — řídí C podlahu `Canvas.mode7` z přívětivé pozice kamery (pozice ve světových/dlaždicových jednotkách, směr v radiánech, `height` = výška kamery). Rozměry `texture` musí být mocniny dvou, jedna světová jednotka = jedna dlaždice. Kresli do 0-RAM `StripDraw` view. Viz [/cs/helpers/pseudo-3d/](/cs/helpers/pseudo-3d/).

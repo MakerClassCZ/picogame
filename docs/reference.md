@@ -190,10 +190,16 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - `TileFlags(flags=None, tile_px=8)` — `flags` = `{tile_index: bitfield}` or a list. `.get(tile, bit=None)` · `.set(tile, bit, value=True)` · `.at(tilemap, tx, ty, bit)` · `.at_px(tilemap, px, py, bit)` (collision one-liner). Keyed by tile index (shared by all cells using it).
 
 ### `picogame_script` — story scripts as generators (Director)
-- `Director(pg, scene, buttons, font, box=None, nlines=3, fg=0xFFFF, bg=0x0000)` — runs ONE story script at a time over a live scene; `box` = the dialog panel rect (default: a bottom strip sized from `screen()`).
-- `.on(name, genfunc)` (register) · `.start(script)` (a name or a generator) · `.active` · `.tick() -> bool` — call once per frame **after** `buttons.poll()`; returns True while a script runs, INCLUDING its final step (so the A press that dismissed the last dialog cannot fall through into the same frame's game input).
-- Waiting primitives (use with `yield from` inside a script): `.text(lines)` (dialog page, A advances) · `.ask(lines) -> sets .answer` (A/B choice) · `.wait(frames)` · `.fade_out(speed)` / `.fade_in(speed)`.
-- Story flags: `.ev(name)` / `.ev_set(name)`, kept in `.events` (a set — persist it via your save schema). `.retarget(scene)` re-points the Director after a map change.
+- `Director(pg, scene, buttons, font, box=None, nlines=3, fg=0xFFFF, bg=0x0000)` — runs ONE story script at a time over a live scene; `box` = the dialog panel rect (default: a bottom strip sized from `picogame_game.screen()`).
+- `.on(name, genfunc)` (register) · `.has(name)` · `.start(script)` (a name, a generator, or a zone's story DATA dict when `picogame_story` is attached) · `.active` · `.tick() -> bool` — call once per frame **after** `buttons.poll()`; returns True while a script runs, INCLUDING the finishing step.
+- Waiting primitives (use with `yield from` inside a script): `.text(lines)` (dialog page, A advances) · `.ask(lines) -> sets .answer` (A/B choice) · `.wait(frames)` · `.fade_out(speed)` / `.fade_in(speed)` · `.goto(level, point=None)` (fade out, set `.pending`, wait for the game loop to swap the level, fade in).
+- Story flags: `.ev(name)` / `.set(name)` (sets AND replays the level's effects through `.on_flag`) / `.ev_set(name)` (plain) / `.ev_clear(name)`, kept in `.events` (a set — persist it via your save schema). `.view` = the current View (kept fresh by `picogame_story`). `.retarget(scene)` re-points the Director after a map change; `.pending` = `(level, point)` a script asked for.
+
+### `picogame_story` — a game.json's story data through the Director
+- `Story(director, game=None, module=None)` — installs itself on the Director; `module` = your `story.py` (`def name(d)` scripts a zone names with `{"script": "name"}`; a missing def shows a visible stub).
+- `.enter(view, x, y) -> bool` — call as the player moves: starts the story of the zone just ENTERED (edge-latched, no restart while standing in it). `.leave()` after a level change.
+- `.zone(data) -> generator` — what a zone's data plays: `say` (a list of lines, or variants `{if, lines, set}` — first match wins), `ask` (`lines`, `set`, `done`, `yes`, `no`), `goto [level, point]` with `if` / `denied`, `script`.
+- `.effects(view)` — replay the level's `effects` rules whose `if` holds (`swap [a, b]`, `solid` / `unsolid` tiles, `hide` / `show` named sprites); called after every load and, through `Director.set`, after every flag change.
 
 ### `picogame_seq` — generator-driven sequences (coroutine pattern)
 - `wait(frames)` · `over(frames, fn)` (fn(t), t 0..1) · `move_over(sprite, x, y, frames)` — all are generators; compose with `yield from`.
@@ -261,15 +267,16 @@ Collision lives on the `Sprite` itself: zero-alloc, anchor/scale/rotation aware 
 - `Watch(scene, clock=None, every=30, x=2, y=2)` · `.step()` each frame · `.hide()/.show()` · `.remove()` — a corner `FPS 30 FREE 31k` overlay (one live text bitmap, re-rendered only on change). Pass your `Clock` as `clock=` for a true FPS reading; `every`/`x`/`y` are keyword args.
 
 ### `picogame_scene` — declarative level loader
-- `load(pg, scene, display=None, strip_h=None, font=None, bank=None) -> View` — build a scene from a baked SCENE dict.
-- `load_bank(pg, bank)` — build a shared asset bank once (reuse across levels).
-- `View`: `.tile_xy(px, py)` · `.group(tag)` · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)`. · `.set_tile_prop(tile, prop, on=True)` — flip a flag for a TILE TYPE at runtime: every cell holding that tile changes meaning at once (a lever makes all gate tiles walkable, ice melts). Complements the native `Tilemap.set_tile`, which swaps ONE cell; tables are copied per `load()`, so changes never leak into other levels sharing a bank.
-- `load_json(pg, path, display=None, strip_h=None, font=None, bank=None, release=True) -> View` — bake a level's scene JSON on the device and load it, skipping `scene_build.py`. For ITERATING on a level; ship the pre-baked module. Colour-tileset levels only.
+- `Game(pg, src, display=None, strip_h=None, font=None, lazy=False)` — the whole game from ONE source: `src` = `"game.json"` (streamed one level at a time and baked at boot: RP2040 40–60 ms, ~4.5 kB per level, then the baker is released; `lazy=True` bakes a level when it is loaded) or the name of a baked bank module (`"game_bank"` from `scene_build.py build`, levels imported per load and dropped again). `.levels` · `.start` · `.size` · `.name` · `.bank`.
+- `Game.load(name=None, at=None) -> View` — build a level's View (default: the start level); `at` = a point name the player is moved to. Drop every reference to the previous View and `gc.collect()` before calling it again (the runner templates show the two-phase goto). Strip buffers are allocated once and shared across levels.
+- `load(pg, scene, display=None, strip_h=None, font=None, bank=None, bufs=None) -> View` — build a scene from a baked SCENE / LEVEL dict. `load_bank(pg, bank)` — build a shared asset bank once. `read_pal8(path)` — a `.pal8` sidecar's palette + index bytes.
+- `View`: `.tile_xy(px, py)` · `.group(tag)` (tagged single sprites included) · `.point(name)` · `.in_zone(x, y, tag=None)` · `.is_solid(tx, ty)` · `.tile_has(tx, ty, prop)` · `.play(sound_id)` · `.tick(dt)` · `.set_tile_prop(tile, prop, on=True)` · `.swap_tiles(a, b)` · `.effects` (story rules) · `.world` (authored world size) · `.name`.
+- `load_json(pg, path, ...) -> View` — the old single-scene entry point; a `game.json` given here returns its start level through `Game`.
 
-### `picogame_scenebake` — on-device scene baker
-- `bake(scene) -> SCENE` — turn an editor scene JSON (already parsed) into the runtime SCENE dict, byte-identical to `tools/scene_build.py`. PNG-backed assets raise `NotImplementedError` (median-cut quantization stays on the desktop).
-- Prefer `picogame_scene.load_json()`: it holds the JSON text and the parse tree as locals, which is what keeps the ~17 kB peak transient. Bake EARLY, while the heap is still contiguous.
-- Costs ~3.6 kB while imported; `load_json(..., release=True)` drops it after the last level.
+### `picogame_scenebake` — on-device baker (the one baker; `scene_build.py` is a CLI over it)
+- `bake_bank(assets, sounds=None, base=None) -> BANK` · `bake_level(level, size, assets) -> LEVEL` · `bake(scene) -> SCENE` (a standalone v1 scene). Colour assets are generated; a PNG asset becomes a `pal8f` reference to its `<name>.pal8` sidecar (no PIL on the device); `pal8_inline` (playground handoff) passes through.
+- `walk(f, on_level=None, stop_after=None, top=None)` — read a `game.json` top level one value at a time (`json.load` per value, one byte of lookahead seeked back); `levels[]` stream into `on_level(level, index, byte_offset)`. `head(path, want)` — just the small keys (what the launcher reads, ~3 ms). `level_at(f, offset, size, assets)` — one level from a remembered offset.
+- `encode_pal8(data, fw, fh, frames, palette, transparent) -> bytes` — a `.pal8` file (16-byte header, palette, indices). Costs ~3 kB while imported; `Game` drops it after boot.
 
 ### `picogame_mode7` — Mode-7 perspective floor
 - `Camera(fov=0.66)` · `.draw(canvas, texture, x, y, angle, horizon, height, y_off=0)` — drive the C `Canvas.mode7` floor from a friendly camera pose (position in world/tile units, heading in radians, `height` = how high the camera sits). `texture` dims must be powers of two, one world unit = one tile. Draw into a 0-RAM `StripDraw` view. See [/helpers/pseudo-3d/](/helpers/pseudo-3d/).

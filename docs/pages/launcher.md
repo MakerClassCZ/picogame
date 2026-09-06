@@ -66,7 +66,7 @@ A custom boot `code.py` can scan a different set of folders — just pass them:
 
 ## Two ways to describe a game
 
-A folder can carry a small manifest so it reads nicely in the menu. Two formats work:
+A folder can carry a small manifest so it reads nicely in the menu. Three sources work, in this order:
 
 - **`metadata.json`** — simple and **FruitJamOS-compatible** (`title` + `icon`, plus optional
   `author`, `category`, `players`, `desc`, `entry`). One game per folder — this is what the example
@@ -84,3 +84,6 @@ A folder can carry a small manifest so it reads nicely in the menu. Two formats 
   ```
   Each entry names its own `entry`, `title` and `icon` (and optional `author`/`category`/`players`/
   `desc`). `picogame.json` is read before `metadata.json`.
+- **`game.json`** — a game made with the level editor needs no manifest at all: the launcher reads
+  its `name` and `icon` (and an optional `launcher` block with `author`, `category`, `players`,
+  `desc`, `entry`) straight from the game's own file, without parsing the levels.

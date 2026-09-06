@@ -13,6 +13,22 @@ The loader turns a baked `SCENE` dictionary into a `pg.Scene` and a set of named
 
 `load_bank(pg, bank)` builds shared bitmaps/sounds/anims ONCE; pass the result as `load(..., bank=...)` for each level so unchanged art is not rebuilt per level.
 
+### From game.json
+
+A whole game is one `game.json` (see [scene format](/scene-format/)); `Game` opens it the way the
+device does, streaming and baking every level at start, and `load(name, at)` builds one level's `View`:
+
+```python
+import picogame_scene as pgs, terminalio
+game = pgs.Game(pg, "game.json", font=terminalio.FONT)   # or Game(pg, "game_bank") after build --mpy
+view = game.load(game.start)
+# later, on a goto: drop the old view, gc.collect(), then
+view = game.load("cave", "entry")
+```
+
+Zone stories and per-level effects from the file run through `picogame_story.Story` on top of the
+`Director` — no code is generated from the JSON.
+
 **Tile properties come with the scene.** Do not reach for `picogame_tiles` after loading a scene — the `View` already answers per-tile questions: `view.is_solid(tx, ty)`, and `view.tile_has(tx, ty, "name")` for any other flag. The name is whatever the editor painted, so it is not limited to the four the editor offers by default: add a `glass` flag in the editor and the game reads it as `view.tile_has(tx, ty, "glass")`. Falling back to a bitfield here means re-deriving data the loader already holds.
 
 **`view.camera` is data, not behaviour.** The loader hands you `(mode, target, axis, x, y, w, h)` and the game applies it — nothing follows the player on its own. `axis` is `"x"`, `"y"` or `"xy"`; honour it when you call `scene.set_view()`, or a level authored to scroll vertically silently will not.

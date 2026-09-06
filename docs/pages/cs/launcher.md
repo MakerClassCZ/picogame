@@ -66,7 +66,7 @@ Vlastní bootovací `code.py` může prohledat jinou sadu složek — stačí je
 
 ## Dva způsoby, jak hru popsat
 
-Složka může nést malý manifest, aby v menu vypadala dobře. Fungují dva formáty:
+Složka může nést malý manifest, aby v menu vypadala dobře. Fungují tři zdroje, v tomto pořadí:
 
 - **`metadata.json`** — jednoduchý a **kompatibilní s FruitJamOS** (`title` + `icon`, plus volitelně
   `author`, `category`, `players`, `desc`, `entry`). Jedna hra na složku — to používá příklad výše,
@@ -84,3 +84,6 @@ Složka může nést malý manifest, aby v menu vypadala dobře. Fungují dva fo
   ```
   Každá položka má vlastní `entry`, `title` a `icon` (a volitelně `author`/`category`/`players`/`desc`).
   `picogame.json` se čte dřív než `metadata.json`.
+- **`game.json`** — hra z editoru úrovní žádný manifest nepotřebuje: launcher si přečte `name` a
+  `icon` (a volitelný blok `launcher` s `author`, `category`, `players`, `desc`, `entry`) přímo z
+  jejího souboru, aniž by parsoval úrovně.

@@ -49,3 +49,16 @@ Pro agenty, kteří čtou dokumentaci přímo, je celý web dostupný jako čist
 - **[/llms-full.txt](/llms-full.txt)** — celá dokumentace jako jeden markdown soubor
 - **[/_llms-txt/api.txt](/_llms-txt/api.txt)** — jen API (reference + engine + helpery), na psaní kódu
 - **[/_llms-txt/getting-started.txt](/_llms-txt/getting-started.txt)** — úvod, tutoriály a koncepty
+
+## Úprava game.json s agentem
+
+Úroveň z [webového editoru](/cs/tools/editor/) je jeden textový soubor, `game.json`, který agent
+upravuje přímo — řádky mapy nad legendou tilesetu, zóny a jejich příběhová data, efekty — vedle
+`story.py` (příběhové skripty v Pythonu) a `code.py`. Pravidla, která skill učí:
+
+- zachovej znaky legendy (přidávej, nikdy nepřepisuj), aby diff mapy zůstal obrázkem;
+- před předáním souboru pusť `python3 tools/scene_build.py check` a `fmt`, po změně PNG `art`;
+  nikdy neupravuj soubory `.pal8` ani `build/`;
+- se zvolenou složkou v editoru se agentův zápis objeví do dvou sekund; v gitu je jeden řádek mapy
+  jeden řádek souboru, takže se tvoje a agentovy úpravy slijí bez konfliktu.
+

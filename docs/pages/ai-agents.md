@@ -49,3 +49,16 @@ the [llms.txt](https://llmstxt.org/) convention — point your agent at these in
 - **[/llms-full.txt](/llms-full.txt)** — the entire documentation as one markdown file
 - **[/_llms-txt/api.txt](/_llms-txt/api.txt)** — just the API (reference + engine + helpers), for writing code
 - **[/_llms-txt/getting-started.txt](/_llms-txt/getting-started.txt)** — the intro, tutorials and concepts
+
+## Editing a game.json with an agent
+
+A level made in the [web editor](/tools/editor/) is one text file, `game.json`, that the agent
+edits directly — map rows over the tileset's legend, zones and their story data, effects — next
+to `story.py` (Python story scripts) and `code.py`. The rules the skill teaches:
+
+- keep the legend's characters (append, never re-letter), so the map's diff stays a picture;
+- run `python3 tools/scene_build.py check` and `fmt` before handing the file back, `art` after
+  touching a PNG; never edit `.pal8` files or `build/`;
+- with a folder chosen in the editor, the agent's write shows up there within two seconds; in git,
+  one map row is one line, so your edits and the agent's merge cleanly.
+
