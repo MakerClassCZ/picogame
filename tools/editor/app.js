@@ -1795,6 +1795,44 @@ async function importExportedFiles(obj, sceneFile, files) {
           " - pick those PNGs too, or keep them in the chosen folder", "info");
 }
 
+// PNG / .pal8 / story.py picked on their own join the project that is open: the art goes to the
+// asset whose src has that name (the pixels of a game.json opened without its PNGs), story.py
+// fills the script bodies. Nothing else about the project changes.
+async function attachFiles(files) {
+  const done = [], unknown = [];
+  for (const f of files) {
+    const base = f.name.toLowerCase();
+    if (/\.png$/i.test(base)) {
+      const id = Object.keys(project.assets).find(function (k) {
+        const a = project.assets[k]; return E.isImg(a) && a.src && a.src.toLowerCase().replace(/^.*[\/\\]/, "") === base;
+      });
+      if (!id) { unknown.push(f.name); continue; }
+      const url = await readFile(f, "dataurl");
+      artURLs[id] = url; images[id] = await loadImageFromDataURL(url); done.push(f.name + " -> " + id);
+    } else if (/\.pal8$/i.test(base)) {
+      const stem = base.replace(/\.pal8$/, "");
+      const id = Object.keys(project.assets).find(function (k) {
+        const a = project.assets[k]; return E.isImg(a) && a.src && a.src.toLowerCase().replace(/^.*[\/\\]/, "").replace(/\.[^.]*$/, "") === stem;
+      });
+      if (!id) { unknown.push(f.name); continue; }
+      if (images[id] && images[id].complete && images[id].naturalWidth) continue;   // a PNG is better
+      const dec = E.pal8ToRGBA(E.decodePal8(new Uint8Array(await f.arrayBuffer())));
+      const c = document.createElement("canvas"); c.width = dec.w; c.height = dec.h;
+      c.getContext("2d").putImageData(new ImageData(dec.rgba, dec.w, dec.h), 0, 0);
+      const url = c.toDataURL("image/png");
+      artURLs[id] = url; images[id] = await loadImageFromDataURL(url); done.push(f.name + " -> " + id + " (recovered)");
+    } else if (/\.py$/i.test(base)) {
+      const scripts = parseStory(await readFile(f, "text"));
+      project.scripts = Object.assign(project.scripts || {}, scripts);
+      done.push(f.name + " (" + Object.keys(scripts).length + " script" + (Object.keys(scripts).length === 1 ? "" : "s") + ")");
+      if ($("storySel")) refreshStory();
+    } else unknown.push(f.name);
+  }
+  renderPanel(); scheduleAutosave();
+  if (done.length) toast("Attached " + done.join(", "), "ok");
+  if (unknown.length) toast("No asset in this game uses " + unknown.join(", ") + " (Paint > Import adds new art; Open a game.json to start one)", "info");
+}
+
 async function importTiledFiles(files) {
   const byName = {};
   files.forEach(function (f) { byName[f.name.toLowerCase()] = f; });
@@ -1847,7 +1885,11 @@ if ($("projfile")) $("projfile").onchange = function (ev) {
     importTiledFiles(files).catch(function (e) { toast("Tiled import: " + e.message, "err"); console.error(e); });
     return;
   }
-  const f = files.find(function (x) { return /\.json$/i.test(x.name); }) || files[0];
+  const f = files.find(function (x) { return /\.json$/i.test(x.name); });
+  if (!f) {                                  // no JSON picked: attach art / story to the OPEN game
+    attachFiles(files).catch(function (e) { toast("Attach: " + e.message, "err"); console.error(e); });
+    return;
+  }
   const fr = new FileReader();
   fr.onload = function () {
     let obj;
