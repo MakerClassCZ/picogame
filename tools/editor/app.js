@@ -77,6 +77,7 @@ function hint(t) { const d = mk("div", "hint"); d.innerHTML = t; return d; }
 // undo checkpoint: call BEFORE a mutation
 let dirtySince = 0;            // set by every mutation, cleared by Save / a reload from disk
 let lastSavedText = "";        // the game.json text we last wrote or read (folder watch)
+let docName = "game.json";     // the file Save writes and the folder watch reads (setDocName)
 function snapshot() { history.push(project); dirtySince = Date.now(); scheduleAutosave(); }
 
 // ---------------------------------------------------------------- session autosave
@@ -88,7 +89,7 @@ let autosaveTimer = null, autosaveWarned = false;
 function autosaveNow() {
   autosaveTimer = null;
   try {
-    const sv = E.serialize(project); sv.art = artURLs;
+    const sv = E.serialize(project); sv.art = artURLs; sv.file = docName;
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(sv));
   } catch (e) {
     // storage full/blocked: warn once, keep the session usable (manual Save still works)
@@ -1305,7 +1306,7 @@ if ($("btnAddLevel")) $("btnAddLevel").onclick = function () {
   snapshot(); project.levels.push(E.newLevel("level" + (project.levels.length + 1))); project.current = project.levels.length - 1;
   clearSel(); sel.tm = 0; renderPanel(); refreshChrome(); doFit(); toast("Added level", "ok");
 };
-if ($("btnNew")) $("btnNew").onclick = function () { if (confirm("New project? Unsaved work is lost.")) { loadProject(E.newProject()); renderPanel(); refreshChrome(); } };
+if ($("btnNew")) $("btnNew").onclick = function () { if (confirm("New project? Unsaved work is lost.")) { loadProject(E.newProject()); setDocName("game.json"); renderPanel(); refreshChrome(); } };
 
 function download(name, text) { const b = new Blob([text], { type: "application/json" }); const a = mk("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
 function downloadBytes(name, u8) { const b = new Blob([u8], { type: "application/octet-stream" }); const a = mk("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
@@ -1499,31 +1500,67 @@ async function saveText(name, text) {
 
 if ($("btnFolder")) $("btnFolder").onclick = pickFolder;
 restoreFolder();
-// With a folder bound, watch game.json: an agent's edit shows up here within 2 s. Reloaded
+// With a folder bound, watch the game file: an agent's edit shows up here within 2 s. Reloaded
 // silently when nothing is unsaved in the editor; otherwise you are told once and Save asks.
 let watchWarned = false;
 async function checkFolder() {
   if (!dirHandle) return;
+  const name = docName;
   let f;
-  try { f = await (await dirHandle.getFileHandle("game.json")).getFile(); } catch (e) { return; }
+  try { f = await (await dirHandle.getFileHandle(name)).getFile(); } catch (e) { return; }
   const st = stampOf(f);
-  if (st === fileStamps.get("game.json")) return;
+  if (st === fileStamps.get(name)) return;
   const text = await f.text();
-  if (text === lastSavedText) { rememberFile("game.json", f); return; }   // our own write
+  if (text === lastSavedText) { rememberFile(name, f); return; }   // our own write
   if (dirtySince) {
-    if (!watchWarned) { watchWarned = true; toast("game.json changed on disk (an agent or another tool). Save will ask before overwriting; Open reloads it.", "info"); }
+    if (!watchWarned) { watchWarned = true; toast(name + " changed on disk (an agent or another tool). Save will ask before overwriting; Open reloads it.", "info"); }
     return;
   }
   let obj;
   try { obj = JSON.parse(text); } catch (e) { return; }       // still being written
   watchWarned = false;
-  try { await importExportedFiles(obj, f, []); toast("Reloaded game.json - it changed on disk", "ok"); }
+  try { await importExportedFiles(obj, f, []); toast("Reloaded " + name + " - it changed on disk", "ok"); }
   catch (e) { console.warn("reload", e); }
 }
 setInterval(function () { checkFolder().catch(function () {}); }, 2000);
-// Save has two entry points - the header button and the last item of the Export
-// menu, which lists the editor project alongside the exports so every file the
-// editor can produce is findable in one place.
+// The file Save writes - and the folder watch reads - is the one you opened: its name travels
+// with the project (autosave included), so a level opened as tutorial.json goes back out as
+// tutorial.json, not as one more game.json in ~/Downloads. Save as… renames it; New, the demos
+// and the legacy formats (v1 scene/project, .pgproj, Tiled - conversions, not the same file)
+// reset it to game.json. Game(pg, path) and scene_build.py take any name; story.py and the
+// .pal8 sidecars keep theirs, they sit next to whatever the game file is called.
+function cleanDocName(name) {
+  name = (name || "").replace(/^.*[\/\\]/, "").trim();     // a file name, not a path
+  return name && !/\.json$/i.test(name) ? name + ".json" : name;
+}
+function setDocName(name) {
+  docName = cleanDocName(name) || "game.json";
+  const b = $("btnSave");
+  if (b) {                                  // the name on the button only when it is news (not game.json)
+    const shown = docName.length > 24 ? docName.slice(0, 12) + "\u2026" + docName.slice(-10) : docName;
+    b.textContent = docName === "game.json" ? "Save" : "Save " + shown;
+    b.title = "Write " + docName + " (+ .pal8 art into the chosen folder)";
+  }
+  scheduleAutosave();
+  return docName;
+}
+async function folderHas(name) {
+  if (!dirHandle) return false;
+  try { await dirHandle.getFileHandle(name); return true; } catch (e) { return false; }
+}
+async function saveProjectAs() {
+  const d = $("saveD"); if (d) d.open = false;
+  const typed = prompt("Save as - the file Save writes from now on (its .pal8 art and story.py sit next to it):", docName);
+  if (typed === null) return;
+  const name = cleanDocName(typed);
+  if (!name) return;
+  // a name we never opened may already be someone's file in the folder: overwriting it is a
+  // choice, not a side effect (a Save to the file you opened asks via changedSinceWeSawIt)
+  if (name !== docName && !fileStamps.has(name) && await folderHas(name) &&
+      !confirm(name + " already exists in " + dirHandle.name + "/ - overwrite it with this game?")) return;
+  setDocName(name);
+  await saveProject();
+}
 // Save writes the ONE source file, game.json (canonical text: what scene_build.py fmt writes,
 // what an agent edits, what the device reads), plus - into a chosen folder - the .pal8 art
 // sidecars and any source PNG the folder lacks. Legacy script bodies (project.scripts, from an
@@ -1540,14 +1577,15 @@ async function saveProject() {
     if (dirHandle && await folderRead("story.py")) storyNote = " - story.py exists, scripts from the panel were NOT written";
     else { await saveText("story.py", st); storyNote = " + story.py"; }
   }
-  const w = await saveText("game.json", text);
+  const w = await saveText(docName, text);
   lastSavedText = text; dirtySince = 0;
-  toast("Saved " + (w === "downloaded" ? "game.json" : w + "game.json") +
+  toast("Saved " + (w === "downloaded" ? docName : w + docName) +
         (art.length ? " + " + art.length + " art file" + (art.length === 1 ? "" : "s") : "") + storyNote +
         (w === "downloaded" && Object.keys(project.assets).some(function (id) { return E.isImg(project.assets[id]); })
           ? " (Build > Art downloads the .pal8 files the device needs)" : ""), "ok");
 }
 if ($("btnSave")) $("btnSave").onclick = saveProject;
+if ($("btnSaveAs")) $("btnSaveAs").onclick = saveProjectAs;
 if ($("btnBuildArt")) $("btnBuildArt").onclick = async function () {
   const d = $("buildD"); if (d) d.open = false;
   const done = await writeArt(true);
@@ -1556,6 +1594,7 @@ if ($("btnBuildArt")) $("btnBuildArt").onclick = async function () {
 if ($("btnLoad")) $("btnLoad").onclick = function () { $("projfile").click(); };
 function loadSave(obj) {
   loadProject(E.deserialize(obj));
+  setDocName(obj.file);                       // the autosave remembers it; a .pgproj/demo does not
   const art = obj.art || (obj.project && obj.project.art) || {};
   for (const id in art) { artURLs[id] = art[id]; const im = new Image(); im.src = art[id]; images[id] = im; }
   renderPanel(); refreshChrome();
@@ -1783,13 +1822,16 @@ async function importExportedFiles(obj, sceneFile, files) {
   }
 
   loadProject(proj);                              // resets images/artURLs - fill AFTER
+  const sameFile = obj.format === "picogame-project" && obj.version === 2;   // v1 / scene: a conversion
+  setDocName(sameFile ? sceneFile.name : "game.json");
   for (const id in art) { artURLs[id] = art[id]; images[id] = await loadImageFromDataURL(art[id]); }
   dirtySince = 0;
   try { lastSavedText = E.canonicalJson(E.exportGame(project)); } catch (e) { lastSavedText = ""; }
   renderPanel(); refreshChrome();
   if (recovered.length) toast("Pixels recovered from .pal8 for: " + recovered.join(", ") + " (565 colours, hard alpha)", "info");
   const n = proj.levels.length;
-  toast("Imported " + sceneFile.name + " (" + n + (n === 1 ? " level" : " levels") + ")", "ok");
+  toast("Imported " + sceneFile.name + " (" + n + (n === 1 ? " level" : " levels") + ")" +
+        (sameFile ? "" : " - Save writes it as game.json (v2)"), "ok");
   if (missing.length)
     toast("No pixels for: " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " +" + (missing.length - 4) : "") +
           " - pick those PNGs too, or keep them in the chosen folder", "info");
