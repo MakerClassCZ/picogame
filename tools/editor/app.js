@@ -294,8 +294,11 @@ function panelSelect() {
 
   cameraPanel(panel);
 
-  add(panel, h3("Story effects"));
-  panel.appendChild(hint('World changes replayed from story flags - on level load and whenever a flag is set. ' +
+  const fxBox = mk("details", "fold");
+  fxBox.open = !!(L().effects && L().effects.length);      // nothing set: stay out of the way
+  fxBox.appendChild(mk("summary", null, "Story effects" + (L().effects && L().effects.length ? " (" + L().effects.length + ")" : "")));
+  const fx = fxBox;                                        // the section below builds into the fold
+  fx.appendChild(hint('World changes replayed from story flags - on level load and whenever a flag is set. ' +
     'E.g. <code>[{"if":"gate_open","swap":[3,6],"unsolid":[3]}]</code>: when <code>gate_open</code> is set, ' +
     'every tile <b>3</b> becomes tile <b>6</b> (the look) and tile 3 stops being solid (the collision). ' +
     'Also <code>solid</code>, <code>hide</code>/<code>show</code> (sprite names). Flags come from zone ' +
@@ -339,16 +342,21 @@ function panelSelect() {
       fxTa.classList.remove("bad"); scheduleAutosave(); renderFxPreview();
     } catch (e) { fxTa.classList.add("bad"); toast("effects is not valid JSON", "err"); }
   };
-  panel.appendChild(fxTa);
+  fx.appendChild(fxTa);
   const fxBr = mk("div", "row");
   add(fxBr, btn("Edit effects\u2026", function () { openEffectsModal(L()); }));
-  panel.appendChild(fxBr);
-  panel.appendChild(fxPrev);
+  fx.appendChild(fxBr);
+  fx.appendChild(fxPrev);
   renderFxPreview();
+  panel.appendChild(fxBox);
 
   add(panel, h3("Objects"));
   const any = L().entities.length + L().hud.length + L().zones.length + L().points.length + L().particles.length;
-  if (!any) { panel.appendChild(hint("Nothing placed yet. Use Paint to make ground, Place to drop sprites.")); return; }
+  if (!any) {
+    panel.appendChild(hint("Nothing placed yet \u2014 <b>Paint</b> makes ground, <b>Place</b> drops sprites, " +
+                           "<b>Zone</b> marks an area that can talk."));
+    return;
+  }
   L().entities.forEach(function (en) { objRow((en.name || (en.tag ? "#" + en.tag : en.asset)), "entity", en); });
   L().hud.forEach(function (hd) { objRow("HUD " + hd.name, "hud", hd); });
   L().zones.forEach(function (z) { objRow("zone " + z.tag, "zone", z); });
@@ -504,15 +512,23 @@ function inspector(box) {
     fieldText(box, "tag", z.tag, function (v) { z.tag = v; });
     fieldNum(box, "x", z.x, function (v) { z.x = v; }); fieldNum(box, "y", z.y, function (v) { z.y = v; });
     fieldNum(box, "w", z.w, function (v) { z.w = v; }); fieldNum(box, "h", z.h, function (v) { z.h = v; });
-    box.appendChild(hint("view.in_zone(x, y, tag) returns this when a point is inside."));
-    fieldData(box, z, 'data (JSON) - story keys, compiled to code on Try: {"script": "name"} \u00b7 ' +
-      '{"say": [lines or {"if","lines","set"} variants]} \u00b7 {"ask": {"lines","set","yes","no","done"}} \u00b7 ' +
-      '{"goto": ["level", "point"], "if": flag, "denied": [lines]}:');
+    // What a zone DOES is the reason to draw one, so it leads - and it reads as a sentence, not
+    // as JSON. The data behind it is still here, one fold down, for hand-editing and for agents.
+    box.appendChild(mk("div", "hint", storySummary(z)));
     const zr = mk("div", "row");
-    add(zr, btn("Edit story\u2026", function () { openStoryModal(z); }));
+    add(zr, btn(z.data && (z.data.say || z.data.ask || z.data.goto || z.data.script)
+                ? "Edit story\u2026" : "Add a story\u2026", function () { openStoryModal(z); }));
     if (z.data && (z.data.say || z.data.ask || z.data.goto))
       add(zr, btn("Convert to script", function () { ejectZoneScript(z); }));
     box.appendChild(zr);
+    const dd = mk("details", "fold");
+    dd.appendChild(mk("summary", null, "data (JSON) \u00b7 how the game reads this zone"));
+    dd.appendChild(hint("<code>view.in_zone(x, y, tag)</code> returns this zone when a point is inside."));
+    if (z.data && !z.data.say && !z.data.ask && !z.data.goto && !z.data.script) dd.open = true;  // hand-written keys stay visible
+    fieldData(dd, z, 'Story keys, compiled on Try: {"script": "name"} \u00b7 ' +
+      '{"say": [lines or {"if","lines","set"} variants]} \u00b7 {"ask": {"lines","set","yes","no","done"}} \u00b7 ' +
+      '{"goto": ["level", "point"], "if": flag, "denied": [lines]}. Anything else rides through untouched.');
+    box.appendChild(dd);
     dupDelRow(box, "zone", z, L().zones);
   } else if (sel.point) {
     const q = sel.point;
@@ -776,6 +792,31 @@ function panelPlace() {
   }
 }
 
+// Placing an object hands you to Select so you can name it - right for one, wrong for a run of
+// them (a tutorial level is eight message zones). Shift keeps the tool armed and skips the trip.
+function afterPlace(kind, obj, ev, msg) {
+  if (ev && ev.shiftKey) { renderPanel(); toast(msg.split(" \u2014 ")[0] + " (Shift held: still in the tool)", "ok"); return; }
+  setTool("select"); pick(kind, obj); toast(msg, "ok");
+}
+
+// The same objects the canvas gestures make, from the panel - placed in the middle of what you
+// are looking at, then selected for naming.
+function addAtViewCentre(kind) {
+  const c = vp.screenToWorld(vp.w / 2, vp.h / 2);
+  const x = Math.round(c.x), y = Math.round(c.y);
+  snapshot();
+  if (kind === "hud") {
+    const hd = { name: "label" + (L().hud.length + 1), x: x, y: y, fg: [255, 255, 255], bg: [0, 0, 0] };
+    L().hud.push(hd); setTool("select"); pick("hud", hd); toast("HUD label added — rename it in the panel", "ok");
+  } else if (kind === "zone") {
+    const z = { tag: "zone" + (L().zones.length + 1), x: x - 32, y: y - 24, w: 64, h: 48 };
+    L().zones.push(z); setTool("select"); pick("zone", z); toast("Zone added — drag its handles, then give it a story", "ok");
+  } else {
+    const q = { name: "point" + (L().points.length + 1), x: x, y: y };
+    L().points.push(q); setTool("select"); pick("point", q); toast("Point added — rename it in the panel", "ok");
+  }
+}
+
 // ---- PAN ----
 function panelPan() {
   add(panel, h3("Navigate"));
@@ -789,6 +830,13 @@ function panelQuick() {
   add(panel, h3(titles[sel.tool]));
   panel.appendChild(hint(TOOL_META[sel.tool].tip));
   const list = sel.tool === "hud" ? L().hud : sel.tool === "zone" ? L().zones : L().points;
+  if (sel.tool === "zone")
+    panel.appendChild(hint("A zone can talk: draw one, then <b>Add a story\u2026</b> in its panel " +
+                           "for a message, a yes/no question or a door to another level."));
+  if (!list.length) panel.appendChild(hint("None in this level yet."));
+  // ...and a way in that does not require knowing you must drag on the map first
+  panel.appendChild(btn("+ " + { hud: "HUD label", zone: "Zone", point: "Point" }[sel.tool] + " (centre of view)",
+    function () { addAtViewCentre(sel.tool); }));
   list.forEach(function (o) {
     const label = sel.tool === "hud" ? o.name : sel.tool === "zone" ? o.tag : o.name;
     const b = mk("button", "objbtn", label);
@@ -869,6 +917,19 @@ function fieldText(box, label, val, set) {
   inp.onfocus = function () { snapshot(); }; inp.oninput = function () { set(inp.value); updateStatus(); };
   add(row, inp); box.appendChild(row); return inp;
 }
+// A zone's story in one line of plain words - what the panel leads with.
+function storySummary(z) {
+  const d = z.data;
+  if (!d) return "No story yet: this zone is just a named area the game can test for.";
+  if (d.script) return "Runs <b>" + d.script + "(d)</b> from story.py when the player enters.";
+  const parts = [];
+  if (d.say) parts.push("says " + d.say.length + " line" + (d.say.length === 1 ? "" : "s"));
+  if (d.ask) parts.push("asks a yes/no question");
+  if (d.goto) parts.push("travels to <b>" + d.goto[0] + (d.goto[1] ? " \u00b7 " + d.goto[1] : "") + "</b>");
+  if (!parts.length) return "Carries data the game reads (no story keys).";
+  return "On entry it " + parts.join(", then ") + (d.if ? " (only when <b>" + d.if + "</b> is set)" : "") + ".";
+}
+
 function fieldData(box, obj, hintText) {
   box.appendChild(mk("div", "hint", hintText));
   const ta = mk("textarea", "json");
@@ -1104,28 +1165,28 @@ const tools = {
     up: function () { drag = null; }
   },
   hud: {
-    down: function (p) {
+    down: function (p, ev) {
       snapshot();
       const hd = { name: "label" + (L().hud.length + 1), x: Math.round(p.x), y: Math.round(p.y), fg: [255, 255, 255], bg: [0, 0, 0] };
-      L().hud.push(hd); setTool("select"); pick("hud", hd); toast("HUD label added — rename it in the panel", "ok");
+      L().hud.push(hd); afterPlace("hud", hd, ev, "HUD label added — rename it in the panel");
     }, move: function () {}, up: function () {}
   },
   zone: {
     down: function (p) { snapshot(); drag = { mode: "zone", start: p }; },
     move: function (p) { if (drag) { const s = drag.start; rubberRect = { x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) }; } },
-    up: function (p) {
+    up: function (p, ev) {
       if (drag && rubberRect && rubberRect.w > 4 && rubberRect.h > 4) {
         const z = { tag: "zone" + (L().zones.length + 1), x: Math.round(rubberRect.x), y: Math.round(rubberRect.y), w: Math.round(rubberRect.w), h: Math.round(rubberRect.h) };
-        L().zones.push(z); setTool("select"); pick("zone", z); toast("Zone added — tag it in the panel", "ok");
+        L().zones.push(z); afterPlace("zone", z, ev, "Zone added — tag it in the panel");
       } else { history.discard(); }   // no real drag -> drop the checkpoint (no redo entry)
       drag = null; rubberRect = null;
     }
   },
   point: {
-    down: function (p) {
+    down: function (p, ev) {
       snapshot();
       const q = { name: "point" + (L().points.length + 1), x: Math.round(p.x), y: Math.round(p.y) };
-      L().points.push(q); setTool("select"); pick("point", q); toast("Point added — rename it in the panel", "ok");
+      L().points.push(q); afterPlace("point", q, ev, "Point added — rename it in the panel");
     }, move: function () {}, up: function () {}
   },
   pan: {
@@ -1190,6 +1251,24 @@ canvas.addEventListener("wheel", function (ev) {
   if (ev.shiftKey) { vp.camX += (d.x + d.y) / vp.zoom; return; }
   vp.camX += d.x / vp.zoom; vp.camY += d.y / vp.zoom;
 }, { passive: false });
+
+// The minimap sits on top of the map's top-right corner, where a wide level has real content:
+// a click there reaches neither. Folding it away is remembered per browser.
+if ($("mmToggle")) {
+  const root = document.querySelector(".pg-editor");
+  const setMM = function (off, save) {
+    root.classList.toggle("mm-off", off);
+    const t = $("mmToggle");
+    t.textContent = off ? "\u25a3" : "\u2013";
+    t.title = off ? "Show the minimap" : "Hide the minimap (it covers this corner of the map)";
+    t.setAttribute("aria-label", t.title);
+    if (save) { try { localStorage.setItem("pg_ed_minimap", off ? "off" : "on"); } catch (e) {} }
+  };
+  let off = false;
+  try { off = localStorage.getItem("pg_ed_minimap") === "off"; } catch (e) {}
+  setMM(off, false);
+  $("mmToggle").onclick = function () { setMM(!root.classList.contains("mm-off"), true); };
+}
 
 // ---------------------------------------------------------------- minimap interaction
 if (minimap) {
@@ -2006,9 +2085,10 @@ async function importTiledFiles(files) {
   if (res.warnings.length) console.log("Tiled import warnings:", res.warnings);
 }
 
-if ($("projfile")) $("projfile").onchange = function (ev) {
-  const files = Array.from(ev.target.files || []);
-  ev.target.value = "";
+// Files reach the editor two ways - the Open picker and a drop on the window - so the handling
+// lives here once. Pick or drop game.json together with its PNGs / .pal8 / story.py and they all
+// land in the same project.
+function openFiles(files) {
   if (!files.length) return;
   // art / story picked on their own only ADD to the open game - those never need the question
   const replaces = files.some(function (f) { return /\.(json|pgproj|tmj|tmx)$/i.test(f.name); });
@@ -2050,7 +2130,34 @@ if ($("projfile")) $("projfile").onchange = function (ev) {
   };
   fr.onerror = function () { toast(unreadable(f, fr), "err"); };
   fr.readAsText(f);
+}
+if ($("projfile")) $("projfile").onchange = function (ev) {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = "";
+  openFiles(files);
 };
+
+// --- 13. drop files anywhere on the editor: the same path as Open, with a target to aim at
+if (typeof window !== "undefined") {
+  const root = document.querySelector(".pg-editor") || document.body;
+  let depth = 0;                                   // dragenter/leave fire per child element
+  const show = function (on) { root.classList.toggle("dropping", on); };
+  window.addEventListener("dragover", function (ev) {
+    if (!ev.dataTransfer || Array.prototype.indexOf.call(ev.dataTransfer.types || [], "Files") < 0) return;
+    ev.preventDefault(); ev.dataTransfer.dropEffect = "copy";
+  });
+  window.addEventListener("dragenter", function (ev) {
+    if (!ev.dataTransfer || Array.prototype.indexOf.call(ev.dataTransfer.types || [], "Files") < 0) return;
+    depth++; show(true);
+  });
+  window.addEventListener("dragleave", function () { if (--depth <= 0) { depth = 0; show(false); } });
+  window.addEventListener("drop", function (ev) {
+    if (!ev.dataTransfer || !ev.dataTransfer.files || !ev.dataTransfer.files.length) return;
+    ev.preventDefault(); depth = 0; show(false);
+    openFiles(Array.from(ev.dataTransfer.files));
+  });
+}
+
 // The loadable demos. Each is a .pgproj.json in this folder (served same-origin). The
 // two scrolling demos teach the big-map workflow: load one, inspect its World size + camera.
 const DEMOS = {
@@ -2718,6 +2825,15 @@ if ($("btnZoomOut")) $("btnZoomOut").onclick = function () { vp.zoomAt(vp.w / 2,
 // ---------------------------------------------------------------- overlays (help)
 function closeOverlays() { const c = $("cheatsheet"); if (c) c.hidden = true; const g = $("gettingStarted"); if (g) g.hidden = true; }
 function toggleCheatsheet() { const c = $("cheatsheet"); if (c) c.hidden = !c.hidden; }
+// The getting-started card used to be one-shot (dismissed once, gone for good) while ? Help held
+// only the key table. They are two halves of the same help, so each opens the other.
+function showGuide() {
+  const g = $("gettingStarted"), c = $("cheatsheet");
+  if (c) c.hidden = true;
+  if (g) g.hidden = false;
+}
+if ($("csGuide")) $("csGuide").onclick = showGuide;
+if ($("gsKeys")) $("gsKeys").onclick = function () { dismissGS(); toggleCheatsheet(); };
 if ($("btnHelp")) $("btnHelp").onclick = toggleCheatsheet;
 if ($("cheatsheetClose")) $("cheatsheetClose").onclick = function () { $("cheatsheet").hidden = true; };
 function dismissGS() { const g = $("gettingStarted"); if (g) g.hidden = true; try { localStorage.setItem("pg_ed_seen", "1"); } catch (e) {} }

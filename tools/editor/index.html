@@ -100,6 +100,7 @@
       <div id="status" class="status" aria-live="polite"></div>
       <div id="toolhelp" class="toolhelp" aria-live="polite"></div>
       <canvas id="minimap" title="Minimap — click or drag to jump the view" aria-label="Minimap"></canvas>
+      <button id="mmToggle" class="mini icon" title="Hide the minimap (it covers this corner of the map)" aria-label="Hide the minimap">–</button>
     </div>
 
     <aside id="panel" aria-live="polite"></aside>
@@ -130,6 +131,7 @@
       <div class="row wrap">
         <button id="gsSample">Load the sample (one screen)</button>
         <button id="gsClose">Start from scratch</button>
+        <button id="gsKeys">Shortcuts ▸</button>
       </div>
     </div>
   </div>
@@ -137,7 +139,8 @@
   <!-- shortcut cheatsheet (toggle with ? or Help) -->
   <div id="cheatsheet" class="overlay" hidden>
     <div class="card">
-      <h2>Shortcuts <button id="cheatsheetClose" class="mini" style="float:right">✕</button></h2>
+      <h2>Shortcuts <button id="cheatsheetClose" class="mini" style="float:right" aria-label="Close">✕</button>
+        <button id="csGuide" class="mini" style="float:right;margin-right:6px">Getting started ▸</button></h2>
       <table class="keys">
         <tr><td>1–6 / V B P H</td><td>Select · Paint · Place · Pan (+ HUD/Zone/Point)</td></tr>
         <tr><td>Space-drag / middle-drag</td><td>Pan the view</td></tr>
