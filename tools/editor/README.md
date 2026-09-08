@@ -8,7 +8,8 @@
 A zero-install, zero-dependency **web editor** for picogame scenes/levels. Import real
 sprite/tileset PNGs, paint tilemaps (with per-tile solid/coin/goal/hazard flags), place
 sprites, HUD labels, zones, spawn points and particle layers, set up a follow-camera, and
-export the `scene.json` that `tools/scene_build.py` bakes for the device/simulator.
+save the `game.json` that the board runs as it is (and `tools/scene_build.py` checks, bakes art
+for and can ship as `.mpy`).
 
 It is **viewport-first**: the canvas is a window onto a world that can be far larger than
 one handheld screen, so authoring **scrolling levels (bigger than one screen) is native**.
@@ -51,7 +52,8 @@ nothing selected):
 3. Place a sprite and name it `player` (Select tool → *name* field).
 4. In **Select** set **Camera → follow → player**. Leave bounds on *auto* (= the whole
    World size) or uncheck it to drag an explicit orange **camera-bounds** frame.
-5. **Export → scene.json**, keep the PNGs beside it, and bake.
+5. **Save** — one `game.json` plus a `.pal8` for every PNG asset. With **📁 Folder…** chosen they
+   land in your project folder; otherwise they download together.
 
 Changing World size (or a layer's own size) pads with empty tiles on grow, and crops with a
 **confirm** if painted tiles would be lost. Everything is undoable.
@@ -90,14 +92,15 @@ loader builds fast lookup tables so the game asks the meaning instead of hardcod
 
 Toggle **Show flag badges on map** (Paint panel) to see coloured corner badges.
 
-## Bake & run
-Keep the imported/exported PNGs next to the downloaded `scene.json`, then:
+## Run & ship
+Copy `game.json` + the `.pal8` files next to your `code.py` on CIRCUITPY and open them with
+`picogame_scene.Game(pg, "game.json")` — no build step. To check or pre-bake them:
 ```sh
-python3 tools/scene_build.py my.scene.json        # -> my_scene.py (SCENE = {...})
-python3 sim/run.py <a consumer that imports my_scene>   # preview in the simulator
-tools/build_mpy.sh                                # optional: my_scene.mpy for the device
+python3 tools/scene_build.py check              # dangling ids, legends, zones, story refs
+python3 tools/scene_build.py build --mpy        # baked modules for a release
 ```
-Load it with `picogame_scene.load(pg, my_scene.SCENE, font=...)`.
+**Build ▾ → Baked module** does the same for one level in the browser: a `<name>_scene.py` you
+load with `picogame_scene.load(pg, my_scene.SCENE, font=...)`.
 
 ## Architecture (vanilla JS, no build step)
 Small single-responsibility files attached to a shared `window.PG*` namespace:
@@ -119,8 +122,8 @@ migrations (flat→levels, single `tilemap`→`tilemaps[]`), `resizeTilemap` gro
 sample round-trip. The full export→bake→load path is validated end-to-end in the simulator.
 
 ## Data contract (do not drift)
-The exported JSON is consumed **unchanged** by `tools/scene_build.py` (see
-`../SCENE_FORMAT.md`). Project files (`*.pgproj.json`) load old shapes via the migrations
+The saved `game.json` is consumed **unchanged** by `tools/scene_build.py` and by
+`picogame_scene.Game` on the device (see `../SCENE_FORMAT.md`). Project files (`*.pgproj.json`) load old shapes via the migrations
 in `core.js`. Both are load-bearing — real games depend on them.
 
 ## Serving standalone

@@ -86,8 +86,10 @@ function snapshot() { history.push(project); dirtySince = Date.now(); scheduleAu
 // Esc, tab close or back-navigation can't erase work. Restored on the next open.
 const AUTOSAVE_KEY = "pg_ed_autosave";
 let autosaveTimer = null, autosaveWarned = false;
+let autosavePaused = false;    // a restore failed: keep the old blob until the user opens or starts anew
 function autosaveNow() {
   autosaveTimer = null;
+  if (autosavePaused) return;
   try {
     const sv = E.serialize(project); sv.art = artURLs; sv.file = docName;
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(sv));
@@ -271,7 +273,10 @@ function panelSelect() {
     return;
   }
   add(panel, h3("Level"));
-  fieldText(panel, "name", L().name || "", function (v) { L().name = v; refreshChrome(); });
+  fieldText(panel, "name", L().name || "", function (v) {
+    if (project.start === L().name) project.start = v;      // renaming the start level keeps it the start
+    L().name = v; refreshChrome();
+  });
   fieldColor(panel, "background", L().background, function (c) { L().background = c; });
 
   worldSizePanel(panel);
@@ -574,7 +579,13 @@ function panelPaint() {
     const b = mk("button", "pick" + (i === sel.tm ? " on" : ""), tm.asset + (tm.fg ? "  [fg]" : "  [bg]") + "  " + tm.cols + "×" + tm.rows);
     b.onclick = function () { sel.tm = i; sel.asset = tm.asset; renderPanel(); };
     const x = mk("button", "del", "×"); x.title = "remove layer";
-    x.onclick = function () { snapshot(); L().tilemaps.splice(i, 1); sel.tm = 0; renderPanel(); toast("Layer removed", "ok"); };
+    x.onclick = function () {
+      const painted = tm.grid.reduce(function (n, row) { return n + row.filter(Boolean).length; }, 0);
+      if (painted && !confirm("Remove layer " + tm.asset + "? The " + painted + " tiles painted on it go with it."))
+        return;
+      snapshot(); L().tilemaps.splice(i, 1); sel.tm = 0; renderPanel();
+      toast("Layer " + tm.asset + " removed (Ctrl+Z undoes it)", "ok");
+    };
     add(row, b, x); panel.appendChild(row);
   });
   const addrow = mk("div", "row wrap");
@@ -841,9 +852,13 @@ function assetChip(id, onpick) {
   del.onclick = function (ev) {
     ev.stopPropagation();
     if (!confirm("Remove '" + id + "'? Layers and sprites using it are removed too.")) return;
+    const hadArt = !!artURLs[id];
     snapshot(); E.removeAsset(project, id); delete images[id]; delete artURLs[id];
     if (sel.asset === id) sel.asset = null;
-    sel.tm = 0; clearSel(); renderPanel(); refreshChrome(); toast("Removed " + id, "ok");
+    sel.tm = 0; clearSel(); renderPanel(); refreshChrome();
+    // history snapshots the project, not the decoded images - be honest about what Ctrl+Z gives back
+    toast(hadArt ? "Removed " + id + " - Ctrl+Z brings it back, but not its pixels (re-open the PNG)"
+                 : "Removed " + id + " (Ctrl+Z to undo)", "ok");
   };
   add(wrap, cv, nm, dl, del); return wrap;
 }
@@ -917,22 +932,46 @@ function paintCell(p, value) {
   const tm = curTm(); if (!tm) return false;
   const a = project.assets[tm.asset];
   const cx = Math.floor((p.x - tm.pos[0]) / a.fw), cy = Math.floor((p.y - tm.pos[1]) / a.fh);
-  if (cy >= 0 && cy < tm.rows && cx >= 0 && cx < tm.cols) { tm.grid[cy][cx] = value; return true; }
+  if (cy >= 0 && cy < tm.rows && cx >= 0 && cx < tm.cols) { tm.grid[cy][cx] = value; stroke.painted++; return true; }
+  stroke.missed++;
   return false;
 }
+
+// A stroke can miss because the LAYER is smaller than the world (they are separate sizes on
+// purpose), and silence there reads as a broken editor. Say it once per stroke, with the two
+// numbers that explain it - and drop the undo checkpoint when nothing changed at all.
+let stroke = { painted: 0, missed: 0 };
+function endStroke() {
+  if (!stroke.painted) history.discard();
+  if (stroke.missed && !strokeWarned) {
+    const tm = curTm();
+    if (tm) {
+      strokeWarned = true;
+      const a = project.assets[tm.asset];
+      const wc = Math.ceil(project.size[0] / (a.fw || 16)), wr = Math.ceil(project.size[1] / (a.fh || 16));
+      const smaller = tm.cols < wc || tm.rows < wr || tm.pos[0] || tm.pos[1];
+      toast("Nothing painted there - layer " + tm.asset + " covers " + tm.cols + "\u00d7" + tm.rows +
+            " tiles" + (tm.pos[0] || tm.pos[1] ? " from " + tm.pos[0] + "," + tm.pos[1] : "") +
+            (smaller ? ", the world is " + wc + "\u00d7" + wr + ". Grow it under Layer size, or move it with pos x,y."
+                     : " - the whole world. You painted outside the level."), "info");
+    }
+  }
+  stroke = { painted: 0, missed: 0 };
+}
+let strokeWarned = false;      // once per session: the rule is learned, not re-learned
 function cellAt(p, tm) {
   const a = project.assets[tm.asset];
   return { cx: Math.floor((p.x - tm.pos[0]) / a.fw), cy: Math.floor((p.y - tm.pos[1]) / a.fh) };
 }
 function floodFill(p, value) {
   const tm = curTm(); if (!tm) return;
-  const c = cellAt(p, tm); if (c.cx < 0 || c.cy < 0 || c.cx >= tm.cols || c.cy >= tm.rows) return;
+  const c = cellAt(p, tm); if (c.cx < 0 || c.cy < 0 || c.cx >= tm.cols || c.cy >= tm.rows) { stroke.missed++; return; }
   const target = tm.grid[c.cy][c.cx]; if (target === value) return;
   const stack = [[c.cx, c.cy]];
   while (stack.length) {
     const [x, y] = stack.pop();
     if (x < 0 || y < 0 || x >= tm.cols || y >= tm.rows || tm.grid[y][x] !== target) continue;
-    tm.grid[y][x] = value;
+    tm.grid[y][x] = value; stroke.painted++;
     stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
   }
 }
@@ -1029,7 +1068,8 @@ const tools = {
     down: function (p, ev) {
       if (!curTm()) { toast("Add a tileset + layer first (Paint panel)", "err"); return; }
       snapshot();
-      if (ev.altKey) { floodFill(p, sel.tileFrame); drag = null; renderPanel(); return; }
+      stroke = { painted: 0, missed: 0 };     // a stroke that paints nothing must say why
+      if (ev.altKey) { floodFill(p, sel.tileFrame); drag = null; endStroke(); renderPanel(); return; }
       if (ev.shiftKey) { drag = { mode: "rect", start: p }; return; }
       drag = { mode: "brush" }; paintCell(p, sel.tileFrame);
     },
@@ -1042,9 +1082,11 @@ const tools = {
       if (drag && drag.mode === "rect") {
         const tm = curTm(); const s = cellAt(drag.start, tm), c = cellAt(p, tm);
         const x0 = Math.min(s.cx, c.cx), x1 = Math.max(s.cx, c.cx), y0 = Math.min(s.cy, c.cy), y1 = Math.max(s.cy, c.cy);
-        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (y >= 0 && y < tm.rows && x >= 0 && x < tm.cols) tm.grid[y][x] = sel.tileFrame;
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
+          if (y >= 0 && y < tm.rows && x >= 0 && x < tm.cols) { tm.grid[y][x] = sel.tileFrame; stroke.painted++; }
+          else stroke.missed++;
       }
-      drag = null; rubberRect = null;
+      drag = null; rubberRect = null; endStroke();
     }
   },
   place: {
@@ -1163,8 +1205,13 @@ window.addEventListener("keydown", function (ev) {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)
     || (document.activeElement && document.activeElement.isContentEditable);   // CodeMirror (Story panel)
   if (typing) return;
+  // a focused button/menu keeps its own keys: Space must press it, not start a pan, and Backspace
+  // must not delete the selected object behind it
+  if (/^(BUTTON|SUMMARY|A)$/.test(document.activeElement && document.activeElement.tagName)
+      && !(ev.ctrlKey || ev.metaKey)) return;
   if (ev.key === " ") { spacePan = true; canvas.style.cursor = "grab"; ev.preventDefault(); return; }
   const mod = ev.ctrlKey || ev.metaKey;
+  if (mod && ev.key.toLowerCase() === "s") { ev.preventDefault(); saveProject(); return; }
   if (mod && ev.key.toLowerCase() === "z" && !ev.shiftKey) { ev.preventDefault(); doUndo(); return; }
   if (mod && (ev.key.toLowerCase() === "y" || (ev.key.toLowerCase() === "z" && ev.shiftKey))) { ev.preventDefault(); doRedo(); return; }
   if (mod && ev.key.toLowerCase() === "c") { doCopy(); return; }
@@ -1279,12 +1326,14 @@ function updateStatus() {
   else if (sel.tool === "place") extra = " · sprite <b>" + (sel.asset || "—") + "</b>";
   const st = $("status");
   if (st) st.innerHTML = "Tool: <b>" + (TOOL_META[sel.tool] ? TOOL_META[sel.tool].label : sel.tool) + "</b>" + extra +
-    " · world <b>" + b[0] + "×" + b[1] + "</b> · zoom <b>" + Math.round(vp.zoom * 100) + "%</b>";
+    " · world <b>" + b[0] + "×" + b[1] + "</b> · zoom <b>" + Math.round(vp.zoom * 100) + "%</b>" +
+    " · file <b>" + docName + "</b>" + (dirtySince ? " (unsaved)" : "");
   const th = $("toolhelp"); if (th) th.innerHTML = TOOL_META[sel.tool] ? TOOL_META[sel.tool].tip : "";
 }
 
 // ================================================================ TOP BAR / FILES
 function loadProject(p) {
+  autosavePaused = false;                      // opening something is the user's answer to a failed restore
   project = p; images = {}; artURLs = {}; history.clear();
   // Reset the selection through clearSel() rather than rebuilding `sel` by hand: the hand-built
   // literal omitted `multi`, so the first renderPanel() after ANY load (demo, Load, import) threw
@@ -1296,17 +1345,45 @@ function loadProject(p) {
   setTimeout(doFit, 0);
   scheduleAutosave();
 }
+// The board boots project.start (game.json's "start"); the dropdown only says which level you are
+// EDITING. Without a control for it the two silently disagree - you playtest level2 and the board
+// opens level1 - so the star sets it, and the dropdown marks it.
+function startName() {
+  const has = project.levels.some(function (lv) { return lv.name === project.start; });
+  return has ? project.start : (project.levels[0] && project.levels[0].name);   // same fallback as exportGame
+}
 function refreshChrome() {
   const sel2 = $("levelSel"); if (!sel2) return; sel2.innerHTML = "";
-  project.levels.forEach(function (lv, i) { sel2.appendChild(new Option(lv.name || ("level" + (i + 1)), i)); });
+  const start = startName();
+  project.levels.forEach(function (lv, i) {
+    const nm = lv.name || ("level" + (i + 1));
+    sel2.appendChild(new Option(nm === start ? "\u2605 " + nm : nm, i));
+  });
   sel2.value = project.current;
+  const b = $("btnStartLevel");
+  if (b) {
+    const isStart = L().name === start;
+    b.textContent = isStart ? "\u2605" : "\u2606";
+    b.classList.toggle("on", isStart);
+    b.title = isStart ? L().name + " is the level the board boots into"
+                      : "Boot into " + L().name + " (the board opens " + start + " now)";
+  }
 }
+if ($("btnStartLevel")) $("btnStartLevel").onclick = function () {
+  if (L().name === startName()) { toast(L().name + " is already the start level", "info"); return; }
+  snapshot(); project.start = L().name; refreshChrome();
+  toast("The board (and a fresh playground run) now boots into " + L().name, "ok");
+};
 if ($("levelSel")) $("levelSel").onchange = function (e) { project.current = parseInt(e.target.value); clearSel(); sel.tm = 0; renderPanel(); refreshChrome(); doFit(); };
 if ($("btnAddLevel")) $("btnAddLevel").onclick = function () {
   snapshot(); project.levels.push(E.newLevel("level" + (project.levels.length + 1))); project.current = project.levels.length - 1;
   clearSel(); sel.tm = 0; renderPanel(); refreshChrome(); doFit(); toast("Added level", "ok");
 };
-if ($("btnNew")) $("btnNew").onclick = function () { if (confirm("New project? Unsaved work is lost.")) { loadProject(E.newProject()); setDocName("game.json"); renderPanel(); refreshChrome(); } };
+if ($("btnNew")) $("btnNew").onclick = function () {
+  if (!confirm("New project? Unsaved work is lost.")) return;
+  autosavePaused = false;                      // the user chose: autosave may write again
+  loadProject(E.newProject()); setDocName("game.json"); renderPanel(); refreshChrome();
+};
 
 function download(name, text) { const b = new Blob([text], { type: "application/json" }); const a = mk("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
 function downloadBytes(name, u8) { const b = new Blob([u8], { type: "application/octet-stream" }); const a = mk("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
@@ -1536,11 +1613,8 @@ function cleanDocName(name) {
 function setDocName(name) {
   docName = cleanDocName(name) || "game.json";
   const b = $("btnSave");
-  if (b) {                                  // the name on the button only when it is news (not game.json)
-    const shown = docName.length > 24 ? docName.slice(0, 12) + "\u2026" + docName.slice(-10) : docName;
-    b.textContent = docName === "game.json" ? "Save" : "Save " + shown;
-    b.title = "Write " + docName + " (+ .pal8 art into the chosen folder)";
-  }
+  if (b) b.title = "Write " + docName + " (+ .pal8 art; the status bar shows the current file)";
+  updateStatus();
   scheduleAutosave();
   return docName;
 }
@@ -1570,19 +1644,24 @@ async function saveProject() {
   try { game = E.exportGame(project); }
   catch (e) { toast("Could not build game.json: " + (e.message || e), "err"); console.error(e); return; }
   const text = E.canonicalJson(game);
-  const art = await writeArt(false);
-  let storyNote = "";
+  // The board reads the .pal8 sidecars, not the PNGs, so a save without them is a game that does
+  // not run. With a folder they go next to the file; without one they download in this same click
+  // (they used to be left to Build > Art, mentioned only in a toast that faded).
+  const art = await writeArt(!dirHandle);
   const st = storyText();
+  let storyNote = "", storyProblem = "";
   if (st) {
-    if (dirHandle && await folderRead("story.py")) storyNote = " - story.py exists, scripts from the panel were NOT written";
+    if (dirHandle && await folderRead("story.py"))
+      storyProblem = " Your Story-panel scripts were NOT written: story.py already exists in " +
+                     dirHandle.name + "/ - rename or delete it, then Save again.";
     else { await saveText("story.py", st); storyNote = " + story.py"; }
   }
   const w = await saveText(docName, text);
   lastSavedText = text; dirtySince = 0;
   toast("Saved " + (w === "downloaded" ? docName : w + docName) +
         (art.length ? " + " + art.length + " art file" + (art.length === 1 ? "" : "s") : "") + storyNote +
-        (w === "downloaded" && Object.keys(project.assets).some(function (id) { return E.isImg(project.assets[id]); })
-          ? " (Build > Art downloads the .pal8 files the device needs)" : ""), "ok");
+        (w === "downloaded" ? " (to your downloads folder)" : "") + storyProblem,
+        storyProblem ? "err" : "ok");
 }
 if ($("btnSave")) $("btnSave").onclick = saveProject;
 if ($("btnSaveAs")) $("btnSaveAs").onclick = saveProjectAs;
@@ -1592,6 +1671,14 @@ if ($("btnBuildArt")) $("btnBuildArt").onclick = async function () {
   toast(done.length ? "Art: " + done.join(", ") : "No image assets to bake (colour tilesets need no art files)", done.length ? "ok" : "info");
 };
 if ($("btnLoad")) $("btnLoad").onclick = function () { $("projfile").click(); };
+// Open, the demos and a Tiled import all REPLACE the open game and clear its history, so they
+// need the same question New asks. One place, so no path forgets it.
+function confirmReplace(what) {
+  if (!dirtySince) return true;
+  return confirm("Replace the open game with " + what + "? Unsaved changes here are lost " +
+                 "(Save first, or Cancel).");
+}
+
 function loadSave(obj) {
   loadProject(E.deserialize(obj));
   setDocName(obj.file);                       // the autosave remembers it; a .pgproj/demo does not
@@ -1923,6 +2010,9 @@ if ($("projfile")) $("projfile").onchange = function (ev) {
   const files = Array.from(ev.target.files || []);
   ev.target.value = "";
   if (!files.length) return;
+  // art / story picked on their own only ADD to the open game - those never need the question
+  const replaces = files.some(function (f) { return /\.(json|pgproj|tmj|tmx)$/i.test(f.name); });
+  if (replaces && !confirmReplace(files[0].name)) return;
   if (files.some(function (f) { return /\.(tmj|tmx)$/i.test(f.name); })) {
     importTiledFiles(files).catch(function (e) { toast("Tiled import: " + e.message, "err"); console.error(e); });
     return;
@@ -1962,7 +2052,7 @@ if ($("projfile")) $("projfile").onchange = function (ev) {
   fr.readAsText(f);
 };
 // The loadable demos. Each is a .pgproj.json in this folder (served same-origin). The
-// two scrolling demos teach the big-map workflow: load one, inspect its Map size + camera.
+// two scrolling demos teach the big-map workflow: load one, inspect its World size + camera.
 const DEMOS = {
   sample:     { file: "sample.pgproj.json",       msg: "Loaded sample (one screen)" },
   platformer: { file: "demo_platformer.pgproj.json", msg: "Loaded scrolling platformer — 960×240, follow-camera axis x (clamps at both ends)" },
@@ -1970,6 +2060,7 @@ const DEMOS = {
 };
 function loadDemo(name) {
   const d = DEMOS[name]; if (!d) return;
+  if (!confirmReplace("the " + name + " demo")) { const dd0 = $("demosD"); if (dd0) dd0.open = false; return; }
   const EDBASE = (typeof window !== "undefined" && window.PG_EDITOR_BASE) || "";
   const dd = $("demosD"); if (dd) dd.open = false;
   fetch(EDBASE + d.file).then(function (r) { if (!r.ok) throw new Error("missing " + d.file); return r.json(); })
@@ -1985,7 +2076,8 @@ if ($("btnDemoOpen")) $("btnDemoOpen").onclick = function () { loadDemo("openwor
 if ($("btnExportBaked")) $("btnExportBaked").onclick = async function () {
   var d = $("exportD"); if (d) d.open = false;
   var scene;
-  try { scene = E.exportScene(project); } catch (e) { toast("Could not export this level", "err"); return; }
+  try { scene = E.exportScene(project); }
+  catch (e) { toast("Baked module not written - " + (e.message || e), "err"); console.error(e); return; }
   var pngIds = Object.keys(scene.assets || {}).filter(function (id) {
     var t = scene.assets[id].type; return t === "sprite" || t === "tileset" || t === "bitmap";
   });
@@ -1999,35 +2091,6 @@ if ($("btnExportBaked")) $("btnExportBaked").onclick = async function () {
           (text.length / 1024).toFixed(1) + " KB) - picogame_scene.load(pg, " + stem + "_scene.SCENE)", "ok");
   } catch (e) { toast("Bake failed: " + (e.message || e), "err"); console.error(e); }
 };
-if ($("btnExport")) $("btnExport").onclick = async function () {
-  const d = $("exportD"); if (d) d.open = false;
-  // ASCII unless asked otherwise: it bakes identically, reads as a picture and diffs
-  // cleanly, and a layer with more distinct tiles than the legend alphabet falls back
-  // to the number grid on its own. The opt-out is for a consumer that wants numbers.
-  const ascii = !($("optGrid") && $("optGrid").checked);
-  const scene = E.exportScene(project, null, ascii);
-  const name = (L().name || "scene").replace(/\W+/g, "_") + ".scene.json";
-  const fell = ascii
-    ? (scene.layers || []).filter(function (l) { return l.kind === "tilemap" && l.grid; }).length : 0;
-  const where = await saveText(name, JSON.stringify(scene, null, 1));
-  toast("Exported " + (where === "downloaded" ? name : where + name) +
-        (fell ? " - " + fell + " layer(s) had more distinct tiles than the ASCII legend holds, " +
-                "kept as a number grid" : "") +
-        " - bake with scene_build.py", fell ? "info" : "ok");
-};
-if ($("btnExportProj")) $("btnExportProj").onclick = async function () {
-  const d = $("exportD"); if (d) d.open = false;
-  const ascii = !($("optGrid") && $("optGrid").checked);
-  const proj = E.exportProject(project, ascii);
-  const fell = ascii ? (proj.levels || []).reduce(function (n, lv) {
-    return n + (lv.layers || []).filter(function (l) { return l.kind === "tilemap" && l.grid; }).length;
-  }, 0) : 0;
-  const where = await saveText("game.project.json", JSON.stringify(proj, null, 1));
-  toast("Exported " + (where === "downloaded" ? "game.project.json" : where + "game.project.json") +
-        (fell ? " - " + fell + " layer(s) had more distinct tiles than the ASCII legend holds, " +
-                "kept as a number grid" : ""), fell ? "info" : "ok");
-};
-
 // Try in playground: hand THIS level to the browser playground and run it live. The playground bakes
 // colour assets in-browser (no PIL/files), so colour tilesets + rect sprites run natively. PNG-backed
 // assets (sprite/bitmap/tileset) can't be baked in-browser -- but rather than decline, we OFFER to
@@ -2099,11 +2162,19 @@ function substitutePngAssets(scene, pngIds) {
 }
 
 function handoffScene(payload) {
+  // the hand-off travels through this browser's storage, so both halves can fail: the write
+  // (full or blocked storage) and the tab (a popup blocker). Neither may be reported as success.
   try { localStorage.setItem("pg_editor_level", JSON.stringify(payload)); }
-  catch (e) { toast("Project too large to hand off", "err"); return; }
+  catch (e) {
+    toast("Could not hand the game to the playground - this browser's storage is full or blocked " +
+          "for the site. Save the game.json and open it in the playground instead.", "err");
+    console.error("handoff", e); return;
+  }
   var url = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";  // set in config.js
-  window.open(url + (url.indexOf("?") < 0 ? "?" : "&") + "from=editor", "_blank");
-  toast("Opening in the playground…", "ok");
+  const tab = window.open(url + (url.indexOf("?") < 0 ? "?" : "&") + "from=editor", "_blank");
+  if (tab) toast("Opening in the playground…", "ok");
+  else toast("The playground tab was blocked - allow pop-ups for this site, then press " +
+             "\u25b6 Try in playground again.", "err");
 }
 
 // Bake the editor's loaded PNG assets into inline PAL8 atlases (Canvas -> quantize -> base64) so the
@@ -2573,7 +2644,9 @@ if ($("btnTryPlay")) $("btnTryPlay").onclick = function () {
   var game;
   try { game = E.exportGame(project); }
   catch (e) { toast("Could not build game.json: " + (e.message || e), "err"); console.error(e); return; }
-  game.start = L().name;
+  game.start = L().name;          // playtest what you are looking at...
+  if (L().name !== startName())   // ...but never let that quietly stand in for the board's boot level
+    toast("Playing " + L().name + " - the board boots into " + startName() + " (\u2605 sets it)", "info");
   var files = {}, missing = [];
   for (var id in game.assets) {
     if (!E.isImg(project.assets[id])) continue;
@@ -2687,7 +2760,14 @@ function init() {
   try {
     const raw = localStorage.getItem(AUTOSAVE_KEY);
     if (raw) { loadSave(JSON.parse(raw)); restored = true; }
-  } catch (e) {}
+  } catch (e) {
+    // the only safety net in the editor: never let it fail in silence, and never overwrite the
+    // blob that failed to open - it may still be recoverable by hand from this browser's storage
+    autosavePaused = true;
+    console.error("autosave restore", e);
+    toast("Your last session could not be reopened. It is still in this browser's storage, so " +
+          "nothing was overwritten - Open a saved game.json to carry on, or New to start clean.", "err");
+  }
   // first-run getting-started overlay (dismissible; remembered; skipped when resuming)
   let seen = false; try { seen = localStorage.getItem("pg_ed_seen") === "1"; } catch (e) {}
   const gs = $("gettingStarted"); if (gs && (seen || restored)) gs.hidden = true;

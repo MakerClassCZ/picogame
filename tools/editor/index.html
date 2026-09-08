@@ -12,7 +12,8 @@
 <div class="pg-editor" role="region" aria-label="picogame level editor">
   <header id="top">
     <b class="brand">picogame</b>
-    <label class="inline">Level <select id="levelSel" aria-label="Level"></select></label>
+    <select id="levelSel" class="inline" aria-label="Level" title="The level you are editing (★ = the one the board boots into)"></select>
+    <button id="btnStartLevel" class="mini icon" title="The level the board boots into" aria-label="Set as start level">&#9734;</button>
     <button id="btnAddLevel" class="mini opt" title="Add a level" aria-label="Add level">+ Level</button>
     <span class="sep"></span>
     <button id="btnUndo" class="mini icon" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
@@ -30,7 +31,7 @@
         <button id="btnSample" data-demo="sample">Sample (one screen)</button>
         <button id="btnDemoPlatformer" data-demo="platformer">Scrolling platformer (bounded)</button>
         <button id="btnDemoOpen" data-demo="openworld">Open world (bigger both ways)</button>
-        <div class="hint">The two scrolling demos are the fastest way to learn the big-map workflow — load one and inspect how its map size + camera are set up.</div>
+        <div class="hint">The two scrolling demos are the fastest way to learn the big-map workflow — load one and inspect how its World size + camera are set up.</div>
       </div>
     </details>
     <button id="btnNew" class="mini opt">New</button>
@@ -111,13 +112,16 @@
     <div class="card">
       <h2>Build a picogame level</h2>
       <ol>
-        <li><b>Paint</b> ground: pick the <b>Paint</b> tool, choose a tile, drag on the map.</li>
+        <li><b>Paint</b> ground: pick the <b>Paint</b> tool, click <b>+ Colour tileset</b> (no art needed)
+          or <b>+ Tileset PNG</b>, choose a tile, drag on the map.</li>
         <li><b>Make it scroll:</b> in the Level panel (Select tool) set <b>World size</b> bigger than one screen — try the <b>3× wide</b> or <b>2×2 screens</b> preset. The dashed white box shows one screen.</li>
         <li><b>Place</b> a sprite (import a PNG, or <b>+ Colour sprite</b> for a placeholder block) and name one <code>player</code> (Select tool → name field).</li>
         <li><b>Camera:</b> in Select (nothing selected) set <b>follow → player</b> to make it scroll.</li>
-        <li><b>Export</b> → scene.json → bake with <code>tools/scene_build.py</code>.</li>
+        <li><b>Save</b> writes <code>game.json</code> — the whole game, plus the <code>.pal8</code> art the
+          board reads. Copy those next to your <code>code.py</code> on CIRCUITPY, or press
+          <b>▶ Try in playground</b> to run it right now.</li>
       </ol>
-      <p class="hint">Best way to learn scrolling: load a <b>scrolling demo</b> below and inspect how its map size + camera are set up.</p>
+      <p class="hint">Best way to learn scrolling: load a <b>scrolling demo</b> below and inspect how its World size + camera are set up.</p>
       <p class="hint">Pan: hold Space or middle-drag. Zoom: Ctrl+wheel or +/−. Undo: Ctrl+Z. Press <b>?</b> anytime for all shortcuts.</p>
       <div class="row wrap">
         <button id="gsPlatformer">Scrolling platformer ▸</button>
