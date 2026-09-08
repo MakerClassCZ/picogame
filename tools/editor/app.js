@@ -175,7 +175,7 @@ function confirmImport() {
   sel.asset = id;
   if (pi.kind === "tileset") ensureLayerFor(id);
   pendingImport = null;
-  renderPanel(); refreshChrome(); toast("Imported " + id, "ok");
+  renderPanel(); refreshChrome(); toast("Added " + id, "ok");
 }
 function addColorTileset() {
   snapshot();
@@ -193,7 +193,7 @@ function addColorSprite() {
   const n = assetIds(function (a) { return a.type === "rect"; }).length;
   const id = n === 0 ? "player" : "sprite" + (Object.keys(project.assets).length);
   project.assets[id] = { type: "rect", fw: 12, fh: 16, color: SPRITE_PLACEHOLDER_COLORS[n % SPRITE_PLACEHOLDER_COLORS.length] };
-  sel.asset = id; renderPanel(); toast("Added colour sprite " + id + " - click the map to place it", "ok");
+  sel.asset = id; renderPanel(); toast("Added colour sprite " + id + " — click the map to place it", "ok");
 }
 
 // ---------------------------------------------------------------- tilemap layers
@@ -298,7 +298,7 @@ function panelSelect() {
   fxBox.open = !!(L().effects && L().effects.length);      // nothing set: stay out of the way
   fxBox.appendChild(mk("summary", null, "Story effects" + (L().effects && L().effects.length ? " (" + L().effects.length + ")" : "")));
   const fx = fxBox;                                        // the section below builds into the fold
-  fx.appendChild(hint('World changes replayed from story flags - on level load and whenever a flag is set. ' +
+  fx.appendChild(hint('World changes replayed from story flags — on level load and whenever a flag is set. ' +
     'E.g. <code>[{"if":"gate_open","swap":[3,6],"unsolid":[3]}]</code>: when <code>gate_open</code> is set, ' +
     'every tile <b>3</b> becomes tile <b>6</b> (the look) and tile 3 stops being solid (the collision). ' +
     'Also <code>solid</code>, <code>hide</code>/<code>show</code> (sprite names). Flags come from zone ' +
@@ -667,7 +667,7 @@ function applyMapSize(tm, cols, rows) {
   E.resizeTilemap(tm, cols, rows);
   if (L().camera && L().camera.autoBounds !== false) { const b = E.levelBounds(project, L()); L().camera.bounds = [0, 0, b[0], b[1]]; }
   renderPanel();
-  toast("Map is now " + cols + "×" + rows + " tiles", "ok");
+  toast("Layer " + tm.asset + " is now " + cols + "×" + rows + " tiles", "ok");
 }
 
 function colorEditor(box, a) {
@@ -750,7 +750,7 @@ function panelPlace() {
   const imp = mk("div", "row wrap");
   add(imp, btn("+ Sprite PNG", function () { importPNG("sprite"); }), btn("+ Colour sprite", addColorSprite));
   panel.appendChild(imp);
-  if (!sp.length) { panel.appendChild(hint("Import a sprite PNG, or add a <b>colour sprite</b> (a placeholder block - no art needed), then click the map to place it. Name one <code>player</code> with Select.")); return; }
+  if (!sp.length) { panel.appendChild(hint("Import a sprite PNG, or add a <b>colour sprite</b> (a placeholder block — no art needed), then click the map to place it. Name one <code>player</code> with Select.")); return; }
   if (!isSprite(project.assets[sel.asset])) sel.asset = sp[0];
   panel.appendChild(hint("Click the map to drop <b>" + sel.asset + "</b>. Set its name/tag/anchor with Select."));
 
@@ -885,7 +885,7 @@ function downloadAssetStrip(id) {
   const a = mk("a"); a.href = url; a.download = id + ".png"; a.click();
   const asset = project.assets[id];
   const fw = asset.fw || 16, fh = asset.fh || 16;
-  toast("Downloaded " + id + ".png - " + fw + "x" + fh + " frames in a row" +
+  toast("Downloaded " + id + ".png — " + fw + "x" + fh + " frames in a row" +
         (isImg(asset) ? "" : " (placeholder art: paint over it, keep the frame order, re-import)"), "ok");
 }
 
@@ -905,7 +905,7 @@ function assetChip(id, onpick) {
     if (sel.asset === id) sel.asset = null;
     sel.tm = 0; clearSel(); renderPanel(); refreshChrome();
     // history snapshots the project, not the decoded images - be honest about what Ctrl+Z gives back
-    toast(hadArt ? "Removed " + id + " - Ctrl+Z brings it back, but not its pixels (re-open the PNG)"
+    toast(hadArt ? "Removed " + id + " — Ctrl+Z brings it back, but not its pixels (re-open the PNG)"
                  : "Removed " + id + " (Ctrl+Z to undo)", "ok");
   };
   add(wrap, cv, nm, dl, del); return wrap;
@@ -1011,10 +1011,10 @@ function endStroke() {
       const a = project.assets[tm.asset];
       const wc = Math.ceil(project.size[0] / (a.fw || 16)), wr = Math.ceil(project.size[1] / (a.fh || 16));
       const smaller = tm.cols < wc || tm.rows < wr || tm.pos[0] || tm.pos[1];
-      toast("Nothing painted there - layer " + tm.asset + " covers " + tm.cols + "\u00d7" + tm.rows +
+      toast("Nothing painted there — layer " + tm.asset + " covers " + tm.cols + "\u00d7" + tm.rows +
             " tiles" + (tm.pos[0] || tm.pos[1] ? " from " + tm.pos[0] + "," + tm.pos[1] : "") +
             (smaller ? ", the world is " + wc + "\u00d7" + wr + ". Grow it under Layer size, or move it with pos x,y."
-                     : " - the whole world. You painted outside the level."), "info");
+                     : " — the whole world. You painted outside the level."), "info");
     }
   }
   stroke = { painted: 0, missed: 0 };
@@ -1127,7 +1127,7 @@ const tools = {
   },
   paint: {
     down: function (p, ev) {
-      if (!curTm()) { toast("Add a tileset + layer first (Paint panel)", "err"); return; }
+      if (!curTm()) { toast("Nothing to paint on yet — add a tileset in the panel (+ Colour tileset needs no art)", "err"); return; }
       snapshot();
       stroke = { painted: 0, missed: 0 };     // a stroke that paints nothing must say why
       if (ev.altKey) { floodFill(p, sel.tileFrame); drag = null; endStroke(); renderPanel(); return; }
@@ -1488,7 +1488,12 @@ async function saveBytes(name, u8) {
     await w.close();
     rememberFile(name, await fh.getFile());
     return dirHandle.name + "/";
-  } catch (e) { downloadBytes(name, u8); toast("Folder write failed (" + e.message + ") - downloaded instead", "err"); return "downloaded"; }
+  } catch (e) {
+    downloadBytes(name, u8);
+    toast("Could not write into " + dirHandle.name + "/ (" + e.message + ") — downloaded " + name +
+          " instead. Click 📁 " + dirHandle.name + " to grant access again.", "err");
+    return "downloaded";
+  }
 }
 // The PAL8 strip of a loaded image asset (the same bytes scene_build.py art writes).
 function pal8Of(id) {
@@ -1500,7 +1505,10 @@ function pal8Of(id) {
   ctx.drawImage(img, 0, 0);
   const fw = a.fw || 16, fh = a.fh || 16, frames = a.frames || 1;
   const sw = fw * frames, sh = fh;
-  if (c.width < sw || c.height < sh) throw new Error(id + ": image is " + c.width + "x" + c.height + ", needs " + sw + "x" + sh);
+  if (c.width < sw || c.height < sh)
+    throw new Error(id + ": frame size " + fw + "×" + fh + " × " + frames + " frame" + (frames === 1 ? "" : "s") +
+                    " needs a " + sw + "×" + sh + " image, this PNG is " + c.width + "×" + c.height +
+                    " — fix frame w/h in the panel, or re-export the PNG");
   const rgba = ctx.getImageData(0, 0, sw, sh).data;
   const q = E.bakePal8(rgba, sw, sh);
   return E.encodePal8(q.data, fw, fh, frames, q.palette, 0);
@@ -1514,7 +1522,7 @@ async function writeArt(force) {
     const a = project.assets[id];
     if (!E.isImg(a)) continue;
     let blob;
-    try { blob = pal8Of(id); } catch (e) { toast("Art: " + e.message, "err"); continue; }
+    try { blob = pal8Of(id); } catch (e) { toast("No art written for " + e.message, "err"); continue; }
     if (!blob) continue;
     const name = pal8Name(a);
     if (dirHandle) {
@@ -1583,13 +1591,14 @@ function idb(fn) {                      // one tiny store, no library
 }
 
 async function pickFolder() {
-  if (!FS_OK) { toast("This browser can't save to a folder (Chrome/Edge only) - exports download instead.", "info"); return; }
+  if (!FS_OK) { toast("This browser can't save to a folder (Chrome/Edge only) — exports download instead.", "info"); return; }
   try {
     dirHandle = await window.showDirectoryPicker({ mode: "readwrite", id: "pgeditor" });
     await idb(function (st) { return st.put(dirHandle, "dir"); });
     refreshFolderChrome();
-    toast("Saving into " + dirHandle.name + "/ - exports write there, no download", "ok");
-  } catch (e) { if (e.name !== "AbortError") toast("Folder: " + e.message, "err"); }
+    toast("Saving into " + dirHandle.name + "/ — exports write there, no download", "ok");
+  } catch (e) { if (e.name !== "AbortError")
+    toast("Could not use that folder (" + e.message + ") — pick another, or Save keeps downloading.", "err"); }
 }
 
 async function restoreFolder() {        // silent: only reuse a handle we may still write to
@@ -1603,7 +1612,7 @@ async function restoreFolder() {        // silent: only reuse a handle we may st
 function refreshFolderChrome() {
   const b = $("btnFolder"); if (!b) return;
   b.textContent = dirHandle ? "📁 " + dirHandle.name : "📁 Folder…";
-  b.title = dirHandle ? "Exports write into " + dirHandle.name + "/ - click to choose another folder"
+  b.title = dirHandle ? "Exports write into " + dirHandle.name + "/ — click to choose another folder"
                       : "Choose a folder to save into (Chrome/Edge) instead of downloading";
 }
 
@@ -1639,7 +1648,7 @@ async function saveText(name, text) {
     const theirs = await changedSinceWeSawIt(name);
     if (theirs) {
       const when = new Date(theirs.lastModified).toLocaleTimeString();
-      if (!confirm(name + " changed on disk at " + when + " - something else wrote it since you " +
+      if (!confirm(name + " changed on disk at " + when + " — something else wrote it since you " +
                    "opened it.\n\nOK = overwrite it with the editor's version.\nCancel = keep their " +
                    "file and save yours next to it.")) {
         name = name.replace(/(\.[^.]*)?$/, ".mine$&");
@@ -1651,7 +1660,12 @@ async function saveText(name, text) {
     await w.close();
     rememberFile(name, await fh.getFile());
     return dirHandle.name + "/";
-  } catch (e) { download(name, text); toast("Folder write failed (" + e.message + ") - downloaded instead", "err"); return "downloaded"; }
+  } catch (e) {
+    download(name, text);
+    toast("Could not write into " + dirHandle.name + "/ (" + e.message + ") — downloaded " + name +
+          " instead. Click 📁 " + dirHandle.name + " to grant access again.", "err");
+    return "downloaded";
+  }
 }
 
 if ($("btnFolder")) $("btnFolder").onclick = pickFolder;
@@ -1675,7 +1689,7 @@ async function checkFolder() {
   let obj;
   try { obj = JSON.parse(text); } catch (e) { return; }       // still being written
   watchWarned = false;
-  try { await importExportedFiles(obj, f, []); toast("Reloaded " + name + " - it changed on disk", "ok"); }
+  try { await importExportedFiles(obj, f, []); toast("Reloaded " + name + " — it changed on disk", "ok"); }
   catch (e) { console.warn("reload", e); }
 }
 setInterval(function () { checkFolder().catch(function () {}); }, 2000);
@@ -1703,14 +1717,14 @@ async function folderHas(name) {
 }
 async function saveProjectAs() {
   const d = $("saveD"); if (d) d.open = false;
-  const typed = prompt("Save as - the file Save writes from now on (its .pal8 art and story.py sit next to it):", docName);
+  const typed = prompt("Save as — the file Save writes from now on (its .pal8 art and story.py sit next to it):", docName);
   if (typed === null) return;
   const name = cleanDocName(typed);
   if (!name) return;
   // a name we never opened may already be someone's file in the folder: overwriting it is a
   // choice, not a side effect (a Save to the file you opened asks via changedSinceWeSawIt)
   if (name !== docName && !fileStamps.has(name) && await folderHas(name) &&
-      !confirm(name + " already exists in " + dirHandle.name + "/ - overwrite it with this game?")) return;
+      !confirm(name + " already exists in " + dirHandle.name + "/ — overwrite it with this game?")) return;
   setDocName(name);
   await saveProject();
 }
@@ -1732,7 +1746,7 @@ async function saveProject() {
   if (st) {
     if (dirHandle && await folderRead("story.py"))
       storyProblem = " Your Story-panel scripts were NOT written: story.py already exists in " +
-                     dirHandle.name + "/ - rename or delete it, then Save again.";
+                     dirHandle.name + "/ — rename or delete it, then Save again.";
     else { await saveText("story.py", st); storyNote = " + story.py"; }
   }
   const w = await saveText(docName, text);
@@ -1747,7 +1761,7 @@ if ($("btnSaveAs")) $("btnSaveAs").onclick = saveProjectAs;
 if ($("btnBuildArt")) $("btnBuildArt").onclick = async function () {
   const d = $("buildD"); if (d) d.open = false;
   const done = await writeArt(true);
-  toast(done.length ? "Art: " + done.join(", ") : "No image assets to bake (colour tilesets need no art files)", done.length ? "ok" : "info");
+  toast(done.length ? "Wrote " + done.join(", ") : "No image assets to bake (colour tilesets need no art files)", done.length ? "ok" : "info");
 };
 if ($("btnLoad")) $("btnLoad").onclick = function () { $("projfile").click(); };
 // Open, the demos and a Tiled import all REPLACE the open game and clear its history, so they
@@ -1888,7 +1902,7 @@ async function decodeTiledData(map) {
   async function fix(L) {
     if (L.type === "group") { for (const c of L.layers || []) await fix(c); return; }
     if (L.type !== "tilelayer" || typeof L.data !== "string") return;
-    if (L.compression === "zstd") throw new Error("layer " + L.name + ": zstd compression - re-export with zlib/gzip/CSV");
+    if (L.compression === "zstd") throw new Error("layer " + L.name + ": zstd compression — re-export with zlib/gzip/CSV");
     const bin = atob(L.data.trim());
     let bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -1994,13 +2008,14 @@ async function importExportedFiles(obj, sceneFile, files) {
   dirtySince = 0;
   try { lastSavedText = E.canonicalJson(E.exportGame(project)); } catch (e) { lastSavedText = ""; }
   renderPanel(); refreshChrome();
-  if (recovered.length) toast("Pixels recovered from .pal8 for: " + recovered.join(", ") + " (565 colours, hard alpha)", "info");
+  if (recovered.length) toast("Art for " + recovered.join(", ") + " came from the device files (.pal8), so a few " +
+                                "colours may differ from the original PNG — open the PNG to get the exact pixels.", "info");
   const n = proj.levels.length;
-  toast("Imported " + sceneFile.name + " (" + n + (n === 1 ? " level" : " levels") + ")" +
-        (sameFile ? "" : " - Save writes it as game.json (v2)"), "ok");
+  toast("Opened " + sceneFile.name + " (" + n + (n === 1 ? " level" : " levels") + ")" +
+        (sameFile ? "" : " — Save will write it as game.json"), "ok");
   if (missing.length)
     toast("No pixels for: " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " +" + (missing.length - 4) : "") +
-          " - pick those PNGs too, or keep them in the chosen folder", "info");
+          " — pick those PNGs too, or keep them in the chosen folder", "info");
 }
 
 // PNG / .pal8 / story.py picked on their own join the project that is open: the art goes to the
@@ -2037,8 +2052,9 @@ async function attachFiles(files) {
     } else unknown.push(f.name);
   }
   renderPanel(); scheduleAutosave();
-  if (done.length) toast("Attached " + done.join(", "), "ok");
-  if (unknown.length) toast("No asset in this game uses " + unknown.join(", ") + " (Paint > Import adds new art; Open a game.json to start one)", "info");
+  if (done.length) toast("Added " + done.join(", ") + " to the open game", "ok");
+  if (unknown.length) toast("Nothing in this game is called " + unknown.join(", ") + " — the Paint panel's " +
+                            "+ Tileset PNG (or Place's + Sprite PNG) adds new art under a new name.", "info");
 }
 
 async function importTiledFiles(files) {
@@ -2079,7 +2095,7 @@ async function importTiledFiles(files) {
   loadProject(res.project);                      // NOTE: resets images/artURLs - fill AFTER
   for (const id in strips) { artURLs[id] = strips[id].dataURL; images[id] = strips[id].img; }
   renderPanel(); refreshChrome();
-  toast("Imported " + mapFile.name, "ok");
+  toast("Opened " + mapFile.name, "ok");
   res.warnings.slice(0, 6).forEach(function (w) { toast(w, "info"); });
   if (res.warnings.length > 6) toast("…and " + (res.warnings.length - 6) + " more warnings (see console)", "info");
   if (res.warnings.length) console.log("Tiled import warnings:", res.warnings);
@@ -2094,12 +2110,18 @@ function openFiles(files) {
   const replaces = files.some(function (f) { return /\.(json|pgproj|tmj|tmx)$/i.test(f.name); });
   if (replaces && !confirmReplace(files[0].name)) return;
   if (files.some(function (f) { return /\.(tmj|tmx)$/i.test(f.name); })) {
-    importTiledFiles(files).catch(function (e) { toast("Tiled import: " + e.message, "err"); console.error(e); });
+    importTiledFiles(files).catch(function (e) {
+      toast("Could not open the Tiled map (" + e.message + ") — pick its .tsx/.tsj tilesets and PNGs along with it.", "err");
+      console.error(e);
+    });
     return;
   }
   const f = files.find(function (x) { return /\.json$/i.test(x.name); });
   if (!f) {                                  // no JSON picked: attach art / story to the OPEN game
-    attachFiles(files).catch(function (e) { toast("Attach: " + e.message, "err"); console.error(e); });
+    attachFiles(files).catch(function (e) {
+      toast("Could not add those files (" + e.message + ") — open the PNG, .pal8 or story.py one at a time to see which.", "err");
+      console.error(e);
+    });
     return;
   }
   const fr = new FileReader();
@@ -2109,7 +2131,7 @@ function openFiles(files) {
     if (marks.length) {
       toast(f.name + " still has git conflict markers (line " + marks[0] +
             (marks.length > 1 ? " and " + (marks.length - 1) + " more" : "") +
-            ") - two edits of the same rows. Resolve them (in an ASCII map you can see both " +
+            ") — two edits of the same rows. Resolve them (in an ASCII map you can see both " +
             "versions) and load it again.", "err");
       return;
     }
@@ -2121,11 +2143,11 @@ function openFiles(files) {
     const fmt = obj && obj.format;
     if (fmt === "picogame-scene" || fmt === "picogame-project") {
       importExportedFiles(obj, f, files).catch(function (e) {
-        toast("Import: " + e.message, "err"); console.error(e);
+        toast("Could not open " + f.name + " (" + e.message + ")", "err"); console.error(e);
       });
       return;
     }
-    try { loadSave(obj); toast("Loaded " + f.name, "ok"); }
+    try { loadSave(obj); toast("Opened " + f.name, "ok"); }
     catch (e) { toast(f.name + " is JSON, but not a project this editor understands (" + e.message + ")", "err"); console.error(e); }
   };
   fr.onerror = function () { toast(unreadable(f, fr), "err"); };
@@ -2161,9 +2183,9 @@ if (typeof window !== "undefined") {
 // The loadable demos. Each is a .pgproj.json in this folder (served same-origin). The
 // two scrolling demos teach the big-map workflow: load one, inspect its World size + camera.
 const DEMOS = {
-  sample:     { file: "sample.pgproj.json",       msg: "Loaded sample (one screen)" },
-  platformer: { file: "demo_platformer.pgproj.json", msg: "Loaded scrolling platformer — 960×240, follow-camera axis x (clamps at both ends)" },
-  openworld:  { file: "demo_openworld.pgproj.json",  msg: "Loaded open world — 640×480, follow-camera axis xy (free roam both ways)" },
+  sample:     { file: "sample.pgproj.json",       msg: "Opened the sample (one screen)" },
+  platformer: { file: "demo_platformer.pgproj.json", msg: "Opened the scrolling platformer — 960×240, follow-camera axis x (clamps at both ends)" },
+  openworld:  { file: "demo_openworld.pgproj.json",  msg: "Opened the open world — 640×480, follow-camera axis xy (free roam both ways)" },
 };
 function loadDemo(name) {
   const d = DEMOS[name]; if (!d) return;
@@ -2184,19 +2206,19 @@ if ($("btnExportBaked")) $("btnExportBaked").onclick = async function () {
   var d = $("exportD"); if (d) d.open = false;
   var scene;
   try { scene = E.exportScene(project); }
-  catch (e) { toast("Baked module not written - " + (e.message || e), "err"); console.error(e); return; }
+  catch (e) { toast("Baked module not written — " + (e.message || e), "err"); console.error(e); return; }
   var pngIds = Object.keys(scene.assets || {}).filter(function (id) {
     var t = scene.assets[id].type; return t === "sprite" || t === "tileset" || t === "bitmap";
   });
   try {
     var res = inlinePngAssets(scene, pngIds);
-    if (res.missing.length) { toast("No image data for: " + res.missing.join(", ") + " - re-import those PNGs first", "err"); return; }
+    if (res.missing.length) { toast("No image data for: " + res.missing.join(", ") + " — re-import those PNGs first", "err"); return; }
     var text = E.sceneModule(scene);
     var stem = (L().name || "scene").replace(/\W+/g, "_");
     var where = await saveText(stem + "_scene.py", text);
     toast("Exported " + (where === "downloaded" ? "" : where) + stem + "_scene.py (" +
-          (text.length / 1024).toFixed(1) + " KB) - picogame_scene.load(pg, " + stem + "_scene.SCENE)", "ok");
-  } catch (e) { toast("Bake failed: " + (e.message || e), "err"); console.error(e); }
+          (text.length / 1024).toFixed(1) + " KB) — picogame_scene.load(pg, " + stem + "_scene.SCENE)", "ok");
+  } catch (e) { toast("Baked module not written — " + (e.message || e), "err"); console.error(e); }
 };
 // Try in playground: hand THIS level to the browser playground and run it live. The playground bakes
 // colour assets in-browser (no PIL/files), so colour tilesets + rect sprites run natively. PNG-backed
@@ -2273,14 +2295,14 @@ function handoffScene(payload) {
   // (full or blocked storage) and the tab (a popup blocker). Neither may be reported as success.
   try { localStorage.setItem("pg_editor_level", JSON.stringify(payload)); }
   catch (e) {
-    toast("Could not hand the game to the playground - this browser's storage is full or blocked " +
+    toast("Could not hand the game to the playground — this browser's storage is full or blocked " +
           "for the site. Save the game.json and open it in the playground instead.", "err");
     console.error("handoff", e); return;
   }
   var url = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";  // set in config.js
   const tab = window.open(url + (url.indexOf("?") < 0 ? "?" : "&") + "from=editor", "_blank");
   if (tab) toast("Opening in the playground…", "ok");
-  else toast("The playground tab was blocked - allow pop-ups for this site, then press " +
+  else toast("The playground tab was blocked — allow pop-ups for this site, then press " +
              "\u25b6 Try in playground again.", "err");
 }
 
@@ -2391,8 +2413,8 @@ function storyForm(box, z, rerender) {
   var kind = storyKindOf(z.data);
   var kr = mk("div", "row"); add(kr, mk("label", null, "story"));
   var ks = mk("select");
-  [["none", "(none)"], ["say", "say - show text"], ["ask", "ask - A/B question"],
-   ["goto", "goto - travel to a level"], ["script", "script - named code"],
+  [["none", "(none)"], ["say", "say — show text"], ["ask", "ask — A/B question"],
+   ["goto", "goto — travel to a level"], ["script", "script — named code"],
    ["json", "custom JSON"]].forEach(function (o) { ks.appendChild(new Option(o[1], o[0])); });
   ks.value = kind;
   ks.onchange = function () { snapshot(); z.data = storySkeleton(ks.value, z.data); rerender(); };
@@ -2456,7 +2478,7 @@ function storyForm(box, z, rerender) {
       ps.innerHTML = "";
       var lv = (project.levels || []).filter(function (l) { return l.name === ls.value; })[0];
       ((lv && lv.points) || []).forEach(function (p) { ps.appendChild(new Option(p.name, p.name)); });
-      if (!ps.options.length) ps.appendChild(new Option("(no points - lands on the player sprite)", ""));
+      if (!ps.options.length) ps.appendChild(new Option("(no points — lands on the player sprite)", ""));
       if (t[1]) {
         if (!Array.prototype.some.call(ps.options, function (o) { return o.value === t[1]; }))
           ps.appendChild(new Option(t[1] + " (?)", t[1]));
@@ -2488,7 +2510,7 @@ function storyForm(box, z, rerender) {
     add(nr, ni); box.appendChild(nr);
     box.appendChild(hint("Runs <code>def name(d)</code> from <b>story.py</b> next to game.json (a Python file you own); the Story panel holds legacy bodies until they are saved there."));
   } else if (kind === "json") {
-    fieldData(box, z, "data (JSON) - free-form; script keys: script / say / ask / goto / if / denied:");
+    fieldData(box, z, "data (JSON) — free-form; script keys: script / say / ask / goto / if / denied:");
   }
 }
 
@@ -2582,7 +2604,7 @@ function effectsForm(box, lv, rerender) {
   var aid = tmA && tmA.asset, a = aid && project.assets[aid];
   var names = [];
   (lv.entities || []).forEach(function (en) { if (en.name && names.indexOf(en.name) < 0) names.push(en.name); });
-  box.appendChild(hint("Rules replayed on level load and whenever a story flag is set - " +
+  box.appendChild(hint("Rules replayed on level load and whenever a story flag is set — " +
     "the world catches up with the story (a pulled lever keeps the gate open after map travel)."));
   rules.forEach(function (r, i) {
     var head = frow(box, "when");
@@ -2735,7 +2757,7 @@ function ejectZoneScript(z) {
     project.scripts = project.scripts || {};
     project.scripts[name] = body.join("\n");
     z.data = { script: name };
-    toast('Converted - the body now lives under Story ▾ as "' + name + '"', "ok");
+    toast('Converted — the body now lives under Story ▾ as "' + name + '"', "ok");
     storyCur = name;
     if ($("storyD")) $("storyD").open = true;
     renderPanel(); refreshStory(); mountStoryEditor(); scheduleAutosave();
@@ -2753,12 +2775,12 @@ if ($("btnTryPlay")) $("btnTryPlay").onclick = function () {
   catch (e) { toast("Could not build game.json: " + (e.message || e), "err"); console.error(e); return; }
   game.start = L().name;          // playtest what you are looking at...
   if (L().name !== startName())   // ...but never let that quietly stand in for the board's boot level
-    toast("Playing " + L().name + " - the board boots into " + startName() + " (\u2605 sets it)", "info");
+    toast("Playing " + L().name + " — the board boots into " + startName() + " (\u2605 sets it)", "info");
   var files = {}, missing = [];
   for (var id in game.assets) {
     if (!E.isImg(project.assets[id])) continue;
     var blob = null;
-    try { blob = pal8Of(id); } catch (e) { toast("Art: " + e.message, "err"); return; }
+    try { blob = pal8Of(id); } catch (e) { toast("Cannot hand this game over — " + e.message, "err"); return; }
     if (blob) files[pal8Name(project.assets[id])] = bytesB64(blob);
     else missing.push(id);
   }
@@ -2772,7 +2794,8 @@ if ($("btnTryPlay")) $("btnTryPlay").onclick = function () {
     catch (e) { toast("Couldn't substitute an image asset: " + (e.message || e), "err"); return; }
   }
   handoffScene({ format: "picogame-game-handoff", start: game.start, game: game, files: files, story: storyText() });
-  if (missing.length) toast("Substituted " + missing.length + " asset(s) with placeholder blocks", "info");
+  if (missing.length) toast("Playing with coloured blocks for " + missing.length + " PNG asset" +
+                            (missing.length === 1 ? "" : "s") + " — the playground cannot bake PNGs.", "info");
 };
 
 // Placeholder blocks for PNG assets the editor has no pixels for, on a game.json copy: a sprite
@@ -2882,7 +2905,7 @@ function init() {
     autosavePaused = true;
     console.error("autosave restore", e);
     toast("Your last session could not be reopened. It is still in this browser's storage, so " +
-          "nothing was overwritten - Open a saved game.json to carry on, or New to start clean.", "err");
+          "nothing was overwritten — Open a saved game.json to carry on, or New to start clean.", "err");
   }
   // first-run getting-started overlay (dismissible; remembered; skipped when resuming)
   let seen = false; try { seen = localStorage.getItem("pg_ed_seen") === "1"; } catch (e) {}
