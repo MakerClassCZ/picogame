@@ -3090,6 +3090,10 @@ function showGuide() {
   const g = $("gettingStarted"), c = $("cheatsheet");
   if (c) c.hidden = true;
   if (g) g.hidden = false;
+  // Reopened from Help with a level already open, "Start from scratch" reads as "throw mine
+  // away" - it only ever closed the card, but nobody dares press it. Say what it does.
+  const b = $("gsClose");
+  if (b) { b.textContent = "Close"; b.title = "Close this card and carry on with the open level"; }
 }
 if ($("csGuide")) $("csGuide").onclick = showGuide;
 if ($("gsKeys")) $("gsKeys").onclick = function () { dismissGS(); toggleCheatsheet(); };
@@ -3097,6 +3101,7 @@ if ($("btnHelp")) $("btnHelp").onclick = toggleCheatsheet;
 if ($("cheatsheetClose")) $("cheatsheetClose").onclick = function () { $("cheatsheet").hidden = true; };
 function dismissGS() { const g = $("gettingStarted"); if (g) g.hidden = true; try { localStorage.setItem("pg_ed_seen", "1"); } catch (e) {} }
 if ($("gsClose")) $("gsClose").onclick = dismissGS;
+if ($("gsCloseX")) $("gsCloseX").onclick = dismissGS;
 if ($("gsSample")) $("gsSample").onclick = function () { dismissGS(); loadDemo("sample"); };
 if ($("gsPlatformer")) $("gsPlatformer").onclick = function () { dismissGS(); loadDemo("platformer"); };
 if ($("gsOpen")) $("gsOpen").onclick = function () { dismissGS(); loadDemo("openworld"); };
