@@ -5,8 +5,13 @@
 
 .pg-editor, .pg-editor * { box-sizing: border-box; }
 .pg-editor {
-  --bg: #11141c; --bg2: #1c212e; --panel: #232838; --line: #2a3142;
-  --accent: #5b78d8; --accent2: #8fb0ff; --hi: #ffd23f; --text: #d8def0; --muted: #a8b4cc;
+  /* picogame's own palette: the warm orange of the logo and the site (#e8601f) on the deep navy
+     the playground already uses (#11131c), so the editor, the playground and the docs are one
+     product. Text on the orange is near-black (6.1:1) - white on it is only 3.4:1. */
+  --bg: #11131c; --bg2: #171a26; --panel: #1b1e2b; --line: #2a2f3f;
+  --accent: #e8601f; --accent-hi: #f26f2c; --accent2: #ff8a4c; --on-accent: #14161f;
+  --hi: #ffd23f; --text: #e7e7ee; --muted: #9aa3b8;
+  --btn: #262b3a; --btn-hi: #333a4e; --edge: #39415a; --sunk: #14171f;
   font: 13px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text);
   position: fixed; inset: 0; display: flex; flex-direction: column; z-index: 2147483000;
 }
@@ -19,18 +24,24 @@
   display: flex; align-items: center; gap: 5px; padding: 6px 8px; flex-wrap: wrap;   /* 5/8: the Save arrow costs 18px; keeps one row at 1280 */
   background: var(--panel); border-bottom: 1px solid #0006; flex: 0 0 auto;
 }
+/* the wordmark carries the pixel-creature as a super-index, exactly as the docs site header does */
 .pg-editor #top .brand { color: var(--accent2); font-size: 15px; margin-right: 4px; font-weight: 700; }
+.pg-editor #top .brand::after {
+  content: ""; display: inline-block; width: .7em; height: .57em;   /* 144:118 creature proportions */
+  margin-inline-start: .28em; vertical-align: .45em;
+  background: url("logo.svg") center / contain no-repeat;
+}
 .pg-editor #top .spacer { flex: 1; }
 .pg-editor #top .sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 3px; }
 .pg-editor .inline { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
-.pg-editor #levelSel { background: #1b1f2a; color: #eef; border: 1px solid #3a4666; border-radius: 4px; padding: 3px; }
+.pg-editor #levelSel { background: var(--sunk); color: var(--text); border: 1px solid var(--edge); border-radius: 4px; padding: 3px; }
 .pg-editor button.mini { width: auto; padding: 5px 9px; }
 .pg-editor button.icon { width: auto; min-width: 30px; padding: 5px 8px; font-size: 15px; line-height: 1; }
 
 .pg-editor .dd { position: relative; }
-.pg-editor .dd > summary { list-style: none; cursor: pointer; background: #34406a; color: #eef; border-radius: 4px; padding: 5px 9px; }
+.pg-editor .dd > summary { list-style: none; cursor: pointer; background: var(--btn); color: var(--text); border-radius: 4px; padding: 5px 9px; }
 .pg-editor .dd > summary::-webkit-details-marker { display: none; }
-.pg-editor .dd[open] > summary { background: var(--accent); }
+.pg-editor .dd[open] > summary { background: var(--accent); color: var(--on-accent); }
 /* split button: the action on the left, its options behind the arrow on the right */
 .pg-editor .split { display: inline-flex; align-items: stretch; }
 .pg-editor .split > button.mini { border-radius: 5px 0 0 5px; }
@@ -39,7 +50,7 @@
   border-radius: 0 5px 5px 0; border-left: 1px solid var(--bg2); }
 .pg-editor .ddsep { border: 0; border-top: 1px solid #4a5680; margin: 4px 0; }
 .pg-editor .ddmenu { position: absolute; right: 0; top: 110%; z-index: 45; width: 240px;
-  background: #2a3146; border: 1px solid #44569a; border-radius: 6px; padding: 8px; box-shadow: 0 6px 20px #0008; }
+  background: var(--bg2); border: 1px solid var(--edge); border-radius: 6px; padding: 8px; box-shadow: 0 6px 20px #0008; }
 
 /* ---------------- main 3-pane ---------------- */
 .pg-editor #main { flex: 1; display: flex; min-height: 0; }
@@ -52,7 +63,7 @@
   font-size: 11px; width: 100%; border-radius: 6px;
 }
 .pg-editor #tools .tool span { font-size: 20px; line-height: 1; }
-.pg-editor #tools .tool.on { background: var(--accent); box-shadow: 0 0 0 2px var(--hi) inset; }
+.pg-editor #tools .tool.on { background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 2px var(--hi) inset; }
 
 .pg-editor #center { flex: 1; position: relative; min-width: 0; background: #0b0d13; overflow: hidden; }
 .pg-editor #canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block;
@@ -69,14 +80,14 @@
 }
 .pg-editor #minimap {
   position: absolute; right: 10px; top: 10px; z-index: 6; width: 200px; height: 130px;
-  background: #0b0d13cc; border: 1px solid #44569a; border-radius: 6px; cursor: pointer;
+  background: #11131ccc; border: 1px solid var(--edge); border-radius: 6px; cursor: pointer;
   box-shadow: 0 4px 16px #0007; image-rendering: pixelated;
 }
 /* ...and the button that folds it away, because it sits ON the map it describes */
 .pg-editor #mmToggle { position: absolute; z-index: 7; right: 10px; top: 10px; width: auto;
   min-width: 22px; padding: 1px 6px; margin: 0; line-height: 1.3; background: #0b0d13cc;
-  border: 1px solid #44569a; color: var(--muted); font-size: 12px; }
-.pg-editor #mmToggle:hover { color: #eef; background: #44569a; }
+  border: 1px solid var(--edge); color: var(--muted); font-size: 12px; }
+.pg-editor #mmToggle:hover { color: var(--text); background: var(--btn-hi); }
 .pg-editor.mm-off #minimap { display: none; }
 
 .pg-editor #panel {
@@ -87,9 +98,9 @@
 .pg-editor h2 { font-size: 15px; color: var(--accent2); margin: 0 0 10px; }
 .pg-editor h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent2); margin: 16px 0 6px; }
 .pg-editor h3:first-child { margin-top: 0; }
-.pg-editor button { background: #34406a; color: #eef; border: 0; border-radius: 5px; padding: 7px 9px; margin: 2px 0; cursor: pointer; width: 100%; font: inherit; }
-.pg-editor button:hover { background: #44569a; }
-.pg-editor button.on { background: var(--accent); }
+.pg-editor button { background: var(--btn); color: var(--text); border: 0; border-radius: 5px; padding: 7px 9px; margin: 2px 0; cursor: pointer; width: 100%; font: inherit; }
+.pg-editor button:hover { background: var(--btn-hi); }
+.pg-editor button.on { background: var(--accent); color: var(--on-accent); }
 .pg-editor button.danger { background: #7a3547; }
 .pg-editor button.danger:hover { background: #9c3f56; }
 .pg-editor button:focus-visible, .pg-editor select:focus-visible, .pg-editor input:focus-visible,
@@ -101,11 +112,11 @@
 .pg-editor input[type=number] { width: 60px; }
 .pg-editor input[type=text] { width: 100%; }
 .pg-editor input, .pg-editor select, .pg-editor textarea {
-  background: #1b1f2a; color: #eef; border: 1px solid #3a4666; border-radius: 4px; padding: 4px; font: inherit; }
+  background: var(--sunk); color: var(--text); border: 1px solid var(--edge); border-radius: 4px; padding: 4px; font: inherit; }
 .pg-editor textarea { width: 100%; }
 .pg-editor textarea.bad { border-color: #d05; background: #331a22; }
 .pg-editor .hint { color: var(--muted); font-size: 11px; margin: 4px 0; }
-.pg-editor .hint code, .pg-editor .keys code { color: #c6d0ee; }
+.pg-editor .hint code, .pg-editor .keys code { color: #d7dae6; }
 .pg-editor .addbox { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .pg-editor .addbox input[type=text] { width: auto; flex: 1 1 80px; }
 
@@ -113,7 +124,7 @@
 .pg-editor .chip { position: relative; width: 44px; }
 .pg-editor .chip canvas { width: 44px; height: 44px; image-rendering: pixelated; background: #0008; border: 2px solid #0006; border-radius: 4px; display: block; cursor: pointer; }
 .pg-editor .chip.sel canvas { border-color: var(--hi); }
-.pg-editor .chip .name { font-size: 9px; color: #b4bdd4; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-editor .chip .name { font-size: 9px; color: var(--muted); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pg-editor .chip .del { position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; padding: 0; border-radius: 50%; background: #8a3a4a; font-size: 12px; line-height: 20px; }
 .pg-editor .chip .del.dl { top: auto; bottom: 10px; right: -8px; background: #3a5a8a; font-size: 11px; }
 .pg-editor .tiles { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -121,7 +132,7 @@
 .pg-editor .tiles .sel { border-color: var(--hi); }
 .pg-editor .lrow { display: flex; gap: 4px; align-items: center; margin: 3px 0; }
 .pg-editor .lrow .pick { text-align: left; }
-.pg-editor .lrow .pick.on { background: var(--accent); }
+.pg-editor .lrow .pick.on { background: var(--accent); color: var(--on-accent); }
 .pg-editor .lrow .del, .pg-editor .swatch .del { width: 30px; flex: 0 0 30px; background: #5a3340; }
 .pg-editor .lrow .del:hover, .pg-editor .swatch .del:hover { background: #8a3a4a; }
 .pg-editor .objbtn { text-align: left; }
@@ -138,14 +149,14 @@
 
 /* ---------------- toasts ---------------- */
 .pg-editor #toasts { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
-.pg-editor .toast { background: #2a3146; color: #eef; border: 1px solid #44569a; border-radius: 6px; padding: 7px 14px; box-shadow: 0 4px 16px #0009; font-size: 13px; opacity: 1; transition: opacity .3s, transform .3s; }
+.pg-editor .toast { background: var(--bg2); color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: 7px 14px; box-shadow: 0 4px 16px #0009; font-size: 13px; opacity: 1; transition: opacity .3s, transform .3s; }
 .pg-editor .toast.ok { border-color: #45e08a; } .pg-editor .toast.err { border-color: #ff5f6d; }
 .pg-editor .toast.out { opacity: 0; transform: translateY(8px); }
 
 /* ---------------- overlays ---------------- */
 .pg-editor .overlay { position: absolute; inset: 0; z-index: 70; background: #0009; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .pg-editor .overlay[hidden] { display: none; }
-.pg-editor .overlay .card { background: var(--panel); border: 1px solid #44569a; border-radius: 10px; padding: 20px 24px; max-width: 520px; width: 100%; box-shadow: 0 10px 40px #000b; max-height: 90%; overflow: auto; }
+.pg-editor .overlay .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 20px 24px; max-width: 520px; width: 100%; box-shadow: 0 10px 40px #000b; max-height: 90%; overflow: auto; }
 .pg-editor .overlay .card ol { padding-left: 20px; margin: 8px 0; }
 .pg-editor .overlay .card li { margin: 6px 0; }
 .pg-editor .overlay .card .row { margin-top: 14px; }
@@ -166,7 +177,7 @@
 /* Dropping files on the editor (game.json + its art + story.py at once) */
 .pg-editor.dropping::after { content: "Drop game.json, PNGs, .pal8 or story.py to open them";
   position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center;
-  background: #11141ccc; border: 3px dashed var(--accent2); color: var(--accent2);
+  background: #11131ccc; border: 3px dashed var(--accent2); color: var(--accent2);
   font-size: 18px; pointer-events: none; }
 
 /* Problems: the validation the device would fail on, shown while you build */
@@ -194,10 +205,10 @@
 
 /* Story effects: numbered tile legend + decoded rule preview */
 .pg-editor .tcell { display: inline-block; text-align: center; margin: 0 2px; }
-.pg-editor .tnum { font-size: 10px; color: #9ab; line-height: 1.1; }
+.pg-editor .tnum { font-size: 10px; color: var(--muted); line-height: 1.1; }
 .pg-editor .fxrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
-.pg-editor .fxchip { display: inline-flex; align-items: center; gap: 3px; background: #232a44;
-  border: 1px solid #37406a; border-radius: 4px; padding: 2px 6px; font-size: 11px; color: #cdd; }
+.pg-editor .fxchip { display: inline-flex; align-items: center; gap: 3px; background: var(--bg2);
+  border: 1px solid var(--edge); border-radius: 4px; padding: 2px 6px; font-size: 11px; color: var(--text); }
 .pg-editor .fxchip canvas { image-rendering: pixelated; }
 
 /* data (JSON) fields: readable multi-line editing */
@@ -207,14 +218,14 @@
 /* Zone story modal: the structured form gets real room */
 .pg-editor .overlay .card.storycard { max-width: 720px; }
 .pg-editor .storycard .frow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 5px 0; }
-.pg-editor .storycard .frow > label { flex: 0 0 64px; color: #9ab; font-size: 12px; }
+.pg-editor .storycard .frow > label { flex: 0 0 64px; color: var(--muted); font-size: 12px; }
 .pg-editor .storycard .frow .tiles { display: inline-flex; gap: 2px; margin: 0; }
 .pg-editor .storycard .frow input[type=text] { flex: 1; min-width: 120px; }
 .pg-editor .storycard .frow .del { flex: 0 0 auto; width: auto; }
-.pg-editor .storycard .fxarrow { font-size: 16px; color: #9ab; margin: 0 2px; }
+.pg-editor .storycard .fxarrow { font-size: 16px; color: var(--muted); margin: 0 2px; }
 .pg-editor .storycard .chipbtn { width: auto; padding: 3px 10px; font-size: 12px;
-  background: #232a44; border: 1px solid #37406a; border-radius: 10px; }
-.pg-editor .storycard .chipbtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  background: var(--bg2); border: 1px solid var(--edge); border-radius: 10px; }
+.pg-editor .storycard .chipbtn.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .pg-editor .storycard textarea { width: 100%; box-sizing: border-box; }
 .pg-editor .storycard .row { margin: 8px 0; }
 .pg-editor .storycard select, .pg-editor .storycard input[type=text] { min-width: 140px; }

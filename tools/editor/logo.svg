@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 118" role="img" aria-label="picogame logo">
+  <!-- picogame pixel-creature mark, traced from the OG image: two eyes, a mouth bar, three teeth. -->
+  <g fill="#e8601f">
+    <rect x="26" y="0" width="26" height="26" rx="4"/>
+    <rect x="92" y="0" width="26" height="26" rx="4"/>
+    <rect x="0" y="46" width="144" height="26" rx="4"/>
+    <rect x="0" y="92" width="26" height="26" rx="4"/>
+    <rect x="59" y="92" width="26" height="26" rx="4"/>
+    <rect x="118" y="92" width="26" height="26" rx="4"/>
+  </g>
+</svg>
