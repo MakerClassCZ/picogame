@@ -87,6 +87,7 @@
     <nav id="tools" aria-label="Tools">
       <button class="tool on" data-tool="select"><span aria-hidden="true">⤡</span>Select</button>
       <button class="tool"    data-tool="paint"><span aria-hidden="true">▦</span>Paint</button>
+      <button class="tool"    data-tool="region"><span aria-hidden="true">⬚</span>Region</button>
       <button class="tool"    data-tool="place"><span aria-hidden="true">☺</span>Place</button>
       <button class="tool"    data-tool="hud"><span aria-hidden="true">⊞</span>HUD</button>
       <button class="tool"    data-tool="zone"><span aria-hidden="true">▭</span>Zone</button>
@@ -142,15 +143,19 @@
       <h2>Shortcuts <button id="cheatsheetClose" class="mini" style="float:right" aria-label="Close">✕</button>
         <button id="csGuide" class="mini" style="float:right;margin-right:6px">Getting started ▸</button></h2>
       <table class="keys">
-        <tr><td>1–6 / V B P H</td><td>Select · Paint · Place · Pan (+ HUD/Zone/Point)</td></tr>
+        <tr><td>1–6 / V B P R H</td><td>Select · Paint · Place · Region · Pan (+ HUD/Zone/Point)</td></tr>
         <tr><td>Space-drag / middle-drag</td><td>Pan the view</td></tr>
         <tr><td>Wheel / Shift+Wheel</td><td>Scroll vertically / horizontally</td></tr>
         <tr><td>Ctrl+Wheel</td><td>Zoom to cursor</td></tr>
         <tr><td>+ / − / 0 / F</td><td>Zoom in / out / 100% / Fit whole map</td></tr>
         <tr><td>Arrows</td><td>Nudge selection (Shift = ×10), or pan when nothing selected</td></tr>
         <tr><td>Shift-click (Select)</td><td>Add / remove objects from a multi-selection</td></tr>
+        <tr><td>Shift (placing)</td><td>Stay in the HUD / Zone / Point tool instead of jumping to Select</td></tr>
         <tr><td>Shift-drag (Paint)</td><td>Rectangle fill</td></tr>
         <tr><td>Alt-click (Paint)</td><td>Flood fill</td></tr>
+        <tr><td>I / Ctrl-click (Paint)</td><td>Pick the tile under the cursor</td></tr>
+        <tr><td>Drag (Region)</td><td>Select a block of tiles — then Ctrl+C / Ctrl+X / Delete</td></tr>
+        <tr><td>Click (Region, after a copy)</td><td>Stamp the copied block · Esc drops it</td></tr>
         <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / redo</td></tr>
         <tr><td>Ctrl+C / V / D</td><td>Copy / paste / duplicate selection</td></tr>
         <tr><td>Delete</td><td>Delete selection</td></tr>

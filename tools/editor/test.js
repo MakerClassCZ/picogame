@@ -399,6 +399,225 @@ section("git conflict markers are detected, ASCII map rows are not mistaken for 
 })();
 ok();
 
+// ---- problems(): the editor-side twin of scene_build.py's validate() ----
+function errsOf(p) { return E.problems(p).filter(function (x) { return x.severity === "error"; }); }
+function warnsOf(p) { return E.problems(p).filter(function (x) { return x.severity === "warning"; }); }
+// the smallest project that has nothing wrong with it: one tileset, one sprite, one of each placed
+function sound() {
+  const p = E.newProject();
+  p.assets.tiles = { type: "tileset", fw: 16, fh: 16, frames: 4, src: "tiles.png" };
+  p.assets.hero = { type: "sprite", fw: 8, fh: 8, frames: 2, src: "hero.png",
+                    animations: { walk: { frames: [0, 1], fps: 8, loop: true } } };
+  const lv = p.levels[0];
+  lv.tilemaps.push(E.newTilemap("tiles", 4, 3));
+  lv.entities.push({ asset: "hero", name: "player", tag: null, x: 8, y: 8, anchor: [0, 0], frame: 0 });
+  return p;
+}
+// one broken thing -> exactly one error, on the object the UI should select
+function oneError(p, kind, ref, re) {
+  const e = errsOf(p);
+  assert.strictEqual(e.length, 1, "expected exactly one error, got: " + e.map(function (x) { return x.where + ": " + x.msg; }).join(" / "));
+  assert.strictEqual(e[0].severity, "error");
+  if (kind === null) assert.strictEqual(e[0].sel, null, "nothing to select for this one");
+  else {
+    assert.strictEqual(e[0].sel.kind, kind, "sel.kind");
+    if (ref !== undefined) assert.strictEqual(e[0].sel.ref, ref, "sel.ref is the offending object itself");
+  }
+  if (re) assert.ok(re.test(e[0].msg), "message " + JSON.stringify(e[0].msg) + " should match " + re);
+  return e[0];
+}
+
+section("problems(): a sound project reports nothing");
+assert.deepStrictEqual(E.problems(sound()), []);
+(function () {                                        // the shipped fixture too, script body and all
+  const p = E.importExported(JSON.parse(fs.readFileSync(__dirname + "/fixtures/quest_game.json", "utf8")), "quest");
+  // opened without story.py the editor knows no bodies at all, so it must not call the boss zone
+  // broken - that is the normal case for a game.json picked on its own
+  assert.deepStrictEqual(E.problems(p), []);
+  p.scripts = { intro: "yield" };                     // now story.py IS loaded, and boss_fight is missing
+  const w = warnsOf(p);
+  assert.strictEqual(w.length, 1);
+  assert.strictEqual(w[0].sel.kind, "zone");
+  assert.ok(/boss_fight/.test(w[0].msg));
+  p.scripts.boss_fight = "yield";                     // written in the Story panel -> clean
+  assert.deepStrictEqual(E.problems(p), []);
+})();
+ok();
+
+section("problems(): asset-bank errors (id, missing src, src with a path)");
+(function () {
+  let p = sound();
+  p.assets["2bad"] = { type: "rect", fw: 4, fh: 4, color: [1, 2, 3] };
+  oneError(p, "asset", "2bad", /not an identifier/);
+  p = sound(); delete p.assets.hero.src;
+  oneError(p, "asset", "hero", /no file name/);
+  p = sound(); p.assets.tiles.src = "art/tiles.png";
+  oneError(p, "asset", "tiles", /bare name/);
+  p = sound(); p.assets.tiles.src = "art\\tiles.png";
+  oneError(p, "asset", "tiles", /bare name/);
+})();
+ok();
+
+section("problems(): level names, duplicates and an unknown start level");
+(function () {
+  let p = sound();
+  p.levels[0].name = "my level";
+  oneError(p, "level", p.levels[0], /Save has to rename it to 'my_level'/);
+  p = sound();
+  const dup = E.newLevel("level1");                   // a second level of the same name
+  dup.entities.push({ asset: "hero", name: "p2", x: 0, y: 0, anchor: [0, 0], frame: 0 });
+  p.levels.push(dup);
+  const e = oneError(p, "level", dup, /already a level called 'level1'/);
+  assert.strictEqual(e.level, 1, "reported against the SECOND level");
+  p = sound(); p.start = "nowhere";
+  const s = oneError(p, null, null, /starts on level 'nowhere'/);
+  assert.strictEqual(s.level, null, "a project-wide problem has no level");
+  p = sound(); p.start = "level1";
+  assert.deepStrictEqual(E.problems(p), [], "a start level that exists is fine");
+})();
+ok();
+
+section("problems(): one name or tag per level, and the message names the other one");
+(function () {
+  let p = sound();
+  p.levels[0].hud.push({ name: "player", x: 0, y: 0, fg: [255, 255, 255], bg: [0, 0, 0] });
+  let e = oneError(p, "hud", p.levels[0].hud[0], /sprite 'player' already uses it/);
+  assert.strictEqual(e.where, "hud label 'player'", "the row points at the second one");
+  p = sound();                                        // a point may not take a zone's tag either
+  p.levels[0].zones.push({ tag: "gate", x: 0, y: 0, w: 8, h: 8 });
+  p.levels[0].points.push({ name: "gate", x: 4, y: 4 });
+  oneError(p, "zone", p.levels[0].zones[0], /point 'gate' already uses it/);
+  p = sound();                                        // same tag = ONE group, not a duplicate
+  p.levels[0].entities.push({ asset: "hero", tag: "foes", x: 32, y: 8, anchor: [0, 0], frame: 0 });
+  p.levels[0].entities.push({ asset: "hero", tag: "foes", x: 48, y: 8, anchor: [0, 0], frame: 0 });
+  assert.deepStrictEqual(E.problems(p), [], "entities sharing a tag fold into one group");
+  p.levels[0].particles.push(E.newParticles("foes"));  // ...but nothing else may take that tag
+  oneError(p, "particle", p.levels[0].particles[0], /group 'foes' already uses it/);
+})();
+ok();
+
+section("problems(): a sprite's frame and animation must exist in its asset");
+(function () {
+  let p = sound();
+  p.levels[0].entities[0].frame = 5;                  // hero has 2 frames
+  oneError(p, "entity", p.levels[0].entities[0], /frame 5.*only 2/);
+  p = sound(); p.levels[0].entities[0].anim = "run";
+  oneError(p, "entity", p.levels[0].entities[0], /animation 'run'/);
+  p = sound(); p.levels[0].entities[0].anim = "walk";
+  assert.deepStrictEqual(E.problems(p), [], "an animation the asset defines is fine");
+  p = sound(); p.levels[0].entities[0].asset = "ghost";
+  oneError(p, "entity", p.levels[0].entities[0], /not in the asset bank/);
+})();
+ok();
+
+section("problems(): a tilemap's asset and its painted tile values");
+(function () {
+  let p = sound();
+  p.levels[0].tilemaps[0].asset = "ghost";
+  oneError(p, "tilemap", p.levels[0].tilemaps[0], /not in the asset bank/);
+  p = sound();
+  p.levels[0].tilemaps[0].grid[1][2] = 9;             // tiles has 4 (0-3)
+  oneError(p, "tilemap", p.levels[0].tilemaps[0], /tile 9 at 2,1.*only has tiles 0-3/);
+  p = sound();
+  const g = p.levels[0].tilemaps[0].grid;
+  g[0][0] = 4; g[0][1] = 5; g[0][2] = 6; g[1][0] = 7; g[1][1] = 8;
+  oneError(p, "tilemap", p.levels[0].tilemaps[0], /tile 4 at 0,0; tile 5 at 1,0; tile 6 at 2,0 and 2 more cells/);
+  p = sound();
+  p.levels[0].tilemaps[0].grid[0][0] = 3 | (5 << 8);  // bits 8-10 are orientation, not the tile
+  assert.deepStrictEqual(E.problems(p), [], "an oriented cell is judged on its tile value alone");
+})();
+ok();
+
+section("problems(): zones - data vs script, goto targets, script names");
+(function () {
+  const withZone = function (data) {
+    const p = sound();
+    p.levels[0].zones.push({ tag: "gate", x: 0, y: 0, w: 16, h: 16, data: data });
+    return p;
+  };
+  let p = withZone({ say: [{ lines: ["hi"] }], script: "talk" });
+  oneError(p, "zone", p.levels[0].zones[0], /both dialogue data \(say\/ask\/goto\) and a script/);
+  p = withZone({ goto: ["castle", "entry"] });
+  oneError(p, "zone", p.levels[0].zones[0], /goto names level 'castle', which does not exist/);
+  p = withZone({ script: "boss fight" });
+  oneError(p, "zone", p.levels[0].zones[0], /not a Python identifier/);
+  // a goto to a real level AND a real point is clean; a wrong point is an error
+  const cave = function (proj) {
+    const lv = E.newLevel("cave");
+    lv.entities.push({ asset: "hero", name: "hero2", x: 0, y: 0, anchor: [0, 0], frame: 0 });
+    lv.points.push({ name: "entry", x: 8, y: 8 });
+    proj.levels.push(lv);
+    return proj;
+  };
+  p = cave(withZone({ goto: ["cave", "entry"] }));
+  assert.deepStrictEqual(E.problems(p), [], "goto level + point that both exist");
+  p = cave(withZone({ goto: ["cave", "back_door"] }));
+  oneError(p, "zone", p.levels[0].zones[0], /point 'back_door', which level 'cave' does not have/);
+  p = cave(withZone({ goto: "cave" }));               // the bare-string form: level only
+  assert.deepStrictEqual(E.problems(p), [], "goto may name a level with no point");
+})();
+ok();
+
+section("problems(): effects rules name this level's tiles and sprites");
+(function () {
+  let p = sound();
+  p.levels[0].effects = [{ if: "gate_open", hide: ["ghost"] }];
+  oneError(p, "level", p.levels[0], /hides\/shows 'ghost'/);
+  p = sound();
+  p.levels[0].effects = [{ if: "gate_open", swap: [9, 0] }];      // tiles has 0-3
+  oneError(p, "level", p.levels[0], /swap uses tile 9/);
+  p = sound();
+  p.levels[0].effects = [{ if: "gate_open", unsolid: ["#"] }];
+  oneError(p, "level", p.levels[0], /tile numbers, not legend characters/);
+  p = sound();
+  p.levels[0].effects = [{ if: "gate_open", swap: [1, 0], hide: ["player"] }];
+  assert.deepStrictEqual(E.problems(p), [], "a rule over real tiles and a real sprite is fine");
+})();
+ok();
+
+section("problems(): warnings are the loads-but-probably-wrong half, and sort after the errors");
+(function () {
+  let p = sound();
+  p.levels.push(E.newLevel("empty"));                 // no tilemaps, no sprites
+  let w = warnsOf(p);
+  assert.strictEqual(w.length, 1);
+  assert.strictEqual(w[0].sel.kind, "level");
+  assert.ok(/empty background/.test(w[0].msg));
+  p = sound();
+  p.levels[0].camera = { mode: "follow", target: "hero", axis: "x", bounds: [0, 0, 320, 240] };
+  w = warnsOf(p);                                     // the sprite is called 'player', not 'hero'
+  assert.strictEqual(w.length, 1);
+  assert.ok(/camera follows 'hero'/.test(w[0].msg));
+  p.levels[0].camera.target = "player";
+  assert.deepStrictEqual(E.problems(p), []);
+  p = sound();                                        // world is one screen: 320x240
+  p.levels[0].zones.push({ tag: "gate", x: 900, y: 8, w: 16, h: 16 });
+  p.levels[0].points.push({ name: "spawn", x: 8, y: 700 });
+  w = warnsOf(p);
+  assert.deepStrictEqual(w.map(function (x) { return x.sel.kind; }), ["point", "zone"]);
+  assert.ok(/outside the 320x240 world/.test(w[0].msg));
+  p.levels[0].worldSize = [1024, 768];                // grow the world -> both are inside it
+  assert.deepStrictEqual(E.problems(p), []);
+  p = sound();
+  p.assets.spare = { type: "sprite", fw: 8, fh: 8, frames: 1, src: "spare.png" };
+  w = warnsOf(p);
+  assert.strictEqual(w.length, 1);
+  assert.deepStrictEqual([w[0].sel.kind, w[0].sel.ref, w[0].level], ["asset", "spare", null]);
+  // severity partitions the list, errors first
+  p = sound();
+  p.levels[0].entities[0].frame = 5;                  // an error
+  p.levels.push(E.newLevel("empty"));                 // a warning
+  const all = E.problems(p);
+  assert.deepStrictEqual(all.map(function (x) { return x.severity; }), ["error", "warning"]);
+  all.forEach(function (x) {
+    assert.ok(x.severity === "error" || x.severity === "warning");
+    assert.ok(typeof x.where === "string" && typeof x.msg === "string");
+    assert.ok(x.level === null || typeof x.level === "number");
+    assert.ok(x.sel === null || typeof x.sel.kind === "string");
+  });
+})();
+ok();
+
 console.log("\neditor/test.js: ALL OK");
 
 // ---------------------------------------------------------------- game.json (v2)

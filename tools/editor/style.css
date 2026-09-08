@@ -169,6 +169,16 @@
   background: #11141ccc; border: 3px dashed var(--accent2); color: var(--accent2);
   font-size: 18px; pointer-events: none; }
 
+/* Problems: the validation the device would fail on, shown while you build */
+.pg-editor .pbadge { cursor: pointer; }
+.pg-editor .pbadge.err { color: #ff8b93; }
+.pg-editor .pbadge.warn { color: var(--hi); }
+.pg-editor details.problems > summary { color: #ff8b93; font-size: 12px; }
+.pg-editor .prow { text-align: left; font-size: 11px; line-height: 1.35; padding: 4px 6px;
+  background: #2a2130; border-left: 3px solid #ff8b93; margin: 3px 0; }
+.pg-editor .prow.warning { background: #2a2820; border-left-color: var(--hi); }
+.pg-editor .prow:hover { background: #3a2f42; }
+
 /* A fold in the panel: the data behind a friendlier control (zone JSON, level effects) */
 .pg-editor details.fold { margin: 4px 0; border-top: 1px solid var(--line); padding-top: 4px; }
 .pg-editor details.fold > summary { cursor: pointer; color: var(--muted); font-size: 11px;

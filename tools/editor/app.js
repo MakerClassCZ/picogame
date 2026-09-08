@@ -27,15 +27,16 @@ const mmCtx = minimap ? minimap.getContext("2d") : null;
 
 // ---------------------------------------------------------------- state
 const FLAGS = R.FLAGS, FLAG_COLOR = R.FLAG_COLOR, flagsOf = R.flagsOf, flagColor = R.flagColor;
-const TOOLS = ["select", "paint", "place", "hud", "zone", "point", "pan"];
+const TOOLS = ["select", "paint", "place", "hud", "zone", "point", "pan", "region"];
 const TOOL_META = {
   select: { key: "1", icon: "⤡", label: "Select", tip: "Select / move objects (V or 1). Click stacked items again to cycle; Shift-click = multi-select." },
-  paint:  { key: "2", icon: "▦", label: "Paint",  tip: "Paint tiles (B or 2). Drag to paint; Shift-drag = rectangle; hold Alt = flood fill." },
+  paint:  { key: "2", icon: "▦", label: "Paint",  tip: "Paint tiles (B or 2). Drag to paint; Shift-drag = rectangle; Alt-click = flood fill; I or Ctrl-click = pick the tile under the cursor." },
   place:  { key: "3", icon: "☺", label: "Place",  tip: "Place sprites (P or 3). Click the map to drop the chosen sprite." },
   hud:    { key: "4", icon: "⊞", label: "HUD",    tip: "Add a camera-fixed text label (4), e.g. a score." },
   zone:   { key: "5", icon: "▭", label: "Zone",   tip: "Drag a trigger rectangle (5), then tag it." },
   point:  { key: "6", icon: "✕", label: "Point",  tip: "Drop a named point (6), e.g. a spawn." },
   pan:    { key: "H", icon: "✋", label: "Pan",    tip: "Pan the view (H or hold Space). Wheel scrolls, Shift+wheel scrolls sideways, Ctrl+wheel zooms." },
+  region: { key: "R", icon: "⬚", label: "Region", tip: "Select a block of tiles (R). Drag a rectangle, then Copy (Ctrl+C) / Cut / Clear — a copied block stamps with every click." },
 };
 
 let project = E.newProject();
@@ -78,7 +79,7 @@ function hint(t) { const d = mk("div", "hint"); d.innerHTML = t; return d; }
 let dirtySince = 0;            // set by every mutation, cleared by Save / a reload from disk
 let lastSavedText = "";        // the game.json text we last wrote or read (folder watch)
 let docName = "game.json";     // the file Save writes and the folder watch reads (setDocName)
-function snapshot() { history.push(project); dirtySince = Date.now(); scheduleAutosave(); }
+function snapshot() { history.push(project); dirtySince = Date.now(); invalidateProblems(); scheduleAutosave(); }
 
 // ---------------------------------------------------------------- session autosave
 // Every mutation (snapshot/undo/redo/load) schedules a debounced dump of the full
@@ -98,7 +99,7 @@ function autosaveNow() {
     if (!autosaveWarned) { autosaveWarned = true; toast("Autosave unavailable (storage full or blocked) — use Save", "err"); }
   }
 }
-function scheduleAutosave() { if (autosaveTimer) clearTimeout(autosaveTimer); autosaveTimer = setTimeout(autosaveNow, 800); }
+function scheduleAutosave() { invalidateProblems(); if (autosaveTimer) clearTimeout(autosaveTimer); autosaveTimer = setTimeout(autosaveNow, 800); }
 function flushAutosave() { if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveNow(); } }
 window.addEventListener("pagehide", flushAutosave);
 document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flushAutosave(); });
@@ -212,6 +213,7 @@ function addLayer(assetId, fg) {
 
 // ================================================================ TOOLS
 function setTool(t) {
+  if (t !== "region" && (tileSel || tileClip)) { tileSel = null; tileSelRect = null; tileClip = null; }
   sel.tool = t;
   document.querySelectorAll(".tool").forEach(function (b) { b.classList.toggle("on", b.dataset.tool === t); });
   if (t === "paint") { if (!isTileset(project.assets[sel.asset])) sel.asset = assetIds(isTileset)[0] || null; if (sel.asset) ensureLayerFor(sel.asset); }
@@ -239,6 +241,7 @@ function renderPanel() {
   else if (sel.tool === "paint") panelPaint();
   else if (sel.tool === "place") panelPlace();
   else if (sel.tool === "pan") panelPan();
+  else if (sel.tool === "region") panelRegion();
   else panelQuick();
   updateStatus();
 }
@@ -272,12 +275,18 @@ function panelSelect() {
     else { add(panel, h3("Selected")); inspector(panel); }
     return;
   }
+  problemsSection(panel);
   add(panel, h3("Level"));
   fieldText(panel, "name", L().name || "", function (v) {
     if (project.start === L().name) project.start = v;      // renaming the start level keeps it the start
     L().name = v; refreshChrome();
   });
   fieldColor(panel, "background", L().background, function (c) { L().background = c; });
+  if (project.levels.length > 1) {
+    const rm = btn("Remove level " + (L().name || ""), removeCurrentLevel);
+    rm.className = "danger";
+    panel.appendChild(rm);
+  }
 
   worldSizePanel(panel);
 
@@ -824,6 +833,75 @@ function panelPan() {
   navButtons(panel);
 }
 
+// ---- PROBLEMS ----
+// core.js knows every rule scene_build.py checks; running them here means a broken goto or a
+// duplicate name is caught while you are looking at the level, not after you copy it to a board.
+// The list is recomputed on change (a big project takes well under a millisecond), never per frame.
+let problemsCache = null;
+function currentProblems() {
+  if (!problemsCache) { try { problemsCache = E.problems(project); } catch (e) { console.error("problems", e); problemsCache = []; } }
+  return problemsCache;
+}
+function invalidateProblems() { problemsCache = null; }
+
+// Take the user to the thing a problem is about, whichever level it lives in.
+function goToProblem(pr) {
+  if (pr.level != null && pr.level !== project.current) {
+    project.current = pr.level; clearSel(); sel.tm = 0; refreshChrome(); doFit();
+  }
+  const k = pr.sel && pr.sel.kind;
+  if (k === "asset") { setTool(isTileset(project.assets[pr.sel.ref]) ? "paint" : "place"); sel.asset = pr.sel.ref; }
+  else if (k === "tilemap") { setTool("paint"); const i = L().tilemaps.indexOf(pr.sel.ref); if (i >= 0) { sel.tm = i; sel.asset = pr.sel.ref.asset; } }
+  else if (k === "level" || !k) { setTool("select"); clearSel(); }
+  else { setTool("select"); pick(k, pr.sel.ref); centerSelection(); }
+  renderPanel();
+}
+
+function problemsSection(box) {
+  const list = currentProblems();
+  if (!list.length) return;
+  const errs = list.filter(function (x) { return x.severity === "error"; }).length;
+  const d = mk("details", "fold problems");
+  d.open = errs > 0;                       // an error means the game will not load: lead with it
+  d.appendChild(mk("summary", null, (errs ? "\u26a0 " + errs + " error" + (errs === 1 ? "" : "s") : "") +
+                   (errs && list.length > errs ? " \u00b7 " : "") +
+                   (list.length > errs ? (list.length - errs) + " warning" + (list.length - errs === 1 ? "" : "s") : "")));
+  list.slice(0, 40).forEach(function (pr) {
+    const row = mk("button", "prow " + pr.severity,
+                   (pr.severity === "error" ? "\u2716 " : "\u26a0 ") +
+                   (pr.level != null && pr.level !== project.current ? (project.levels[pr.level] || {}).name + " \u00b7 " : "") +
+                   pr.where + " — " + pr.msg);
+    row.onclick = function () { goToProblem(pr); };
+    d.appendChild(row);
+  });
+  if (list.length > 40) d.appendChild(hint("…and " + (list.length - 40) + " more."));
+  box.appendChild(d);
+}
+
+// ---- REGION (a block of tiles) ----
+function panelRegion() {
+  add(panel, h3("Region"));
+  panel.appendChild(hint(TOOL_META.region.tip));
+  const tm = curTm();
+  if (!tm) { panel.appendChild(hint("This level has no tilemap layer yet — add one in the Paint panel.")); return; }
+  panel.appendChild(hint("Layer <b>" + tm.asset + "</b> (" + tm.cols + "×" + tm.rows + " tiles)."));
+  if (tileClip) {
+    const box = mk("div", "addbox");
+    box.appendChild(mk("div", null, "Stamp ready: " + tileClip.w + "×" + tileClip.h + " tiles from " + tileClip.asset));
+    box.appendChild(hint("Click the map to stamp it, again and again. <b>Shift-drag</b> selects a new region instead; <b>Esc</b> drops the stamp."));
+    box.appendChild(btn("Drop the stamp", dropStamp));
+    panel.appendChild(box);
+  }
+  if (!tileSel) { panel.appendChild(hint("Nothing selected — drag a rectangle on the map.")); return; }
+  const [w, h] = selSize();
+  panel.appendChild(hint("Selected <b>" + w + "×" + h + "</b> tiles at " + tileSel.x0 + "," + tileSel.y0 + "."));
+  panel.appendChild(btn("Copy (Ctrl+C)", function () { copyTileRegion(false); }));
+  panel.appendChild(btn("Cut (Ctrl+X)", function () { copyTileRegion(true); }));
+  panel.appendChild(btn("Fill with tile " + sel.tileFrame, function () { fillTileRegion(null); renderPanel(); }));
+  const cl = btn("Clear (Delete)", function () { fillTileRegion(0); renderPanel(); });
+  cl.className = "danger"; panel.appendChild(cl);
+}
+
 // ---- HUD / ZONE / POINT + Particles list ----
 function panelQuick() {
   const titles = { hud: "HUD labels", zone: "Zones", point: "Points" };
@@ -1075,6 +1153,10 @@ function camBoundsHit(p) {
 // ---------------------------------------------------------------- interaction state
 let drag = null;              // active drag descriptor (varies by tool)
 let rubberRect = null;        // world-space rect being dragged (for render preview)
+// A rectangle of CELLS on the active layer, and the block copied out of one. The block remembers
+// which tileset it came from: the same number means a different tile in another tileset.
+let tileSel = null;           // {x0, y0, x1, y1} in cells, inclusive
+let tileClip = null;          // {w, h, asset, cells: [[v,...], ...]}
 let tileSelRect = null;       // world-space tile-region marquee (copy source)
 let spacePan = false;         // space held -> temporary pan
 
@@ -1128,6 +1210,7 @@ const tools = {
   paint: {
     down: function (p, ev) {
       if (!curTm()) { toast("Nothing to paint on yet — add a tileset in the panel (+ Colour tileset needs no art)", "err"); return; }
+      if (ev.ctrlKey || ev.metaKey) { pickTileUnderPointer(p); return; }   // Ctrl-click = pick, no paint
       snapshot();
       stroke = { painted: 0, missed: 0 };     // a stroke that paints nothing must say why
       if (ev.altKey) { floodFill(p, sel.tileFrame); drag = null; endStroke(); renderPanel(); return; }
@@ -1189,12 +1272,87 @@ const tools = {
       L().points.push(q); afterPlace("point", q, ev, "Point added — rename it in the panel");
     }, move: function () {}, up: function () {}
   },
+  // Region: a marquee on the active layer. Drag to select; with a block copied, every click
+  // stamps it (the reason to have this at all is a platform you build once and repeat).
+  region: {
+    down: function (p, ev) {
+      const tm = curTm();
+      if (!tm) { toast("No tilemap layer here — add one in the Paint panel", "err"); return; }
+      if (tileClip && !ev.shiftKey) { stampClipAt(p); return; }
+      const c = clampCell(cellAt(p, tm), tm);
+      drag = { mode: "region", start: c };
+      tileSel = { x0: c.cx, y0: c.cy, x1: c.cx, y1: c.cy };
+      syncTileSelRect();
+    },
+    move: function (p) {
+      const tm = curTm(); if (!tm) return;
+      if (drag && drag.mode === "region") {
+        const c = clampCell(cellAt(p, tm), tm);
+        tileSel = { x0: Math.min(drag.start.cx, c.cx), y0: Math.min(drag.start.cy, c.cy),
+                    x1: Math.max(drag.start.cx, c.cx), y1: Math.max(drag.start.cy, c.cy) };
+        syncTileSelRect();
+      }
+    },
+    up: function () { if (drag && drag.mode === "region") { drag = null; renderPanel(); } }
+  },
   pan: {
     down: function (p, ev) { const s = evScreen(ev); drag = { mode: "pan", lastSx: s.sx, lastSy: s.sy }; canvas.style.cursor = "grabbing"; },
     move: function (p, ev) { if (drag && drag.mode === "pan") { const s = evScreen(ev); vp.panScreen(s.sx - drag.lastSx, s.sy - drag.lastSy); drag.lastSx = s.sx; drag.lastSy = s.sy; } },
     up: function () { drag = null; canvas.style.cursor = "grab"; }
   }
 };
+
+function clampCell(c, tm) {
+  return { cx: Math.max(0, Math.min(tm.cols - 1, c.cx)), cy: Math.max(0, Math.min(tm.rows - 1, c.cy)) };
+}
+function syncTileSelRect() {
+  const tm = curTm();
+  if (!tm || !tileSel) { tileSelRect = null; return; }
+  const a = project.assets[tm.asset];
+  tileSelRect = { x: tm.pos[0] + tileSel.x0 * a.fw, y: tm.pos[1] + tileSel.y0 * a.fh,
+                  w: (tileSel.x1 - tileSel.x0 + 1) * a.fw, h: (tileSel.y1 - tileSel.y0 + 1) * a.fh };
+}
+function selSize() { return tileSel ? [tileSel.x1 - tileSel.x0 + 1, tileSel.y1 - tileSel.y0 + 1] : [0, 0]; }
+
+function copyTileRegion(cut) {
+  const tm = curTm(); if (!tm || !tileSel) { toast("Drag a rectangle on the map first", "err"); return; }
+  const cells = [];
+  for (let y = tileSel.y0; y <= tileSel.y1; y++) cells.push(tm.grid[y].slice(tileSel.x0, tileSel.x1 + 1));
+  const [w, h] = selSize();
+  tileClip = { w: w, h: h, asset: tm.asset, cells: cells };
+  if (cut) { snapshot(); fillTileRegion(0, true); }
+  renderPanel();
+  toast((cut ? "Cut " : "Copied ") + w + "×" + h + " tiles — click the map to stamp them (Esc drops the stamp)", "ok");
+}
+// value === null means "the tile you are painting with"
+function fillTileRegion(value, quiet) {
+  const tm = curTm(); if (!tm || !tileSel) { toast("Drag a rectangle on the map first", "err"); return; }
+  if (!quiet) snapshot();
+  const v = value === null ? sel.tileFrame : value;
+  for (let y = tileSel.y0; y <= tileSel.y1; y++)
+    for (let x = tileSel.x0; x <= tileSel.x1; x++) tm.grid[y][x] = v;
+  const [w, h] = selSize();
+  if (!quiet) toast((v ? "Filled " : "Cleared ") + w + "×" + h + " tiles with tile " + v + " (Ctrl+Z undoes it)", "ok");
+}
+function stampClipAt(p) {
+  const tm = curTm(); if (!tm || !tileClip) return;
+  if (tileClip.asset !== tm.asset) {
+    toast("That block came from tileset " + tileClip.asset + ", this layer uses " + tm.asset +
+          " — the same numbers are different tiles. Copy again from this layer.", "err");
+    return;
+  }
+  const c = cellAt(p, tm);
+  snapshot();
+  let placed = 0;
+  for (let y = 0; y < tileClip.h; y++) for (let x = 0; x < tileClip.w; x++) {
+    const gy = c.cy + y, gx = c.cx + x;
+    if (gy >= 0 && gy < tm.rows && gx >= 0 && gx < tm.cols) { tm.grid[gy][gx] = tileClip.cells[y][x]; placed++; }
+  }
+  if (!placed) { history.discard(); toast("That is off the layer — nothing stamped", "info"); return; }
+  tileSel = { x0: c.cx, y0: c.cy, x1: c.cx + tileClip.w - 1, y1: c.cy + tileClip.h - 1 };
+  syncTileSelRect();
+}
+function dropStamp() { tileClip = null; renderPanel(); }
 
 function rubberRectFromCells(tm, s, c) {
   const a = project.assets[tm.asset];
@@ -1210,6 +1368,26 @@ function onDown(ev) {
   if (isMiddle || spacePan || ev.button === 2) { tools.pan.down(p, ev); drag && (drag.tempPan = true); return; }
   (tools[sel.tool] || tools.select).down(p, ev);
 }
+let hoverWorld = null;              // last pointer position in world coords (the eyedropper's target)
+canvas.addEventListener("mousemove", function (ev) { hoverWorld = evWorld(ev); });
+canvas.addEventListener("mouseleave", function () { hoverWorld = null; });
+
+// Take the tile under the pointer as the one to paint with - the move every tile editor has, and
+// the only way to answer "which tile is that?" without hunting the palette.
+function pickTileUnderPointer(p) {
+  const tm = curTm();
+  if (!tm) { toast("No tilemap layer here to pick from", "err"); return; }
+  if (!p) { toast("Point at the map, then press I to pick that tile", "info"); return; }
+  const c = cellAt(p, tm);
+  if (c.cx < 0 || c.cy < 0 || c.cx >= tm.cols || c.cy >= tm.rows) {
+    toast("That is outside layer " + tm.asset, "info"); return;
+  }
+  const v = tm.grid[c.cy][c.cx];
+  sel.tileFrame = v;
+  if (sel.tool !== "paint") setTool("paint"); else renderPanel();
+  toast(v ? "Picked tile " + v + " from " + tm.asset : "Picked the eraser (tile 0)", "ok");
+}
+
 function onMove(ev) {
   if (!drag) return; ev.preventDefault();
   const p = evWorld(ev);
@@ -1284,26 +1462,39 @@ window.addEventListener("keydown", function (ev) {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)
     || (document.activeElement && document.activeElement.isContentEditable);   // CodeMirror (Story panel)
   if (typing) return;
-  // a focused button/menu keeps its own keys: Space must press it, not start a pan, and Backspace
-  // must not delete the selected object behind it
-  if (/^(BUTTON|SUMMARY|A)$/.test(document.activeElement && document.activeElement.tagName)
-      && !(ev.ctrlKey || ev.metaKey)) return;
+  // A focused button/menu keeps the keys that belong to IT - Space and Enter press it, Backspace
+  // must not delete the object behind it - but every other shortcut still works, because focus
+  // rests on a toolbar button after every click and the tool hotkeys have to keep working there.
+  const onControl = /^(BUTTON|SUMMARY|A)$/.test(document.activeElement && document.activeElement.tagName);
+  if (onControl && !(ev.ctrlKey || ev.metaKey) && (ev.key === " " || ev.key === "Enter" || ev.key === "Backspace")) return;
   if (ev.key === " ") { spacePan = true; canvas.style.cursor = "grab"; ev.preventDefault(); return; }
   const mod = ev.ctrlKey || ev.metaKey;
   if (mod && ev.key.toLowerCase() === "s") { ev.preventDefault(); saveProject(); return; }
   if (mod && ev.key.toLowerCase() === "z" && !ev.shiftKey) { ev.preventDefault(); doUndo(); return; }
   if (mod && (ev.key.toLowerCase() === "y" || (ev.key.toLowerCase() === "z" && ev.shiftKey))) { ev.preventDefault(); doRedo(); return; }
-  if (mod && ev.key.toLowerCase() === "c") { doCopy(); return; }
+  if (mod && ev.key.toLowerCase() === "c") {
+    if (sel.tool === "region") { ev.preventDefault(); copyTileRegion(false); return; }
+    doCopy(); return;
+  }
+  if (mod && ev.key.toLowerCase() === "x" && sel.tool === "region") { ev.preventDefault(); copyTileRegion(true); return; }
   if (mod && ev.key.toLowerCase() === "v") { doPaste(); return; }
   if (mod && ev.key.toLowerCase() === "d") { ev.preventDefault(); doDuplicate(); return; }
   if (mod) return;
   // tool hotkeys
-  const byKey = { v: "select", b: "paint", p: "place", h: "pan" };
+  const byKey = { v: "select", b: "paint", p: "place", h: "pan", r: "region" };
   if (byKey[ev.key.toLowerCase()]) { setTool(byKey[ev.key.toLowerCase()]); return; }
   if (ev.key >= "1" && ev.key <= "6") { setTool(TOOLS[parseInt(ev.key) - 1]); return; }
-  if (ev.key === "Delete" || ev.key === "Backspace") { deleteSelection(); return; }
-  if (ev.key === "Escape") { clearSel(); pendingImport = null; closeOverlays(); renderPanel(); return; }
+  if (ev.key === "Delete" || ev.key === "Backspace") {
+    if (sel.tool === "region" && tileSel) { fillTileRegion(0); renderPanel(); return; }
+    deleteSelection(); return;
+  }
+  if (ev.key === "Escape") {
+    if (tileClip) { dropStamp(); toast("Stamp dropped", "info"); return; }
+    if (tileSel) { tileSel = null; tileSelRect = null; renderPanel(); return; }
+    clearSel(); pendingImport = null; closeOverlays(); renderPanel(); return;
+  }
   if (ev.key === "f" || ev.key === "F") { doFit(); return; }
+  if (ev.key === "i" || ev.key === "I") { pickTileUnderPointer(hoverWorld); return; }
   // zoom: + / = / numpad+ in, - / _ / numpad- out, 0 = 100% (the cheatsheet promised these)
   if (ev.key === "+" || ev.key === "=" || ev.code === "NumpadAdd") { ev.preventDefault(); vp.zoomAt(vp.w / 2, vp.h / 2, 1.25); return; }
   if (ev.key === "-" || ev.key === "_" || ev.code === "NumpadSubtract") { ev.preventDefault(); vp.zoomAt(vp.w / 2, vp.h / 2, 0.8); return; }
@@ -1403,16 +1594,36 @@ function updateStatus() {
   if (sel.tool === "paint") extra = " · layer <b>" + (curTm() ? (sel.tm + " " + curTm().asset) : "—") + "</b> · tile <b>" + sel.tileFrame + "</b>";
   else if (sel.tool === "select") extra = " · <b>" + what + "</b>" + (pickCycle.n > 1 ? " (click again: " + (pickCycle.i + 1) + "/" + pickCycle.n + ")" : "");
   else if (sel.tool === "place") extra = " · sprite <b>" + (sel.asset || "—") + "</b>";
-  const st = $("status");
-  if (st) st.innerHTML = "Tool: <b>" + (TOOL_META[sel.tool] ? TOOL_META[sel.tool].label : sel.tool) + "</b>" + extra +
+  const html = "Tool: <b>" + (TOOL_META[sel.tool] ? TOOL_META[sel.tool].label : sel.tool) + "</b>" + extra +
     " · world <b>" + b[0] + "×" + b[1] + "</b> · zoom <b>" + Math.round(vp.zoom * 100) + "%</b>" +
-    " · file <b>" + docName + "</b>" + (dirtySince ? " (unsaved)" : "");
-  const th = $("toolhelp"); if (th) th.innerHTML = TOOL_META[sel.tool] ? TOOL_META[sel.tool].tip : "";
+    " · file <b>" + docName + "</b>" + (dirtySince ? " (unsaved)" : "") + problemsBadge();
+  // This runs in the frame loop. Rewriting it every frame replaced the nodes 60×/s: the problems
+  // badge inside could not be clicked (mousedown and mouseup landed on different elements), and a
+  // screen reader re-read the whole line. Write only when it actually changed.
+  const st = $("status");
+  if (st && html !== lastStatusHtml) {
+    st.innerHTML = html; lastStatusHtml = html;
+    const pb = $("pbadge");
+    if (pb) pb.onclick = function () { setTool("select"); clearSel(); renderPanel(); };
+  }
+  const tip = TOOL_META[sel.tool] ? TOOL_META[sel.tool].tip : "";
+  const th = $("toolhelp");
+  if (th && tip !== lastToolTip) { th.innerHTML = tip; lastToolTip = tip; }
+}
+let lastStatusHtml = "", lastToolTip = "";
+// The one always-visible sign that the game will not load. Cheap: the list is cached.
+function problemsBadge() {
+  const list = currentProblems();
+  if (!list.length) return "";
+  const errs = list.filter(function (x) { return x.severity === "error"; }).length;
+  return " · <b id=\"pbadge\" class=\"pbadge " + (errs ? "err" : "warn") + "\">" +
+         (errs ? "\u2716 " + errs + " error" + (errs === 1 ? "" : "s") : "\u26a0 " + list.length +
+          " warning" + (list.length === 1 ? "" : "s")) + "</b>";
 }
 
 // ================================================================ TOP BAR / FILES
 function loadProject(p) {
-  autosavePaused = false;                      // opening something is the user's answer to a failed restore
+  autosavePaused = false; invalidateProblems();                      // opening something is the user's answer to a failed restore
   project = p; images = {}; artURLs = {}; history.clear();
   // Reset the selection through clearSel() rather than rebuilding `sel` by hand: the hand-built
   // literal omitted `multi`, so the first renderPanel() after ANY load (demo, Load, import) threw
@@ -1454,6 +1665,29 @@ if ($("btnStartLevel")) $("btnStartLevel").onclick = function () {
   toast("The board (and a fresh playground run) now boots into " + L().name, "ok");
 };
 if ($("levelSel")) $("levelSel").onchange = function (e) { project.current = parseInt(e.target.value); clearSel(); sel.tm = 0; renderPanel(); refreshChrome(); doFit(); };
+function removeCurrentLevel() {
+  if (project.levels.length < 2) { toast("A game needs one level — this is the only one", "err"); return; }
+  const lv = L(), name = lv.name;
+  const inside = lv.tilemaps.length + lv.entities.length + lv.zones.length + lv.points.length + lv.hud.length;
+  if (!confirm("Remove level " + name + "? It holds " + inside + " layer/object" + (inside === 1 ? "" : "s") +
+               ", and this is undoable with Ctrl+Z."))
+    return;
+  snapshot();
+  project.levels.splice(project.current, 1);
+  project.current = Math.min(project.current, project.levels.length - 1);
+  // the boot level and any zone that travelled here must not point at a level that is gone
+  if (project.start === name) project.start = project.levels[0].name;
+  const pointedHere = [];
+  project.levels.forEach(function (o) {
+    (o.zones || []).forEach(function (z) {
+      if (z.data && z.data.goto && z.data.goto[0] === name) pointedHere.push(o.name + " · " + z.tag);
+    });
+  });
+  clearSel(); sel.tm = 0; renderPanel(); refreshChrome(); doFit();
+  toast("Removed level " + name + " (Ctrl+Z undoes it)" +
+        (pointedHere.length ? " — but " + pointedHere.join(", ") + " still travels there" : ""),
+        pointedHere.length ? "err" : "ok");
+}
 if ($("btnAddLevel")) $("btnAddLevel").onclick = function () {
   snapshot(); project.levels.push(E.newLevel("level" + (project.levels.length + 1))); project.current = project.levels.length - 1;
   clearSel(); sel.tm = 0; renderPanel(); refreshChrome(); doFit(); toast("Added level", "ok");
@@ -1751,10 +1985,12 @@ async function saveProject() {
   }
   const w = await saveText(docName, text);
   lastSavedText = text; dirtySince = 0;
+  const errs = currentProblems().filter(function (x) { return x.severity === "error"; }).length;
   toast("Saved " + (w === "downloaded" ? docName : w + docName) +
         (art.length ? " + " + art.length + " art file" + (art.length === 1 ? "" : "s") : "") + storyNote +
-        (w === "downloaded" ? " (to your downloads folder)" : "") + storyProblem,
-        storyProblem ? "err" : "ok");
+        (w === "downloaded" ? " (to your downloads folder)" : "") + storyProblem +
+        (errs ? " — but " + errs + " problem" + (errs === 1 ? "" : "s") + " will stop it loading (see the Level panel)" : ""),
+        storyProblem || errs ? "err" : "ok");
 }
 if ($("btnSave")) $("btnSave").onclick = saveProject;
 if ($("btnSaveAs")) $("btnSaveAs").onclick = saveProjectAs;
