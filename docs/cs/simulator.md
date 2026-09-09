@@ -52,6 +52,7 @@ python3 sim/run.py demos/picogame_flappy.py --frames 80 --shot shot.png
 | `--keys 20:A:2,40:RIGHT,60:-RIGHT` | skriptovaná časová osa vstupu: `snímek:TLAČÍTKO` stiskne a drží, `snímek:-TLAČÍTKO` pustí, `snímek:TLAČÍTKO:n` ťukne na n snímků (1–2snímkový ťuk je to, co potřebuje `just_pressed`) |
 | `--fast` | přeskočí realtime spánek mezi snímky (dt zůstává nominální) — soak na 3600 snímků doběhne za vteřiny |
 | `--shot-at N` | pořídí `--shot` screenshot na snímku N místo posledního |
+| `--shots N` | pořídí N snímků rozložených po celém běhu do JEDNOHO kontaktního archu (jméno určí `--shot`) a řekne, jestli se mezi nimi obraz **mění** — zamrzlá hra nebo hra, která pořád stojí na titulní obrazovce, vypadá na jediném screenshotu dobře, tady je to vidět. Když běh spadne, zapíšou se snímky, které stihl. |
 | `--profile` | vypíše časování fází + report trvale držených alokací (warm-up vs druhá polovina běhu) |
 
 V živém okně: šipky nebo **WASD** pohyb; `F` (nebo `Ctrl`) = A, `G` (nebo `Space`) = B, `R`/`Q` = X, `T`/`E` = Y.

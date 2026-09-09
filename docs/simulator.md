@@ -52,6 +52,7 @@ python3 sim/run.py demos/picogame_flappy.py --frames 80 --shot shot.png
 | `--keys 20:A:2,40:RIGHT,60:-RIGHT` | a scripted input timeline: `frame:BTN` presses and holds, `frame:-BTN` releases, `frame:BTN:n` taps for n frames (a 1-2 frame tap is what `just_pressed` needs) |
 | `--fast` | skip the real-time frame sleep (dt stays nominal) — a 3600-frame soak finishes in seconds |
 | `--shot-at N` | take the `--shot` screenshot at frame N instead of the last frame |
+| `--shots N` | take N screenshots spread over the run into ONE contact sheet (`--shot` names it), and say whether the picture **changes** between them — a frozen game or one still sitting on its title looks fine in a single screenshot and is obvious here. A run that crashes still writes the shots it got. |
 | `--profile` | print per-phase timing + a retained-allocation report (warm-up vs the run's second half) |
 
 In the live window: arrows or **WASD** move; `F` (or `Ctrl`) = A, `G` (or `Space`) = B, `R`/`Q` = X, `T`/`E` = Y.

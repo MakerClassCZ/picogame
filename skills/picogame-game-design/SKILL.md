@@ -415,6 +415,10 @@ self-contained file** — no sibling imports, inline art — per the playground 
    # --strict-dirty  honours each always_dirty=False StripDraw's dirty bit, so a content change
    #                 you forgot to invalidate() FREEZES here as it does on device. Run it once
    #                 before you call a StripDraw-heavy UI done.
+   # --shots 4       four screenshots over the run in ONE sheet, plus a verdict on whether the
+   #                 picture CHANGES between them. One screenshot cannot tell a playing game from
+   #                 one frozen on frame 3 or still waiting on its title - this can, so use it
+   #                 (with --seed) as the check that the game is actually running.
    # a BUTTON-driven feature: script the press instead of reasoning about it (FRAME:BTN[:HELD])
    python3 sim/run.py examples/my_game.py --keys "5:RIGHT,25:B:3" --shot-at 30 --shot /tmp/jump.png
    # live window FOR THE USER to actually play (don't run it yourself — you won't see it):
@@ -449,12 +453,16 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
    allocations too; `--profile` reports RETAINED growth only. A headless run skips the frame sleep
    by default (`dt` still reads the nominal 1/fps, so the game behaves identically), so the soak
    costs compute, not two minutes of waiting — and the same `--seed` reproduces the same frame.
-2. It **reads at a glance** in the PNG — *name* the player's shape+colour and each threat's from the
+2. It **is actually playing, not frozen** — `--shots 4 --seed N` puts four frames of the run in one
+   sheet and says whether the picture changes between them. Identical shots mean the game is stuck
+   (or still on its title and your input script never got past it), which a single screenshot shows
+   as a perfectly fine-looking frame. Check this BEFORE reading the shot for anything else.
+3. It **reads at a glance** in the PNG — *name* the player's shape+colour and each threat's from the
    shot alone; if you can't tell them apart by **shape AND colour** (not colour alone), it fails. HUD legible.
    This applies to **every object you just added**, not only the player: find it in the shot and check
    it stands out from *the background it actually sits on*. "Present in the frame" is not the bar —
    a blue thing on a blue sky renders perfectly and is invisible, and the user will notice before you do.
-3. It controls cleanly on **D-pad + A/B**; nothing needs a manual. Keep a **control manifest** — one
+4. It controls cleanly on **D-pad + A/B**; nothing needs a manual. Keep a **control manifest** — one
    row per button, what it does in each state, and what is deliberately unbound — and make it the
    input test plan: **every row gets fired via `--keys` and a screenshot**, so input coverage is
    systematic instead of "the ones I thought of". The unbound rows matter as much: they are where the
@@ -466,11 +474,11 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
    ```
    Then drive the `--hold` edge cases: hold-fire 300 f (pool must not exhaust), idle (title must not
    crash), `LEFT,RIGHT` (no NaN/escape), A on frame 1.
-4. Clean **game flow** — an entry state, play, an outcome state and a **fast way back in**, named
+5. Clean **game flow** — an entry state, play, an outcome state and a **fast way back in**, named
    for your game (§1.6). Prove it with a 3-shot sequence (`--shot` entry → `--hold A` play →
    `--shot-at <outcome>` outcome) showing *distinct* states — execution evidence, not just code
    that compiles.
-5. It **fits the RAM target** (RP2040 is the primary budget; RP2350/Fruit Jam only adds slack) and uses
+6. It **fits the RAM target** (RP2040 is the primary budget; RP2350/Fruit Jam only adds slack) and uses
    `rgb565()` / `sprite.touch()` correctly. **Measure, don't estimate** — with the right tool for
    each environment:
    - **In the sim** (where you build): compute the asset RAM budget statically (bitmap bytes — see
@@ -483,7 +491,7 @@ CANNOT confirm from a static frame — surface those to the human, don't rubber-
      (CPython has no `gc.mem_free`; it prints numbers only under `PYTHONTRACEMALLOC=1`, and even then
      they're CPython allocations — good for deltas/leaks, not an absolute budget). (Don't hand-roll a
      `gc.mem_free` guard — that's what `picogame_debug` is.)
-6. The code is **≈ one example's length** (not a sprawling engine), commented like the examples, and starts from `picogame_game.setup()`.
+7. The code is **≈ one example's length** (not a sprawling engine), commented like the examples, and starts from `picogame_game.setup()`.
 
 **Human-verifiable — a single frame can't prove these; hand them to the player:**
 - The **core loop is fun in the first 10 seconds** ("one more go"), not just "technically runs."

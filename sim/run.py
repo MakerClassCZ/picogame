@@ -279,6 +279,39 @@ def _install_frame_boundary(host):
     picogame_clock.Clock.tick = tick
 
 
+def _write_shots(_host, args):
+    """Write the captured screenshots - one file, or several side by side as a contact sheet -
+    and say whether the picture CHANGES between them. A single screenshot cannot tell you that a
+    game froze on frame 3; four identical ones can."""
+    shots = _host.take_shots()
+    if not shots or not args.shot:
+        return
+    if len(shots) == 1:
+        shots[0][1].save(args.shot)
+        return
+    from PIL import Image, ImageDraw
+    w, h = shots[0][1].size
+    gap, top = 4, 13                       # the labels go ABOVE the frames: these shots are what
+    sheet = Image.new("RGB", (w * len(shots) + gap * (len(shots) - 1), h + top), (24, 26, 38))
+    d = ImageDraw.Draw(sheet)              # the game is judged by, so nothing may cover them
+    for i, (fr, im) in enumerate(shots):
+        sheet.paste(im, (i * (w + gap), top))
+        d.text((i * (w + gap) + 3, 2), "frame %d" % fr, fill=(255, 210, 63))
+    sheet.save(args.shot)
+    print("[sim] %d shots -> %s (frames %s)" %
+          (len(shots), args.shot, ", ".join(str(f) for f, _ in shots)))
+    # identical neighbours = nothing moved between them
+    same = [i for i in range(1, len(shots)) if shots[i][1].tobytes() == shots[i - 1][1].tobytes()]
+    if not same:
+        print("[sim] the picture changes between all %d shots" % len(shots))
+    elif len(same) == len(shots) - 1:
+        print("[sim] WARNING: all %d shots are IDENTICAL - nothing on screen moved after frame %d "
+              "(a game waiting on a title needs --keys/--tap to get past it)" % (len(shots), shots[0][0]))
+    else:
+        runs = ", ".join("%d==%d" % (shots[i - 1][0], shots[i][0]) for i in same)
+        print("[sim] WARNING: some shots are identical (%s) - the screen froze between those frames" % runs)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("game")
@@ -288,6 +321,13 @@ def main():
                     help="pygame = live window, pil = headless. Default: a live window if pygame is "
                          "installed, else headless (screenshot / CI runs use pil).")
     ap.add_argument("--shot", default=None)
+    ap.add_argument("--shots", type=int, default=1,
+                    help="take N screenshots spread evenly over the run and write them side by "
+                         "side into --shot as one contact sheet (600 frames, --shots 4 -> frames "
+                         "150, 300, 450, 600). The run then reports whether the picture actually "
+                         "CHANGES between them: identical shots mean nothing on screen moved, "
+                         "which one screenshot cannot tell you. A crashing run still writes the "
+                         "shots it managed to take.")
     ap.add_argument("--shot-at", type=int, default=None,
                     help="screenshot after this GAME frame - counted from the very first "
                          "clock.tick(), so TITLE and menu frames count too: if the game "
@@ -366,8 +406,10 @@ def main():
 
     import _host
     max_frames = None if (args.backend == "pygame" and not args.profile) else args.frames
+    if args.shots > 1 and not args.shot:
+        sys.exit("[sim] --shots needs --shot to name the contact sheet, e.g. --shots 4 --shot out.png")
     _host.configure(backend=args.backend, max_frames=max_frames,
-                    shot=args.shot, shot_at=args.shot_at)
+                    shot=args.shot, shot_at=args.shot_at, shots=args.shots)
     if args.backend == "pygame":
         _host.setup_keymap()
         print("[sim] controls: arrows / WASD = move,  F / Ctrl = A,  G / Space = B,  "
@@ -449,9 +491,11 @@ def main():
         print("[sim] stopped after %d frames OK: %s" % (_host._frame, os.path.basename(game_path)))
         for n in _host.take_notes():
             print("[sim] WARNING: %s" % n)
+        _write_shots(_host, args)
     except Exception:
         print("[sim] EXCEPTION in %s:" % os.path.basename(game_path))
         traceback.print_exc()
+        _write_shots(_host, args)      # the frames before the crash are the useful part
         sys.exit(1)
 
 

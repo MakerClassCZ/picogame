@@ -28,6 +28,8 @@ _last_image = None          # PIL.Image of the last frame (pil backend)
 _inverted = False           # hardware colour inversion (pg.invert) - show fb's negative while True
 _shot_path = None
 _shot_at = None             # frame index at which to save a screenshot
+_shot_ats = ()              # every frame to shoot at (--shots spreads several over the run)
+_shot_imgs = {}             # frame -> PIL.Image, kept until run.py writes the sheet
 
 
 class SimStop(Exception):
@@ -40,12 +42,19 @@ def set_tick_mode(on):
     _tick_mode = bool(on)
 
 
-def configure(backend="pil", max_frames=None, shot=None, shot_at=None):
-    global _backend, _max_frames, _shot_path, _shot_at
+def configure(backend="pil", max_frames=None, shot=None, shot_at=None, shots=1):
+    """shots > 1 spreads that many screenshots evenly over the run (--shot names the sheet)."""
+    global _backend, _max_frames, _shot_path, _shot_at, _shot_ats, _shot_imgs
     _backend = backend
     _max_frames = max_frames
     _shot_path = shot
     _shot_at = shot_at if shot_at is not None else (max_frames - 1 if max_frames else 0)
+    _shot_imgs = {}
+    if shots > 1 and max_frames:
+        # evenly over the run, last one on the final frame: 600 frames / 4 -> 150, 300, 450, 600
+        _shot_ats = tuple(sorted(set(max(1, round(max_frames * i / shots)) for i in range(1, shots + 1))))
+    else:
+        _shot_ats = (_shot_at,)
     if backend == "pygame":
         _init_pygame()
 
@@ -108,8 +117,7 @@ def present():
     if _backend == "pygame":
         _present_pygame()
     else:
-        if _shot_path is not None and _frame == _shot_at:
-            _to_image().save(_shot_path)
+        _maybe_shoot()
     global _presents
     if _tick_mode:
         _presents += 1
@@ -125,9 +133,20 @@ def tick_boundary():
     `--keys 1:A` tap reaches the game's very first poll."""
     if not _tick_mode:
         return
-    if _backend != "pygame" and _shot_path is not None and _frame == _shot_at:
-        _to_image().save(_shot_path)     # shoot what the frame actually ended up showing
+    if _backend != "pygame":
+        _maybe_shoot()                   # shoot what the frame actually ended up showing
     _advance()
+
+
+def _maybe_shoot():
+    if _shot_path is None or _frame not in _shot_ats or _frame in _shot_imgs:
+        return
+    _shot_imgs[_frame] = _to_image()
+
+
+def take_shots():
+    """[(frame, image), ...] captured so far - run.py writes them, so a crash keeps what it got."""
+    return sorted(_shot_imgs.items())
 
 
 def _advance():
@@ -136,8 +155,10 @@ def _advance():
     if _frame_hook is not None:
         _frame_hook(_frame)
     if _max_frames is not None and _frame >= _max_frames:
-        if _backend != "pygame" and _shot_path is not None and _shot_at >= _max_frames:
-            _to_image().save(_shot_path)
+        if _backend != "pygame" and _shot_path is not None:
+            for f in _shot_ats:          # anything asked for at/after the end shoots the last frame
+                if f >= _max_frames and f not in _shot_imgs:
+                    _shot_imgs[f] = _to_image()
         raise SimStop()
 
 
