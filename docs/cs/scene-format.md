@@ -129,6 +129,42 @@ Poznámky k polím:
   vlastní logikou.
 - Neznámé klíče zůstávají: editor i `fmt` je zapíší zpět, loader je ignoruje.
 
+### Soubor `.pal8`
+
+Ručně ho nikdy nepíšeš — vyrobí ho Save v editoru a `scene_build.py art`, čte ho
+`picogame_scene.read_pal8()`. Rozvržení je tu proto, aby ho uměl vytvořit i převodník, grafická
+pipeline nebo agent. Všechno je **little-endian** a soubor se popisuje sám, takže tentýž sidecar
+poslouží jakékoli hře, která očekává dané rozměry snímku.
+
+**Hlavička — 16 bajtů** (formát `struct` `<4sBBHHHHH`):
+
+| offset | velikost | pole | hodnota |
+|---|---|---|---|
+| 0 | 4 | magic | `PAL8` (ASCII) |
+| 4 | 1 | verze | `1` — cokoli jiného musí čtečka odmítnout |
+| 5 | 1 | flags | bit 0 nastaven = **index 0 je průhledný klíč**; ostatní bity `0` |
+| 6 | 2 | `fw` | šířka snímku v pixelech |
+| 8 | 2 | `fh` | výška snímku v pixelech |
+| 10 | 2 | `frames` | počet snímků |
+| 12 | 2 | `ncol` | počet položek palety |
+| 14 | 2 | rezervováno | `0` |
+
+**Paleta** — `ncol` × `uint16` hned za hlavičkou. Barvy jsou RGB565 ve **wire pořadí**, tedy v tom
+pořadí bajtů, které berou panel, framebuffer i simulátor — RGB565 hodnota s prohozenými bajty:
+
+```python
+c = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)   # běžné RGB565
+wire = ((c >> 8) | (c << 8)) & 0xFFFF                  # to, co jde do souboru
+```
+
+**Indexy** — `fw * frames * fh` bajtů, jeden bajt na pixel, až do konce souboru. Snímky leží
+**vedle sebe v jednom pásu**, takže krok řádku je `fw * frames` a řádek `y` snímku `f` začíná na
+`y * fw * frames + f * fw`. Je to totéž rozvržení, jaké bere `picogame.Bitmap(..., frames=…,
+stride=…)`, a proto může loader buffer předat rovnou, bez přerovnávání.
+
+Čtečka by měla brát špatné magic, jinou verzi než 1 i zkrácený blok indexů jako chybu — přesně to
+dělá ta dodávaná.
+
 ### Import map z Tiled
 
 `tools/tiled2scene.py` převede JSON mapu (`.tmj`) z editoru [Tiled](https://www.mapeditor.org/)

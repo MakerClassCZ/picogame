@@ -117,7 +117,7 @@ Widgety s metodou `tick()` vracejí vybraný index nebo buňku po stisku **A**, 
 
 **`HudBar(pg, display, buffer, x, y, w, h, bg)`** - okamžitě vykreslený HUD v okraji rezervovaném pomocí `Scene(..., top=/bottom=)`. `draw()` volej pouze po změně obsahu. Objekt drží texty popisků a odkazy na ikony, ale ne pixelovou plochu velikosti panelu. `buffer` je vykreslovací buffer ze setupu na SPI cílech; na framebufferu může být `None`.
 - `.add(sprite)` - uloží ikonový sprite (srdíčka, ukazatele) do baru; vrátí ho. Při `draw()` se vykreslí na svém x/y.
-- `.label(font, x, y, fg, text=" ")` - přidá textové pole a vrátí objekt `_HudLabel`, nikoli sprite. Text změň přes `handle.set(text)`.
+- `.label(font, x, y, fg, text=" ")` - přidá textové pole a vrátí objekt `HudLabel`, nikoli sprite. Text změň přes `handle.set(text)`.
 - `.draw()` - vykreslí pozadí, ikony a text jedním `pg.render()`. Displej, buffer a rozměry si objekt uložil při vytvoření.
 
 ```python

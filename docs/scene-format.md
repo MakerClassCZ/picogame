@@ -128,6 +128,43 @@ Field notes:
   themselves.
 - Unknown keys are kept: the editor and `fmt` write them back, the loader ignores them.
 
+### The `.pal8` file
+
+You never write one by hand — the editor's Save and `scene_build.py art` produce them, and
+`picogame_scene.read_pal8()` reads them. The layout is here so a converter, an art pipeline or an
+agent can emit one directly. Everything is **little-endian**, and the file is self-describing, so the
+same sidecar serves any game that expects those frame dimensions.
+
+**Header — 16 bytes** (`struct` format `<4sBBHHHHH`):
+
+| offset | size | field | value |
+|---|---|---|---|
+| 0 | 4 | magic | `PAL8` (ASCII) |
+| 4 | 1 | version | `1` — a reader must reject anything else |
+| 5 | 1 | flags | bit 0 set = **index 0 is the transparent key**; all other bits `0` |
+| 6 | 2 | `fw` | frame width in pixels |
+| 8 | 2 | `fh` | frame height in pixels |
+| 10 | 2 | `frames` | number of frames |
+| 12 | 2 | `ncol` | palette entries |
+| 14 | 2 | reserved | `0` |
+
+**Palette** — `ncol` × `uint16`, immediately after the header. The colours are **wire-order** RGB565,
+the byte order the panel, the framebuffer and the simulator all take, i.e. an RGB565 value with its
+two bytes swapped:
+
+```python
+c = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)   # plain RGB565
+wire = ((c >> 8) | (c << 8)) & 0xFFFF                  # what goes in the file
+```
+
+**Indices** — `fw * frames * fh` bytes, one byte per pixel, to the end of the file. Frames sit **side
+by side in one strip**, so the row stride is `fw * frames` and row `y` of frame `f` starts at
+`y * fw * frames + f * fw`. That is the same layout `picogame.Bitmap(..., frames=…, stride=…)` takes,
+which is why the loader can hand the buffer over without rearranging it.
+
+A reader should treat a wrong magic, a version other than 1, or a short index block as an error —
+that is what the shipped one does.
+
 ### Importing Tiled maps
 
 `tools/tiled2scene.py` converts a [Tiled](https://www.mapeditor.org/) JSON map (`.tmj`) into

@@ -117,7 +117,7 @@ Pick by what owns the pixels:
 
 **`HudBar(pg, display, buffer, x, y, w, h, bg)`** - an immediate HUD drawn in a border reserved with `Scene(..., top=/bottom=)`. Call `draw()` only after its contents change. It stores label strings and icon references but no panel-sized pixel surface. `buffer` is the render buffer from setup on SPI targets and may be `None` on framebuffer targets.
 - `.add(sprite)` - store an icon sprite (hearts, gauges) in the bar; returns it. It's blitted at its own x/y on `draw()`.
-- `.label(font, x, y, fg, text=" ")` - add a text field; returns a `_HudLabel` **handle** (not a sprite) which you update with `handle.set(text)` (the same `.set` verb as `SceneLabel`). The text is composited directly, no per-label sprite.
+- `.label(font, x, y, fg, text=" ")` - add a text field; returns a `HudLabel` **handle** (not a sprite) which you update with `handle.set(text)` (the same `.set` verb as `SceneLabel`). The text is composited directly, no per-label sprite.
 - `.draw()` - repaint the bar (flat bg + icons + text) and push it in one `pg.render`. Takes no arguments - the bar stores the display/buffer/geometry at construction. Call only on HUD changes.
 
 ```python

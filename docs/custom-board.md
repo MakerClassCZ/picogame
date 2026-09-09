@@ -118,6 +118,8 @@ need a full restart, see the note above). Values are **integers or strings only*
 | `PICOGAME_USBKBD` | `NAME=keycode` tokens | `"A=0x2C START=0x28"` | Remap USB-keyboard keys to game buttons (HID keycode, hex or decimal). Merges over the default arrows/WASD layout. |
 | `PICOGAME_USBKBD_EP` | `"iface:endpoint"` | `"2:0x83"` | Point the keyboard driver at the live interface/IN-endpoint of a combo dongle whose boot interface is silent (find it with `tools/usbkbd_probe.py`). |
 | `PICOGAME_USBKBD_TIMEOUT` | ms | `10` | HID read timeout for the keyboard poll. |
+| `PICOGAME_I2CPAD` | preset / recipe | `"qwstpad"` | **Opt-in** I2C gamepad (GPIO-expander pads, e.g. Pimoroni QwSTPad) — works on any board with I2C, no USB host needed. A preset name, `preset@0xNN`, several separated by `;`, or a full recipe (`"addr=0x20 read=:1 inv=1 UP=0 A=4 …"`). Off unless set. |
+| `PICOGAME_I2C` | `"SDA,SCL"` pins, or a bus name | `"GP4,GP5"` | I2C bus for the pad above. Only needed on a bare board or non-standard wiring — a STEMMA/Qw-ST connector needs nothing. A single token names a board bus instead (`"I2C0"`). |
 | `PICOGAME_DEBUG` | `1` / `0` | `PICOGAME_DEBUG = 1` | **When something doesn't work, set this.** Prints `[picogame] ...` failure reasons (audio DAC/driver, USB pad/keyboard, …) to the serial console. Remove once working. |
 
 **Buttons on a key matrix.** If your buttons are wired as a scanned **row × column** grid (a small

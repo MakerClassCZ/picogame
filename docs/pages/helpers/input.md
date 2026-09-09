@@ -118,6 +118,49 @@ The keyboard twin of the gamepad — also auto-attached, also OR'd in. Works wit
 
 The driver is `picogame_usbkbd.UsbKbd`.
 
+## I2C gamepad (any board with I2C, incl. the PicoPad)
+
+The third pad family: "dumb" I2C button boards — GPIO expanders (TCA9555, PCF8574, MCP23017) and the
+vendor pads built on them, such as the Pimoroni QwSTPad. **No USB host needed**, so this is how a
+PicoPad or a bare Pico gets an external controller. One driver plus a declarative recipe covers the
+whole family — the same philosophy as the USB pad, not a library per device.
+
+Unlike USB, it is **opt-in**: an expander has no identity register, so probing addresses could bind an
+unrelated device on your bus. Name the pad in `settings.toml` and `Buttons()` ORs it in like any other
+source, with no game changes:
+
+```toml
+PICOGAME_I2CPAD = "qwstpad"                  # a preset at its default address
+# PICOGAME_I2CPAD = "qwstpad@0x23"           # a preset at a specific address
+# PICOGAME_I2CPAD = "qwstpad;qwstpad@0x23"   # several pads = local multiplayer
+# PICOGAME_I2C = "GP4,GP5"                   # SDA,SCL — bare boards only; a STEMMA/Qw-ST
+#                                            #  connector needs nothing. One token names a
+#                                            #  board bus instead: PICOGAME_I2C = "I2C0"
+```
+
+An unknown device is one line, no code — a **recipe** of space-separated tokens:
+
+```toml
+PICOGAME_I2CPAD = "addr=0x20 read=:1 inv=1 UP=0 DOWN=1 LEFT=2 RIGHT=3 A=4 B=5"
+```
+
+- `addr=0x21` — the I2C address.
+- `read=00:2` — one poll: write register byte `00`, read 2 bytes. `read=:1` reads without a register
+  (PCF8574 style).
+- `init=063FF9,0206C0` — raw hex frames written once at attach (register + payload, verbatim).
+- `inv=1` — buttons are active-low in the RAW read; omit it when the device already reports a press
+  as 1.
+- `UP=1 A=14 …` — logical button = bit index into the bytes read, little-endian
+  (`byte_index * 8 + bit_in_byte`). Names are the ones `PICOGAME_BUTTONS` uses.
+
+A poll is one short transaction, about half a millisecond at 100 kHz. A failed poll (loose cable)
+holds the last state and reports everything released after eight misses, so a disconnect cannot stick
+a button down. The bus is also clocked free after a soft reload, which is what otherwise leaves an
+expander mid-transaction.
+
+The driver is `picogame_i2cpad`; `Buttons` attaches it for you. Reach for it directly only to build a
+pad by hand (`I2CPad`) or to enumerate pads for multiplayer (`find_pads`, below).
+
 :::tip[Set `PICOGAME_DEBUG = 1` when input doesn't attach]
 It prints `[picogame] ...` reasons to the serial console (driver missing, device not found, wrong
 endpoint) instead of failing silently. Remove it once things work.
@@ -137,8 +180,19 @@ p2 = pi.Buttons(sources=pads[1:2])     # player 2 = second pad
 # or mix devices — pi.Buttons(usb=False) is a player on the on-board buttons.
 ```
 
+`picogame_i2cpad.find_pads()` is the I2C twin — every pad of a preset on the bus, in address
+order, and each one lights its player-number LED. A QwSTPad preset covers four addresses, so four
+players work on a board with no USB host at all:
+
+```python
+import picogame_i2cpad as i2c
+pads = i2c.find_pads("qwstpad")        # up to four, in address order
+p1 = pi.Buttons(sources=pads[0:1])
+```
+
 Each player is independent: poll and read them separately (`p1.just_pressed(pi.A)` /
-`p2.just_pressed(pi.A)`). `find_pads()` returns `[]` on a board with no USB host. Two identical pads
+`p2.just_pressed(pi.A)`). `pi.find_pads()` returns `[]` on a board with no USB host, and
+`i2c.find_pads()` returns `[]` when no pad answers on the bus. Two identical pads
 come back in enumeration order — if players want them the other way round, they swap controllers (the
 engine tracks no per-pad identity). See the two-player pattern above.
 

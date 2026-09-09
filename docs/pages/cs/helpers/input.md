@@ -117,6 +117,49 @@ bezdrátovými přes 2,4GHz dongle (ne Bluetooth — CircuitPython nemá BT host
 
 Driver je `picogame_usbkbd.UsbKbd`.
 
+## I2C gamepad (jakákoli deska s I2C, včetně PicoPadu)
+
+Třetí rodina padů: „hloupé" I2C tlačítkové desky — GPIO expandéry (TCA9555, PCF8574, MCP23017) a pady
+na nich postavené, například Pimoroni QwSTPad. **Nepotřebuje USB hosta**, takže právě takhle se
+externí ovladač připojí k PicoPadu nebo k holému Picu. Jeden driver plus deklarativní recept pokrývají
+celou rodinu — stejná filozofie jako u USB padu, ne knihovna na každé zařízení.
+
+Na rozdíl od USB je to **opt-in**: expandér nemá identifikační registr, takže by oťukávání adres mohlo
+sáhnout na cizí zařízení na tvé sběrnici. Pad pojmenuj v `settings.toml` a `Buttons()` ho naORuje jako
+každý jiný zdroj, bez zásahu do hry:
+
+```toml
+PICOGAME_I2CPAD = "qwstpad"                  # preset na výchozí adrese
+# PICOGAME_I2CPAD = "qwstpad@0x23"           # preset na konkrétní adrese
+# PICOGAME_I2CPAD = "qwstpad;qwstpad@0x23"   # více padů = lokální multiplayer
+# PICOGAME_I2C = "GP4,GP5"                   # SDA,SCL — jen holé desky; konektor
+#                                            #  STEMMA/Qw-ST nepotřebuje nic. Jeden token
+#                                            #  místo toho pojmenuje sběrnici desky:
+#                                            #  PICOGAME_I2C = "I2C0"
+```
+
+Neznámé zařízení je jeden řádek bez kódu — **recept** z tokenů oddělených mezerou:
+
+```toml
+PICOGAME_I2CPAD = "addr=0x20 read=:1 inv=1 UP=0 DOWN=1 LEFT=2 RIGHT=3 A=4 B=5"
+```
+
+- `addr=0x21` — I2C adresa.
+- `read=00:2` — jeden poll: zapiš registrový bajt `00`, přečti 2 bajty. `read=:1` čte bez registru
+  (styl PCF8574).
+- `init=063FF9,0206C0` — syrové hex rámce zapsané jednou při připojení (registr + data, doslova).
+- `inv=1` — tlačítka jsou v SYROVÉM čtení aktivní v nule; vynech, když zařízení hlásí stisk jako 1.
+- `UP=1 A=14 …` — logické tlačítko = index bitu ve čtených bajtech, little-endian
+  (`index_bajtu * 8 + bit_v_bajtu`). Názvy jsou ty, které používá `PICOGAME_BUTTONS`.
+
+Poll je jedna krátká transakce, zhruba půl milisekundy při 100 kHz. Neúspěšný poll (uvolněný kabel)
+podrží poslední stav a po osmi minutích ohlásí vše puštěné, takže odpojení nemůže nechat tlačítko
+zaseknuté. Sběrnice se také protaktuje po soft reloadu, což je jinak přesně to, co nechá expandér
+uprostřed transakce.
+
+Driver je `picogame_i2cpad`; `Buttons` ho připojí za tebe. Přímo po něm sáhneš jen když si chceš pad
+postavit ručně (`I2CPad`) nebo vyjmenovat pady pro multiplayer (`find_pads`, níže).
+
 :::tip[Když se vstup nepřipojí, nastav `PICOGAME_DEBUG = 1`]
 Vypíše na sériovou konzoli důvody `[picogame] ...` (chybí driver, zařízení nenalezeno, špatný
 endpoint) místo tichého selhání. Po vyřešení odeber.
@@ -136,8 +179,19 @@ p2 = pi.Buttons(sources=pads[1:2])     # hráč 2 = druhý pad
 # nebo míchej zařízení — pi.Buttons(usb=False) je hráč na palubních tlačítkách.
 ```
 
+`picogame_i2cpad.find_pads()` je I2C dvojče — všechny pady daného presetu na sběrnici v pořadí
+adres, každý si rozsvítí LED se svým číslem. Preset QwSTPad pokrývá čtyři adresy, takže čtyři hráči
+fungují i na desce úplně bez USB hosta:
+
+```python
+import picogame_i2cpad as i2c
+pads = i2c.find_pads("qwstpad")        # až čtyři, v pořadí adres
+p1 = pi.Buttons(sources=pads[0:1])
+```
+
 Každý hráč je nezávislý: pollni a čti je zvlášť (`p1.just_pressed(pi.A)` / `p2.just_pressed(pi.A)`).
-`find_pads()` vrátí `[]` na desce bez USB hostu. Dva stejné pady se vrátí v pořadí enumerace — když je
+`pi.find_pads()` vrátí `[]` na desce bez USB hostu a `i2c.find_pads()` vrátí `[]`,
+když na sběrnici žádný pad neodpoví. Dva stejné pady se vrátí v pořadí enumerace — když je
 hráči chtějí prohodit, prostě si vymění ovladače (engine si žádnou identitu padu nedrží). Viz vzor pro
 dva hráče výše.
 

@@ -38,6 +38,7 @@ RAM at a glance: a retained full-screen `Canvas` ≈ 150 KB; `StripDraw` / `Tile
 | cutscene / title image with no frame buffer | `picogame_cutscene` (streams from flash) | [Animation](/helpers/animation/) |
 | read the buttons through one API | `picogame_input.Buttons` | [Input & controls](/helpers/input/) |
 | play with a USB gamepad or keyboard (USB-host boards, e.g. Fruit Jam) | `picogame_usbpad` / `picogame_usbkbd` (auto-attached via `Buttons`) | [Input & controls](/helpers/input/) |
+| play with an I2C gamepad (QwSTPad & friends — any board with I2C, incl. the PicoPad) | `picogame_i2cpad` (opt-in via `settings.toml`) | [Input & controls](/helpers/input/) |
 | give each player their own controller (local multiplayer) | one `Buttons(sources=[pad])` per player + `find_pads()` | [Input & controls](/helpers/input/#local-multiplayer) |
 | coyote time / jump buffering | `picogame_input.Timer` | [Boot & game loop](/helpers/boot-loop/) · [Snippets](/snippets/) |
 | frame-rate-independent motion | `picogame_clock.Clock` (dt) / `FixedStep` (deterministic) | [Boot & game loop](/helpers/boot-loop/) |

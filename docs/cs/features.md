@@ -38,6 +38,7 @@ RAM ve zkratce: uchovávaný celoobrazovkový `Canvas` ≈ 150 KB; `StripDraw` /
 | meziscéna / titulní obrázek bez framebufferu | `picogame_cutscene` (čte postupně z flash) | [Animace](/cs/helpers/animation/) |
 | číst tlačítka přes stejné API | `picogame_input.Buttons` | [Vstup a ovládání](/cs/helpers/input/) |
 | hrát s USB gamepadem nebo klávesnicí (desky s USB hostem, např. Fruit Jam) | `picogame_usbpad` / `picogame_usbkbd` (připojené automaticky přes `Buttons`) | [Vstup a ovládání](/cs/helpers/input/) |
+| hrát s I2C gamepadem (QwSTPad a spol. — jakákoli deska s I2C, včetně PicoPadu) | `picogame_i2cpad` (opt-in přes `settings.toml`) | [Vstup a ovládání](/helpers/input/) |
 | dát každému hráči vlastní ovladač (lokální multiplayer) | jeden `Buttons(sources=[pad])` na hráče + `find_pads()` | [Vstup a ovládání](/cs/helpers/input/#lokální-multiplayer) |
 | tolerovat skok krátce po opuštění hrany nebo stisk před dopadem | `picogame_input.Timer` | [Spuštění a herní smyčka](/cs/helpers/boot-loop/) · [Úryvky kódu](/cs/snippets/) |
 | pohyb nezávislý na snímkové frekvenci | `picogame_clock.Clock` (dt) / `FixedStep` (deterministický) | [Boot a herní smyčka](/cs/helpers/boot-loop/) |
