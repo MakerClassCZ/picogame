@@ -593,7 +593,8 @@ function panelPaint() {
   ts.forEach(function (id) { strip.appendChild(assetChip(id, function () { sel.asset = id; ensureLayerFor(id); renderPanel(); })); });
   panel.appendChild(strip);
   const imp = mk("div", "row wrap");
-  add(imp, btn("+ Tileset PNG", function () { importPNG("tileset"); }), btn("+ Colour tileset", addColorTileset));
+  add(imp, btn("+ Tileset PNG", function () { importPNG("tileset"); }), btn("+ Colour tileset", addColorTileset),
+      btn("\u270e Paint tiles", function () { newPaintedAsset("tileset", 16, 16, 8); }));
   panel.appendChild(imp);
   if (!ts.length) { panel.appendChild(hint("Import a tileset PNG or add a colour tileset to start painting.")); return; }
   if (!isTileset(project.assets[sel.asset])) sel.asset = ts[0];
@@ -757,7 +758,8 @@ function panelPlace() {
   sp.forEach(function (id) { strip.appendChild(assetChip(id, function () { sel.asset = id; renderPanel(); })); });
   panel.appendChild(strip);
   const imp = mk("div", "row wrap");
-  add(imp, btn("+ Sprite PNG", function () { importPNG("sprite"); }), btn("+ Colour sprite", addColorSprite));
+  add(imp, btn("+ Sprite PNG", function () { importPNG("sprite"); }), btn("+ Colour sprite", addColorSprite),
+      btn("\u270e Paint a sprite", function () { newPaintedAsset("sprite", 16, 16, 1); }));
   panel.appendChild(imp);
   if (!sp.length) { panel.appendChild(hint("Import a sprite PNG, or add a <b>colour sprite</b> (a placeholder block — no art needed), then click the map to place it. Name one <code>player</code> with Select.")); return; }
   if (!isSprite(project.assets[sel.asset])) sel.asset = sp[0];
@@ -831,6 +833,210 @@ function panelPan() {
   add(panel, h3("Navigate"));
   panel.appendChild(hint("Drag to pan the view. Or hold <b>Space</b> in any tool, or middle-mouse-drag. Wheel scrolls, <b>Shift+wheel</b> scrolls sideways, Ctrl+wheel zooms to cursor."));
   navButtons(panel);
+}
+
+// ---- PIXEL EDITOR ----
+// Art without leaving the browser: MakeCode Arcade's real classroom advantage. It edits ONE frame
+// of an image asset at a time and writes the whole strip back as the same dataURL the PNG import
+// produces, so the .pal8 bake, Save and the board path need no changes. Pixels are written into
+// ImageData directly - never a stroked canvas - because PAL8 accepts alpha 0 or 255 and nothing
+// between (core.js bakePal8 throws on soft alpha).
+const PAINT_DEFAULT = [[0, 0, 0], [255, 255, 255], [140, 140, 150], [60, 60, 70],
+                       [200, 60, 60], [245, 170, 40], [245, 215, 80], [90, 190, 70],
+                       [40, 140, 90], [60, 130, 220], [40, 60, 140], [170, 100, 235],
+                       [235, 130, 180], [150, 90, 40], [90, 60, 40], [30, 34, 48]];
+let paintColor = [245, 215, 80];
+
+function stripCanvas(id) {                 // the asset's whole strip as an editable canvas
+  const a = project.assets[id];
+  const fw = a.fw || 16, fh = a.fh || 16, frames = a.frames || 1;
+  const c = mk("canvas"); c.width = fw * frames; c.height = fh;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  if (images[id] && images[id].complete && images[id].naturalWidth) g.drawImage(images[id], 0, 0);
+  return c;
+}
+
+function openPaintModal(id) {
+  const a = project.assets[id];
+  if (!E.isImg(a)) { toast("Only PNG-backed art has pixels to paint (a colour tileset is just colours)", "err"); return; }
+  const fw = a.fw || 16, fh = a.fh || 16, frames = a.frames || 1;
+  const work = stripCanvas(id), wg = work.getContext("2d", { willReadFrequently: true });
+  let frame = 0, tool = "pencil", undo = [];
+
+  const ov = mk("div", "overlay"); ov.id = "paintModal";
+  const card = mk("div", "card paintcard");
+  const title = h3("Paint " + id);
+  const view = mk("canvas", "pxview");
+  const zoom = Math.max(4, Math.min(16, Math.floor(320 / Math.max(fw, fh))));
+  view.width = fw * zoom; view.height = fh * zoom;
+  const vg = view.getContext("2d");
+
+  function draw() {
+    vg.imageSmoothingEnabled = false;
+    vg.fillStyle = "#0d0f17"; vg.fillRect(0, 0, view.width, view.height);
+    for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {   // checkerboard = transparent
+      if ((x + y) & 1) { vg.fillStyle = "#171a26"; vg.fillRect(x * zoom, y * zoom, zoom, zoom); }
+    }
+    vg.drawImage(work, frame * fw, 0, fw, fh, 0, 0, view.width, view.height);
+    if (zoom >= 8) {
+      vg.strokeStyle = "#ffffff14"; vg.lineWidth = 1;
+      for (let x = 1; x < fw; x++) { vg.beginPath(); vg.moveTo(x * zoom + .5, 0); vg.lineTo(x * zoom + .5, view.height); vg.stroke(); }
+      for (let y = 1; y < fh; y++) { vg.beginPath(); vg.moveTo(0, y * zoom + .5); vg.lineTo(view.width, y * zoom + .5); vg.stroke(); }
+    }
+  }
+  function pushUndo() {
+    undo.push(wg.getImageData(frame * fw, 0, fw, fh));
+    if (undo.length > 40) undo.shift();
+  }
+  function put(x, y, rgb) {                 // one pixel, hard alpha, no antialiasing anywhere
+    if (x < 0 || y < 0 || x >= fw || y >= fh) return;
+    const d = wg.createImageData(1, 1);
+    if (rgb) { d.data[0] = rgb[0]; d.data[1] = rgb[1]; d.data[2] = rgb[2]; d.data[3] = 255; }
+    wg.putImageData(d, frame * fw + x, y);
+  }
+  function at(x, y) {
+    const d = wg.getImageData(frame * fw + x, 0 + y, 1, 1).data;
+    return d[3] < 128 ? null : [d[0], d[1], d[2]];
+  }
+  function fill(x, y, rgb) {
+    const target = at(x, y), same = function (p, q) {
+      return (p === null && q === null) || (p && q && p[0] === q[0] && p[1] === q[1] && p[2] === q[2]);
+    };
+    if (same(target, rgb)) return;
+    const img = wg.getImageData(frame * fw, 0, fw, fh), px = img.data;
+    const get = function (i) { return px[i * 4 + 3] < 128 ? null : [px[i * 4], px[i * 4 + 1], px[i * 4 + 2]]; };
+    const stack = [y * fw + x];
+    while (stack.length) {
+      const i = stack.pop();
+      if (i < 0 || i >= fw * fh || !same(get(i), target)) continue;
+      px[i * 4] = rgb ? rgb[0] : 0; px[i * 4 + 1] = rgb ? rgb[1] : 0;
+      px[i * 4 + 2] = rgb ? rgb[2] : 0; px[i * 4 + 3] = rgb ? 255 : 0;
+      const cx = i % fw;
+      if (cx > 0) stack.push(i - 1);
+      if (cx < fw - 1) stack.push(i + 1);
+      stack.push(i - fw); stack.push(i + fw);
+    }
+    wg.putImageData(img, frame * fw, 0);
+  }
+  let painting = false;
+  function cellAtEv(ev) {
+    const r = view.getBoundingClientRect();
+    return { x: Math.floor((ev.clientX - r.left) / (r.width / fw)), y: Math.floor((ev.clientY - r.top) / (r.height / fh)) };
+  }
+  function apply(ev, first) {
+    const c = cellAtEv(ev);
+    if (tool === "pick") { const g0 = at(c.x, c.y); if (g0) { paintColor = g0; renderPalette(); } return; }
+    if (first) pushUndo();
+    if (tool === "fill") fill(c.x, c.y, paintColor);
+    else put(c.x, c.y, tool === "eraser" ? null : paintColor);
+    draw();
+  }
+  view.onmousedown = function (ev) { ev.preventDefault(); painting = true; apply(ev, true); };
+  window.addEventListener("mousemove", onPaintMove);
+  window.addEventListener("mouseup", onPaintUp);
+  function onPaintMove(ev) { if (painting && tool !== "fill" && tool !== "pick") apply(ev, false); }
+  function onPaintUp() { painting = false; }
+
+  // palette: what the art already uses, then the defaults, then any colour you like
+  const pal = mk("div", "pxpal");
+  function usedColors() {
+    const img = wg.getImageData(0, 0, work.width, work.height).data, seen = {}, out = [];
+    for (let i = 0; i < img.length; i += 4) {
+      if (img[i + 3] < 128) continue;
+      const k = (img[i] << 16) | (img[i + 1] << 8) | img[i + 2];
+      if (!seen[k]) { seen[k] = 1; out.push([img[i], img[i + 1], img[i + 2]]); }
+      if (out.length >= 24) break;
+    }
+    return out;
+  }
+  function renderPalette() {
+    pal.innerHTML = "";
+    const used = usedColors();
+    const list = used.concat(PAINT_DEFAULT.filter(function (c) {
+      return !used.some(function (u) { return u[0] === c[0] && u[1] === c[1] && u[2] === c[2]; });
+    }));
+    list.forEach(function (c) {
+      const b = mk("button", "pxswatch");
+      b.style.background = rgbCss(c);
+      b.title = rgbHex(c);
+      if (c[0] === paintColor[0] && c[1] === paintColor[1] && c[2] === paintColor[2]) b.classList.add("on");
+      b.onclick = function () { paintColor = c; tool = "pencil"; renderTools(); renderPalette(); };
+      pal.appendChild(b);
+    });
+    const ci = mk("input"); ci.type = "color"; ci.value = rgbHex(paintColor); ci.className = "pxpick";
+    ci.title = "any other colour";
+    ci.oninput = function () { paintColor = hexToRgb(ci.value); tool = "pencil"; renderTools(); };
+    pal.appendChild(ci);
+  }
+
+  const tools = mk("div", "row wrap");
+  function renderTools() {
+    tools.innerHTML = "";
+    [["pencil", "✎ Pencil"], ["fill", "▨ Fill"], ["eraser", "⌫ Erase"], ["pick", "⬚ Pick"]]
+      .forEach(function (t) {
+        const b = mk("button", "mini" + (tool === t[0] ? " on" : ""), t[1]);
+        b.onclick = function () { tool = t[0]; renderTools(); };
+        tools.appendChild(b);
+      });
+    const u = mk("button", "mini", "↶ Undo");
+    u.onclick = function () { if (undo.length) { wg.putImageData(undo.pop(), frame * fw, 0); draw(); } };
+    tools.appendChild(u);
+  }
+
+  const frow = mk("div", "row wrap");
+  function renderFrames() {
+    frow.innerHTML = "";
+    if (frames < 2) return;
+    frow.appendChild(mk("span", "hint", "frame " + (frame + 1) + " / " + frames + ": "));
+    for (let i = 0; i < frames; i++) {
+      const b = mk("button", "mini" + (i === frame ? " on" : ""), String(i));
+      b.onclick = (function (n) { return function () { frame = n; undo = []; draw(); renderFrames(); }; })(i);
+      frow.appendChild(b);
+    }
+  }
+
+  function close(commit) {
+    window.removeEventListener("mousemove", onPaintMove);
+    window.removeEventListener("mouseup", onPaintUp);
+    document.removeEventListener("keydown", onEsc, true);
+    ov.remove();
+    if (commit) {
+      snapshot();
+      artURLs[id] = work.toDataURL("image/png");
+      loadImageFromDataURL(artURLs[id]).then(function (im) {
+        images[id] = im; renderPanel();
+        toast("Painted " + id + " — Save writes it as " + pal8Name(a) + " for the board", "ok");
+      });
+    } else renderPanel();
+  }
+  function onEsc(e) { if (e.key === "Escape") { e.stopPropagation(); close(false); } }
+  document.addEventListener("keydown", onEsc, true);
+
+  const done = mk("div", "row");
+  add(done, btn("Done", function () { close(true); }), btn("Cancel", function () { close(false); }));
+  add(card, title, view, pal, tools, frow,
+      hint("Pixels only: picogame art is hard-edged, so a pixel is either a colour or fully " +
+           "transparent (the checkerboard). Save bakes this into <code>" + pal8Name(a) + "</code>."),
+      done);
+  ov.appendChild(card);
+  (document.querySelector(".pg-editor") || document.body).appendChild(ov);
+  renderPalette(); renderTools(); renderFrames(); draw();
+}
+
+// a blank image asset to paint on, with the src name Save/board writes it under
+function newPaintedAsset(kind, fw, fh, frames) {
+  snapshot();
+  const base = kind === "tileset" ? "tiles" : "sprite";
+  let id = base, n = 2;
+  while (project.assets[id]) id = base + (n++);
+  const c = mk("canvas"); c.width = fw * frames; c.height = fh;   // fully transparent
+  project.assets[id] = { type: kind === "tileset" ? "tileset" : "sprite", src: id + ".png",
+                         fw: fw, fh: fh, frames: frames, transparent: 0 };
+  artURLs[id] = c.toDataURL("image/png");
+  images[id] = new Image(); images[id].src = artURLs[id];
+  sel.asset = id;
+  if (kind === "tileset") { sel.tileFrame = 1; ensureLayerFor(id); }
+  images[id].onload = function () { renderPanel(); openPaintModal(id); };
 }
 
 // ---- PROBLEMS ----
@@ -974,6 +1180,8 @@ function assetChip(id, onpick) {
   const nm = mk("div", "name", id);
   const dl = mk("button", "del dl", "\u2b07"); dl.title = "download this asset as a PNG strip (frames left to right)";
   dl.onclick = function (ev) { ev.stopPropagation(); downloadAssetStrip(id); };
+  const ed = mk("button", "del ed", "\u270e"); ed.title = "paint this art here (no image editor needed)";
+  ed.onclick = function (ev) { ev.stopPropagation(); openPaintModal(id); };
   const del = mk("button", "del", "×"); del.title = "remove asset";
   del.onclick = function (ev) {
     ev.stopPropagation();
@@ -986,7 +1194,7 @@ function assetChip(id, onpick) {
     toast(hadArt ? "Removed " + id + " — Ctrl+Z brings it back, but not its pixels (re-open the PNG)"
                  : "Removed " + id + " (Ctrl+Z to undo)", "ok");
   };
-  add(wrap, cv, nm, dl, del); return wrap;
+  add(wrap, cv, nm, ed, dl, del); return wrap;
 }
 function btn(label, fn) { const b = mk("button", null, label); b.onclick = fn; return b; }
 function fieldText(box, label, val, set) {
@@ -1801,6 +2009,107 @@ function parseStory(text) {
   return out;
 }
 
+// ---------------------------------------------------------------- save straight to the board
+// MakeCode Arcade's one real advantage is that a game reaches the hardware in one click. CIRCUITPY
+// is just a mounted folder, and we already write folders - so this is the same machinery pointed at
+// the board: game.json + the .pal8 art + story.py + a runner code.py, and CircuitPython reloads on
+// its own. The board handle is remembered separately from the project folder.
+let boardHandle = null;
+
+async function pickBoard(silent) {
+  if (boardHandle) {
+    try { if ((await boardHandle.queryPermission({ mode: "readwrite" })) === "granted") return boardHandle; } catch (e) {}
+    try { if ((await boardHandle.requestPermission({ mode: "readwrite" })) === "granted") return boardHandle; } catch (e) {}
+  }
+  if (silent) return null;
+  try {
+    boardHandle = await window.showDirectoryPicker({ mode: "readwrite", id: "pgboard" });
+    // remembering the board is a convenience; blocked storage must not stop the save itself
+    try { await idb(function (st) { return st.put(boardHandle, "board"); }); } catch (e) { console.warn("remember board", e); }
+    return boardHandle;
+  } catch (e) { if (e.name !== "AbortError") toast("Board: " + e.message, "err"); return null; }
+}
+async function boardRead(h, name) {
+  try { return await (await (await h.getFileHandle(name)).getFile()).text(); } catch (e) { return null; }
+}
+async function boardHas(h, name) {
+  try { await h.getFileHandle(name); return true; } catch (e) { return false; }
+}
+async function boardWrite(h, name, data) {
+  const fh = await h.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  await w.write(data);
+  await w.close();
+}
+// the same runner the playground hands your level to, picked by what the level contains
+async function runnerSource(game, startLevel) {
+  const base = (typeof window !== "undefined" && window.PG_PLAYGROUND_URL) || "/play/";
+  let pick = "topdown";
+  try {
+    const m = await import(base + "vendor/runner_stubs.mjs?v=rs5");
+    pick = m.runnerFor({ camera: startLevel.camera, assets: game.assets, layers: startLevel.layers });
+  } catch (e) { /* offline copy: fall back to the top-down runner */ }
+  const r = await fetch(base + "runner/" + pick + ".py?v=g2");
+  if (!r.ok) throw new Error("runner/" + pick + ".py (" + r.status + ")");
+  return [pick, await r.text()];
+}
+
+async function saveToBoard() {
+  const d = $("saveD"); if (d) d.open = false;
+  if (!FS_OK) { toast("Saving to a board needs Chrome or Edge (the File System Access API).", "err"); return; }
+  let game;
+  try { game = E.exportGame(project); }
+  catch (e) { toast("Could not build game.json: " + (e.message || e), "err"); console.error(e); return; }
+  const h = await pickBoard(false);
+  if (!h) return;
+  // boot_out.txt is what CircuitPython writes at every boot: no file, probably not a board
+  const boot = await boardRead(h, "boot_out.txt");
+  if (!boot && !confirm(h.name + " has no boot_out.txt, so it may not be a CircuitPython board.\n\n" +
+                        "Write the game there anyway?")) return;
+  const wrote = [], notes = [];
+  try {
+    await boardWrite(h, "game.json", E.canonicalJson(game));
+    wrote.push("game.json");
+    for (const id in project.assets) {
+      const a = project.assets[id];
+      if (!E.isImg(a)) continue;
+      let blob = null;
+      try { blob = pal8Of(id); } catch (e) { notes.push("no art for " + e.message); continue; }
+      if (!blob) { notes.push("no pixels loaded for " + id + " — open its PNG, then save again"); continue; }
+      await boardWrite(h, pal8Name(a), blob);
+      wrote.push(pal8Name(a));
+    }
+    const st = storyText();
+    if (st) {
+      if (await boardHas(h, "story.py")) notes.push("story.py already on the board — left alone");
+      else { await boardWrite(h, "story.py", st); wrote.push("story.py"); }
+    }
+    // code.py is the board's program: never clobber one without asking
+    const hasCode = await boardHas(h, "code.py");
+    if (!hasCode || confirm("code.py already exists on " + h.name + ".\n\nOK = replace it with a fresh " +
+                            "runner for this game.\nCancel = keep it (game.json and the art are written either way).")) {
+      try {
+        const [pick, src] = await runnerSource(game, project.levels.find(function (l) { return l.name === game.start; }) || project.levels[0]);
+        await boardWrite(h, "code.py", src);
+        wrote.push("code.py (" + pick + " runner)");
+      } catch (e) {
+        notes.push("no code.py written (" + e.message + ") — copy a runner yourself, or press Try in playground and save from there");
+      }
+    }
+  } catch (e) {
+    toast("Writing to " + h.name + " stopped: " + e.message + " — is the board still mounted?", "err");
+    console.error(e); return;
+  }
+  // the helper libs have to be there too, unless the firmware freezes them
+  let libs = false;
+  try { for await (const n of (await h.getDirectoryHandle("lib")).keys()) if (/^picogame_/.test(n)) { libs = true; break; } }
+  catch (e) { /* no lib/ at all */ }
+  if (!libs) notes.push("no picogame_* in lib/ — if this firmware does not carry them frozen, install the bundle with circup");
+  toast("Wrote " + wrote.join(", ") + " to " + h.name + ". CircuitPython reloads by itself." +
+        (notes.length ? " — " + notes.join("; ") : ""), notes.length ? "info" : "ok");
+}
+if ($("btnSaveBoard")) $("btnSaveBoard").onclick = saveToBoard;
+
 // ---------------------------------------------------------------- save in place (a folder)
 // Pick a project folder once (File System Access) and every export WRITES THERE instead of
 // landing in ~/Downloads: the file the editor saves is then the same file the game imports and
@@ -1816,8 +2125,11 @@ function idb(fn) {                      // one tiny store, no library
     r.onupgradeneeded = function () { r.result.createObjectStore("kv"); };
     r.onerror = function () { rej(r.error); };
     r.onsuccess = function () {
-      const tx = r.result.transaction("kv", "readwrite");
-      const q = fn(tx.objectStore("kv"));
+      // a synchronous throw in here (put() rejects an un-cloneable value) used to leave this
+      // promise pending FOREVER, hanging whatever awaited it - reject instead
+      let q;
+      try { q = fn(r.result.transaction("kv", "readwrite").objectStore("kv")); }
+      catch (e) { rej(e); return; }
       q.onsuccess = function () { res(q.result); };
       q.onerror = function () { rej(q.error); };
     };
@@ -1840,6 +2152,8 @@ async function restoreFolder() {        // silent: only reuse a handle we may st
   try {
     const h = await idb(function (st) { return st.get("dir"); });
     if (h && (await h.queryPermission({ mode: "readwrite" })) === "granted") { dirHandle = h; refreshFolderChrome(); }
+    const b = await idb(function (st) { return st.get("board"); });
+    if (b) boardHandle = b;              // permission is asked for at the next save, not now
   } catch (e) { /* no handle yet, or the folder is gone */ }
 }
 
