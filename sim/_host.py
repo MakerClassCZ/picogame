@@ -5,6 +5,7 @@
 # present() is called every frame from Scene.refresh / Display.render.
 
 import os as _os
+import time
 # Display size: defaults to the PicoPad's 320x240, override for other boards via
 # PICOGAME_SIM_SIZE=WxH (e.g. "240x240" for the Pimoroni PicoSystem).
 try:
@@ -22,6 +23,8 @@ _frame_hook = None          # optional per-frame callback fn(frame_no) — used 
 _tick_mode = False          # set by run.py: True = a frame is one clock.tick() (the game's loop
                             #  boundary), False = one present (games with no picogame_clock)
 _presents = 0               # presents seen in tick mode - only to catch "game never ticks"
+_last_advance = 0.0         # wall clock of the last counted frame (see present())
+_since_tick = 0             # presents since the game last ticked - many = it is WAITING
 _backend = None             # set by run.py: "pil" or "pygame"
 _pyg = None                 # pygame module + surface, when used
 _last_image = None          # PIL.Image of the last frame (pil backend)
@@ -118,11 +121,22 @@ def present():
         _present_pygame()
     else:
         _maybe_shoot()
-    global _presents
+    global _presents, _since_tick
     if _tick_mode:
         _presents += 1
-        if _presents > 20000:            # safety valve: a "clocked" game that never ticks would
-            raise SimStop()              #  otherwise run forever
+        # A game can also draw while it WAITS outside its loop - a title screen spinning on
+        # `while not btn.is_pressed(A): ...`, a cutscene. Those presents are real frames on the
+        # panel, but the clock never ticks, so a frame-indexed --keys/--shot-at timeline would
+        # stand still and the wait could never end. Wall time tells the two apart: a running
+        # loop ticks far faster than real time headless, a wait paces itself to the display.
+        # Both tests have to hold, so a merely SLOW frame is never mistaken for a wait: a
+        # running loop ticks once per present or two (a draw-on-change HUD, an overlay), a
+        # wait presents over and over with no tick at all.
+        _since_tick += 1
+        if _since_tick >= 3 and time.monotonic() - _last_advance >= 0.03:
+            _advance()
+        elif _presents > 20000:          # safety valve: a "clocked" game that never ticks and
+            raise SimStop()              #  never waits would otherwise run forever
         return
     _advance()
 
@@ -150,7 +164,9 @@ def take_shots():
 
 
 def _advance():
-    global _frame
+    global _frame, _last_advance, _since_tick
+    _last_advance = time.monotonic()
+    _since_tick = 0
     _frame += 1
     if _frame_hook is not None:
         _frame_hook(_frame)
