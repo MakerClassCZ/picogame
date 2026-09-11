@@ -119,8 +119,8 @@ def present():
     global _last_image
     if _backend == "pygame":
         _present_pygame()
-    else:
-        _maybe_shoot()
+    elif not _tick_mode:
+        _maybe_shoot()           # no clock: this present IS the game's frame boundary
     global _presents, _since_tick
     if _tick_mode:
         _presents += 1
@@ -134,6 +134,7 @@ def present():
         # wait presents over and over with no tick at all.
         _since_tick += 1
         if _since_tick >= 3 and time.monotonic() - _last_advance >= 0.03:
+            _maybe_shoot()       # a WAIT: no tick is coming, so this present is the frame
             _advance()
         elif _presents > 20000:          # safety valve: a "clocked" game that never ticks and
             raise SimStop()              #  never waits would otherwise run forever
@@ -148,7 +149,11 @@ def tick_boundary():
     if not _tick_mode:
         return
     if _backend != "pygame":
-        _maybe_shoot()                   # shoot what the frame actually ended up showing
+        # The END of the game's frame, so the shot shows what the PLAYER saw - immediate-mode
+        # drawing included (dialogs, HUD text, pg.render overlays). present() used to shoot the
+        # same frame earlier, mid-loop, and won by being first: a whole text adventure looked
+        # like a blank screen, and 67% of the games a batch called "frozen" were drawing.
+        _maybe_shoot()
     _advance()
 
 
