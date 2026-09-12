@@ -1421,7 +1421,7 @@ def xip_map(path):
         raise OSError(22, "EINVAL")
     n = int(os.environ.get("PICOGAME_SIM_XIP_RUNS", "1") or 1)
     if n > XIP_MAX_RUNS:
-        raise OSError("fragmented")
+        raise OSError(27)   # EFBIG: more than XIP_MAX_RUNS runs
     blocks = (len(data) + 511) // 512
     n = max(1, min(n, blocks))
     bounds = [0]
