@@ -6,7 +6,20 @@
 #   iv = IsoView(ox, oy, tw, th)   # tw,th = tile half-width, half-height (2:1 diamond: th = tw//2)
 #   sx, sy = iv.to_screen(gx, gy, h=0)
 #   key    = iv.depth(gx, gy, h=0)  # sort your objects by this, draw ascending (far -> near)
-#   top, right, left = iv.cube_faces(gx, gy, height_px)   # 3 visible faces of a raised block
+#
+# HOW TO DRAW THE BLOCKS - pick before you write anything else:
+#
+#   1. A FIXED SET OF BLOCK TYPES (most iso games): bake one Bitmap per block type and put the
+#      blocks in the Scene as Sprites, positioned with to_screen() and added in depth() order.
+#      The whole draw is then C, and the Scene redraws only what moved. This is the fast path.
+#   2. PROCEDURAL GEOMETRY (per-cell heights computed at runtime, a board that morphs, colours
+#      mixed per frame): art per block is not an option, so build the triangles yourself with
+#      emit_blocks() + a Triangles layer / Canvas.fill_triangles.
+#
+# Measured on a PicoPad (RP2040, 320x240, 150 blocks, ALL moving every frame, whole frame incl.
+# the display push): Sprites in a Scene 40 ms/frame, the emit_blocks + Triangles rebuild 89 ms.
+# Sprites win because the geometry costs nothing and the Scene skips what did not change. Reach
+# for the triangle path when option 1 cannot express your board, not because it sounds cheaper.
 
 
 class IsoView:
@@ -35,14 +48,19 @@ class IsoView:
         return ((dy + dx) * 0.5, (dy - dx) * 0.5)
 
     def emit_blocks(self, cells, tv, tc):
-        """Alloc-free batch builder: write the flat-shaded cube triangles for MANY blocks straight into
-        the tv (int16 array, 6 coords/tri) and tc (uint16 array, 1 colour/tri) buffers, ready for one
+        """Alloc-free batch builder for PROCEDURAL block geometry - see the module header first:
+        with a fixed set of block types, baked Bitmaps drawn as Sprites in a Scene are ~2x faster
+        than rebuilding triangles, because the geometry then costs nothing at all.
+
+        Writes the flat-shaded cube triangles for MANY blocks straight into the tv (int16 array,
+        6 coords/tri) and tc (uint16 array, 1 colour/tri) buffers, ready for one
         `Canvas.fill_triangles(tv, tc, n)`. `cells` = iterable of `(gx, gy, h, (col_left, col_right,
         col_top))`, already back-to-front sorted (sort by `depth()`) with colours pre-shaded via
-        `pg.rgb565`. Returns the triangle count. ~2x faster than looping `cube_faces` + a packer, because
-        it computes the 7 screen points from two integer bases (no per-corner tuples, no method calls,
-        no divide) - which matters because this Python geometry loop, not the C fill, dominates a
-        rebuild-every-frame iso frame. Static/grid scenes: call once and cache; only scrolling/animating
+        `pg.rgb565`. Returns the triangle count. ~2x faster than looping `cube_faces` + a packer,
+        because it computes the 7 screen points from two integer bases (no per-corner tuples, no
+        method calls, no divide) - and within this path that Python loop, not the C fill, is what
+        dominates: measured on a PicoPad, 150 blocks cost ~51 ms of geometry against ~15 ms of
+        `fill_triangles`. Static/grid scenes: call once and cache; only scrolling or animating
         heights need it per frame."""
         ox, oy, tw, th = self.ox, self.oy, self.tw, self.th
         nt = 0

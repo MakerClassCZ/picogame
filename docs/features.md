@@ -25,7 +25,7 @@ RAM at a glance: a retained full-screen `Canvas` ≈ 150 KB; `StripDraw` / `Tile
 | terrain / sky that varies naturally | C noise: `value2d` / `fbm2d` | [Reference](reference.md) |
 | a pseudo-3D floor or first-person walls | `Canvas.mode7` (floor, via `picogame_mode7`) / `picogame_ray` (walls) — both into a `StripDraw` | [Pseudo-3D](/helpers/pseudo-3d/) |
 | real flat-shaded polygon 3D (blocky worlds, low-poly) | `pg.project` (batch projection, float/fixed per `pg.FPU`) + `pg.Triangles` (C-composited batch layer; `Canvas.fill_triangles` on the canvas path) | [Pseudo-3D](/helpers/pseudo-3d/) · [Reference](reference.md) |
-| an isometric board (RPG / tactics / builder) | `picogame_iso.IsoView` (integer-only projection + painter's key + `emit_blocks` batch) | [Pseudo-3D](/helpers/pseudo-3d/) |
+| an isometric board (RPG / tactics / builder) | `picogame_iso.IsoView` for the projection + painter's key; draw the blocks as **Sprites in the Scene** (baked art per block type), or with `emit_blocks` + triangles when the geometry is procedural | [Pseudo-3D](/helpers/pseudo-3d/) |
 | an OutRun-style racing road at 30 fps | `pg.road_edges` + `Canvas.road` (per-scanline loop in C, into a `StripDraw`) | [Reference](reference.md) |
 
 ## Gameplay

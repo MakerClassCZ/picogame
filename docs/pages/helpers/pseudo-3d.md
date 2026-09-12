@@ -12,7 +12,7 @@ for the signatures.
 |---|---|---|
 | A ground / floor that recedes to the horizon | `picogame_mode7.Camera` (drives the C `Canvas.mode7`) | C primitive, per-scanline - fast |
 | Walls / a first-person corridor | `picogame_ray.Raycaster` | native DDA caster + temporal repaint |
-| An isometric board (RPG / tactics / builder) | `picogame_iso.IsoView` | integer-only Python + one `fill_triangles` batch |
+| An isometric board (RPG / tactics / builder) | `picogame_iso.IsoView` | integer-only Python projection; blocks drawn as Sprites, or one `fill_triangles` batch when procedural |
 | An OutRun-style racing road | `pg.road_edges` + `Canvas.road` | C per-scanline loop into a `StripDraw` - 30 fps on RP2040 |
 | Real polygon 3D (blocky worlds, low-poly) | `pg.project` + `Canvas.fill_triangles` | batch C projection + batch C fill |
 
@@ -146,11 +146,19 @@ games.
   blocks straight into an int16 verts buffer + uint16 colour buffer, ready for **one**
   `Canvas.fill_triangles(tv, tc, n)` call; returns the triangle count.
 
-**The pattern that hits 30 fps on RP2040:** a static board is rendered ONCE (into a half-res
-`Canvas` shown through a 2× sprite, or baked into a `Tilemap`), then only the movers redraw -
-picogame's dirty-rects do the rest. Rebuild-every-frame scenes use `emit_blocks` (the Python
-geometry loop, not the C fill, is what dominates - the batch builder is ~2× faster than looping
-`cube_faces` yourself).
+**Choose the drawing path first.** With a fixed set of block types, bake one Bitmap per type and
+put the blocks in the Scene as **Sprites**, positioned with `to_screen()` and added in `depth()`
+order: the geometry then costs nothing and the Scene redraws only what moved. Measured on a PicoPad
+with 150 blocks all moving every frame, whole frame including the display push: **Sprites 40 ms,
+an `emit_blocks` + `Triangles` rebuild 89 ms.** `emit_blocks` earns its place when the geometry is
+genuinely procedural - per-cell heights computed at runtime, a board that morphs, colours mixed per
+frame - because then art per block is not an option.
+
+**Cheaper still:** a static board rendered ONCE (into a half-res `Canvas` shown through a 2× sprite,
+or baked into a `Tilemap`), with only the movers redrawing - picogame's dirty-rects do the rest.
+Within the triangle path it is the Python geometry loop, not the C fill, that dominates (150 blocks:
+~51 ms of geometry against ~15 ms of `fill_triangles`), which is why `emit_blocks` exists and is
+~2× faster than looping `cube_faces` yourself.
 
 ## pg.road_edges + Canvas.road - the racing road
 
