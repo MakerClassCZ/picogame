@@ -501,10 +501,6 @@ def validate(project, base=None, story=None, warnings=None):
                 continue
             if f is not None and kv >= f:
                 errs.append("assets[%r].props[%r]: tile value %d >= frames (%d)" % (aid, k, kv, f))
-            for flag in (a["props"][k] or {}):
-                if flag == "transparent":
-                    errs.append("assets[%r].props[%r]: 'transparent' is not a tile flag (it is the "
-                                "asset's transparent colour index); use solid/hazard/... " % (aid, k))
         for ch, v in (a.get("legend") or {}).items():
             if len(ch) != 1:
                 errs.append("assets[%r].legend[%r]: legend keys are single characters" % (aid, ch))
