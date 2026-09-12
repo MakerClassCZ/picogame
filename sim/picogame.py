@@ -1402,6 +1402,35 @@ def invert(display, on):
     _host._inverted = bool(on)
 
 
+XIP_MAX_RUNS = 32            # mirrors the firmware constant
+
+
+def xip_map(path):
+    """Sim parity for the flash mapper: the file as a tuple of read-only memoryviews, one per
+    contiguous flash run on the device. The PC has no XIP window, so this is a RAM copy - but the
+    SHAPE is the device's, so seam code runs here too. PICOGAME_SIM_XIP_RUNS=N fakes N runs split
+    at 512-byte boundaries (a cluster boundary on the device), N > XIP_MAX_RUNS raises like the
+    firmware. Raises OSError(ENOENT) if missing, OSError(EINVAL) if empty."""
+    import os
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        raise OSError(2, "ENOENT")
+    if not data:
+        raise OSError(22, "EINVAL")
+    n = int(os.environ.get("PICOGAME_SIM_XIP_RUNS", "1") or 1)
+    if n > XIP_MAX_RUNS:
+        raise OSError("fragmented")
+    blocks = (len(data) + 511) // 512
+    n = max(1, min(n, blocks))
+    bounds = [0]
+    for i in range(1, n):
+        bounds.append(min(len(data), (blocks * i // n) * 512))
+    bounds.append(len(data))
+    return tuple(memoryview(data[a:b]) for a, b in zip(bounds, bounds[1:]) if b > a)
+
+
 def collide(x1, y1, x2, y2, ax1, ay1, ax2=None, ay2=None):
     # Inclusive AABB: boxes collide when they TOUCH (bounce-on-contact game feel). Pass sprite
     # boxes as (x, y, x+w, y+h). Mirrors the firmware. (render is half-open -- different domain:

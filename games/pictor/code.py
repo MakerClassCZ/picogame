@@ -112,9 +112,8 @@ if PARALLAX_MID:
 # tan path/soil), scrolled at ground speed through the 8-px band the foreground's transparent grass
 # fringe would otherwise leave showing the static fill. Rows 76-79 live in the last ground strip.
 if not PARALLAX_MID:
-    _last_top, _last_bm, _last_buf = gnd_strips[-1]
-    seam_bm = pg.Bitmap(memoryview(_last_buf)[(76 - _last_top) * pic_meadow.STRIDE:], 320, 4,
-                        format=pg.PAL8, palette=pic_meadow.PAL, stride=pic_meadow.STRIDE)
+    _seam_buf = pic_strips.rows_buf(gnd_strips, pic_meadow.STRIDE, 76, 4)   # 0-copy unless a seam splits them
+    seam_bm = pg.Bitmap(_seam_buf, 320, 4, format=pg.PAL8, palette=pic_meadow.PAL, stride=pic_meadow.STRIDE)
 # each layer: (strips, scale, wrap_width, top_y, speed, phase). Speeds 1:2:3 * SPEED_SCALE; phase is
 # an initial horizontal offset (the seam is shifted so its copy of the ground's bottom rows doesn't
 # mirror the rows the ground shows just above it).
