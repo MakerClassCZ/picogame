@@ -392,7 +392,8 @@ def main():
                 args.backend = "pygame"
             except ImportError:
                 args.backend = "pil"
-                print("[sim] pygame not installed -- running headless. `pip install pygame` for a live window.")
+                print("[sim] headless (pil backend) -- this is the right mode for CI, agents and any\n"
+                      "      box without a display. Install pygame ONLY if you want a live window on a desktop.")
 
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
