@@ -9,6 +9,17 @@
 import board
 import picogame as pg
 
+# The bundle's release, so a board can be asked what it is actually running. A stale .mpy bundle
+# shadowing an edited .py is the classic silent failure here (sys.path order, not a suffix rule),
+# and "which libs are on this board?" had no answer before. Bump this with the git tag.
+VERSION = "0.3.0"
+
+try:
+    from picogame_debug import note as _debug   # optional diagnostics (settings.toml PICOGAME_DEBUG=1)
+except ImportError:                             # not deployed -> silent no-op, never a dependency
+    def _debug(*args):
+        pass
+
 
 def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, left=0, right=0,
           rgb444=False):
@@ -38,6 +49,7 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
     (plenty for PAL8 art). Needs a controller with COLMOD 12-bit (ST7789/ST7735; not ILI9341).
     rgb444="auto" enables it only where the board reports support (picogame.RGB444_SUPPORTED),
     so one codebase runs optimally on ST7789 and safely (RGB565) on ILI9341 - no per-board code."""
+    _debug("picogame libs", VERSION)
     if rgb444 == "auto":
         rgb444 = getattr(pg, "RGB444_SUPPORTED", False)
     if strip_h is None:

@@ -396,7 +396,7 @@ In the project root (copy to `CIRCUITPY/code.py`):
 
 | File | Shows |
 |---|---|
-| `examples/picogame_scene_example.py` | retained Scene + dirty-rect (static field + movers) |
+| `examples/picogame_scene_example.py` | loads a baked level with `picogame_scene.load()` — tilemap, sprites, tagged group, fixed HUD, follow camera, tile-property queries |
 | `examples/picogame_hud_example.py` | HUD text via the bundled font (`picogame_font.py`) |
 | `examples/picogame_tilemap_example.py` | tilemap background + sprite over it |
 | `examples/picogame_scroll_example.py` | camera/scrolling: a bigger world with the view following the player (`scene.set_view`) |

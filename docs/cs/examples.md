@@ -1,6 +1,6 @@
 # picogame ukázkové hry
 
-Klikni na hru a spusť ji rovnou v prohlížeči — nebo si ji zkopíruj do PicoPadu. Tohle jsou hry, které jsou součástí picogame.
+Klikni na hru a spusť ji rovnou v prohlížeči — nebo si ji zkopíruj do PicoPadu. Všechny běží v prohlížeči, u většiny je v tomhle repu i zdroják.
 
 ## Jak si hru pustit
 
@@ -52,8 +52,9 @@ zkopíruješ soubory hry, hotovo.
 </div>
 
 Každá hra je jeden samostatný program a její úvodní komentář přesně vypisuje, co používá — takže
-slouží i jako šablona: začni od nejbližší a přetvoř ji. Všechny najdeš v
-[repozitáři picogame](https://github.com/MakerClassCZ/picogame).
+slouží i jako šablona: začni od nejbližší a přetvoř ji. Většinu najdeš v
+[repozitáři picogame](https://github.com/MakerClassCZ/picogame) — pár jich jde zahrát tady, ale
+jejich zdroják součástí veřejného stromu není.
 
 ## Nahrání hry do zařízení
 

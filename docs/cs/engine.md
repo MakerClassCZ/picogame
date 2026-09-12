@@ -394,7 +394,7 @@ V kořeni projektu (zkopíruj do `CIRCUITPY/code.py`):
 
 | Soubor | Co ukazuje |
 |---|---|
-| `examples/picogame_scene_example.py` | retained Scene + dirty-rect (statické pole + pohyblivé objekty) |
+| `examples/picogame_scene_example.py` | načte upečenou úroveň přes `picogame_scene.load()` — tilemapa, sprity, otagovaná skupina, pevný HUD, sledující kamera, dotazy na vlastnosti dlaždic |
 | `examples/picogame_hud_example.py` | HUD text přes přibalený font (`picogame_font.py`) |
 | `examples/picogame_tilemap_example.py` | tilemap pozadí + sprite nad ním |
 | `examples/picogame_scroll_example.py` | kamera a posouvání: větší svět s pohledem sledujícím hráče (`scene.set_view`) |

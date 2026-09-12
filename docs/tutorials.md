@@ -60,8 +60,9 @@ All the helpers live in `lib/` (pure Python, work on device and in the simulator
 Once you understand the mechanics, the **editor** (`tools/editor/`; hosted at /editor/ on this site) can replace hand-placing every
 tile and sprite in Python. It lets you paint maps, place sprites, and assign tile properties,
 then export a **scene** that the `picogame_scene` loader builds. The same data runs on device and in the simulator. See
-`examples/picogame_platformer_scene.py` for a full game whose level (tiles, collisions,
-coins, enemies, camera) is loaded from editor data, with only the gameplay left in Python.
+`examples/picogame_scene_example.py` for a minimal driver that loads such a scene and proves
+what the loader builds for you: the tilemap, the sprites, a tagged group, a fixed HUD, the
+camera, and tile-property queries like `is_solid` and `tile_has`.
 The tutorials teach the mechanics; the editor moves level layout into data.
 
 ## Next steps after the tutorials

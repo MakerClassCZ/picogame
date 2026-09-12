@@ -1,6 +1,6 @@
 # picogame example games
 
-Click a game to play it in your browser — or copy it to a PicoPad. These are the games that ship with picogame.
+Click a game to play it in your browser — or copy it to a PicoPad. Every one of them runs in the browser; most also ship their source in this repo.
 
 ## Try a game
 
@@ -53,8 +53,9 @@ game's files, done.
 </div>
 
 Every game is one self-contained program, and its opening comment lists exactly what it uses — so it
-also works as a template: start from the closest one and reshape it. They all live in the
-[picogame repo](https://github.com/MakerClassCZ/picogame).
+also works as a template: start from the closest one and reshape it. Most of them live in the
+[picogame repo](https://github.com/MakerClassCZ/picogame) — a few are playable here without their
+source being part of the public tree.
 
 ## Put a game on a device
 
