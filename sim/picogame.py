@@ -1402,14 +1402,14 @@ def invert(display, on):
     _host._inverted = bool(on)
 
 
-XIP_MAX_RUNS = 32            # mirrors the firmware constant
+_XIP_MAX_RUNS = 32           # mirrors the firmware's internal cap
 
 
 def xip_map(path):
     """Sim parity for the flash mapper: the file as a tuple of read-only memoryviews, one per
     contiguous flash run on the device. The PC has no XIP window, so this is a RAM copy - but the
     SHAPE is the device's, so seam code runs here too. PICOGAME_SIM_XIP_RUNS=N fakes N runs split
-    at 512-byte boundaries (a cluster boundary on the device), N > XIP_MAX_RUNS raises like the
+    at 512-byte boundaries (a cluster boundary on the device), N > 32 raises like the
     firmware. Raises OSError(ENOENT) if missing, OSError(EINVAL) if empty."""
     import os
     try:
@@ -1420,8 +1420,8 @@ def xip_map(path):
     if not data:
         raise OSError(22, "EINVAL")
     n = int(os.environ.get("PICOGAME_SIM_XIP_RUNS", "1") or 1)
-    if n > XIP_MAX_RUNS:
-        raise OSError(27)   # EFBIG: more than XIP_MAX_RUNS runs
+    if n > _XIP_MAX_RUNS:
+        raise OSError(27)   # EFBIG: more than 32 runs
     blocks = (len(data) + 511) // 512
     n = max(1, min(n, blocks))
     bounds = [0]
