@@ -86,11 +86,44 @@ function snapshot() { history.push(project); dirtySince = Date.now(); invalidate
 // project (same shape as Save, incl. art dataURLs) into localStorage, so a stray
 // Esc, tab close or back-navigation can't erase work. Restored on the next open.
 const AUTOSAVE_KEY = "pg_ed_autosave";
-let autosaveTimer = null, autosaveWarned = false;
+// The blob is ONE localStorage slot, so two open tabs would take turns overwriting each other and
+// the restore would hand back whichever wrote last - silently, and possibly the wrong project. One
+// tab therefore OWNS the slot: it stamps a heartbeat, and a second tab sees a live owner and stops
+// autosaving instead of clobbering. An owner that dies (crash, closed tab) leaves a stale stamp
+// that the next tab claims after OWNER_TTL, so the slot can never be orphaned for good.
+const OWNER_KEY = "pg_ed_autosave_owner";
+const OWNER_TTL = 15000;                       // a stamp older than this belongs to a dead tab
+const TAB_ID = String(Math.random()).slice(2) + "." + Date.now();
+let autosaveTimer = null, autosaveWarned = false, notOwnerWarned = false;
 let autosavePaused = false;    // a restore failed: keep the old blob until the user opens or starts anew
+
+function ownsAutosave() {
+  try {
+    const raw = localStorage.getItem(OWNER_KEY);
+    const o = raw ? JSON.parse(raw) : null;
+    if (o && o.id !== TAB_ID && Date.now() - o.ts < OWNER_TTL) { return false; }   // a live sibling
+    localStorage.setItem(OWNER_KEY, JSON.stringify({ id: TAB_ID, ts: Date.now() }));   // claim + beat
+    return true;
+  } catch (e) { return true; }   // storage blocked: the write below fails loudly enough on its own
+}
+
+function releaseAutosave() {
+  try {
+    const raw = localStorage.getItem(OWNER_KEY);
+    if (raw && JSON.parse(raw).id === TAB_ID) { localStorage.removeItem(OWNER_KEY); }
+  } catch (e) {}
+}
+
 function autosaveNow() {
   autosaveTimer = null;
   if (autosavePaused) return;
+  if (!ownsAutosave()) {
+    if (!notOwnerWarned) {
+      notOwnerWarned = true;
+      toast("Another editor tab is autosaving — this tab will not, so save it with Save", "err");
+    }
+    return;
+  }
   try {
     const sv = E.serialize(project); sv.art = artURLs; sv.file = docName;
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(sv));
@@ -101,7 +134,7 @@ function autosaveNow() {
 }
 function scheduleAutosave() { invalidateProblems(); if (autosaveTimer) clearTimeout(autosaveTimer); autosaveTimer = setTimeout(autosaveNow, 800); }
 function flushAutosave() { if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveNow(); } }
-window.addEventListener("pagehide", flushAutosave);
+window.addEventListener("pagehide", function () { flushAutosave(); releaseAutosave(); });
 document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flushAutosave(); });
 
 // ---------------------------------------------------------------- toasts (no alert)
