@@ -149,6 +149,16 @@ s nimi viz [Firmware](../firmware.md).
 picogame kreslí přímo do panelu, takže orientace je v nastavení panelu, ne v softwarové rotaci.
 Následující hodnoty měň v `settings.toml`; herní kód upravovat nemusíš:
 
+:::tip[Jak hodnotu najít bez resetu po každém pokusu]
+`PICOGAME_FLIP` se zapéká do inicializace panelu, takže každá další zkoušená hodnota znamená **hard
+reset** - je to místo, kam odpověď patří, ne kde se hledá. Dokud hledáš, nastav místo toho
+`PICOGAME_MADCTL`: ten se posílá až při startu hry, takže se projeví běžným uložením a reloadem.
+Skript `display_test.py` ze skillu board-setup jde ještě dál a všechny čtyři orientace ti sám
+prostřídá, ke každé vypíše odpovídající `PICOGAME_FLIP`. Až hodnotu znáš, zapiš ji jako
+`PICOGAME_FLIP` a `PICOGAME_MADCTL` **smaž** - je absolutní a FLIP přebije (setup() na to upozorní,
+když jsou nastavené oba).
+:::
+
 | Projev | Řešení |
 |---|---|
 | Na bok / špatný poměr stran | prohoď `PICOGAME_SIZE` (`320x240` ↔ `240x320`) |

@@ -64,8 +64,19 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
     #   PICOGAME_MADCTL     absolute MADCTL byte (0x36 register: mirrors + BGR order). Absolute on
     #                       purpose - the register can't be read back, so bit-flips would need a
     #                       per-board baseline. PicoPad values: 0x60 stock | 0x68 BGR panel |
-    #                       0xA0 mounted 180 deg | 0xA8 both. (DIY boards: use the custom-board
-    #                       PICOGAME_FLIP/PICOGAME_BGR keys instead - their launcher rebuilds.)
+    #                       0xA0 mounted 180 deg | 0xA8 both; an ILI9341 counts from 0x38.
+    #
+    #                       Orientation has TWO keys, and they are two PHASES, not two options:
+    #                         PICOGAME_FLIP ("", "h", "v", "hv") is where the answer LIVES. The
+    #                           boot.py / launcher that builds the display bakes it into the panel
+    #                           init, so the panel is right from power-on - the REPL and a
+    #                           traceback get it too - and no game code changes. Set once per box.
+    #                         PICOGAME_MADCTL is for FINDING the answer. It is applied here, at
+    #                           setup(), and settings.toml is re-read on every reload, so values
+    #                           can be tried with a save instead of the hard reset boot.py needs.
+    #                       Delete MADCTL once FLIP is set: this send happens AFTER the init, so
+    #                       an absolute byte silently overrides whatever FLIP baked in. The check
+    #                       below says so rather than leaving you to find it.
     #   PICOGAME_BRIGHTNESS backlight, integer PERCENT 0-100 (settings.toml has no floats).
     try:
         import os
@@ -79,6 +90,9 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
                     str(_inv).strip().lower() not in ("", "0", "false", "no")
                 pg.invert(_d, _on)
             if _mad is not None:
+                if os.getenv("PICOGAME_FLIP"):
+                    print("picogame: settings.toml has both PICOGAME_MADCTL and PICOGAME_FLIP - "
+                          "MADCTL wins (it is sent after the panel init). Drop one.")
                 _d.bus.send(0x36, bytes([int(str(_mad), 0) & 0xFF]))
             if _bri is not None:
                 _d.brightness = max(0, min(100, int(_bri))) / 100

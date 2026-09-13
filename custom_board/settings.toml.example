@@ -7,6 +7,12 @@ PICOGAME_DISPLAY = "st7789"        # "st7789" or "ili9341"
 PICOGAME_PINS    = "SCK=GP18 MOSI=GP19 DC=GP17 CS=GP21 RST=GP20 BL=GP16"
 PICOGAME_SIZE    = "320x240"       # WIDTH x HEIGHT; WIDTH > HEIGHT = landscape
 PICOGAME_FLIP    = ""              # "", "h", "v", "hv" — image sideways / upside down? toggle
+                                   #   changing this needs a RESET (it is baked into the panel init)
+# PICOGAME_MADCTL = 0xA0           # only while HUNTING the orientation: the raw 0x36 byte, applied
+                                   #   at game setup, so a normal reload picks it up - no reset per
+                                   #   try. Once you know the answer, write it as PICOGAME_FLIP
+                                   #   above and DELETE this line: MADCTL is absolute and silently
+                                   #   overrides FLIP.
 PICOGAME_INVERT  = 0               # colours look like a photo-negative? set 1
 PICOGAME_BGR     = 0               # red and blue swapped? set 1
 PICOGAME_BAUD    = 24000000        # lower (e.g. 12000000) if you see noise on long breadboard wires

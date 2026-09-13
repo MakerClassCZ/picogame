@@ -144,6 +144,15 @@ firmware options** (`CIRCUITPY_PICOGAME_FRAMEBUFFER`, `CIRCUITPY_PICOGAME_RGB444
 picogame draws straight to the panel, so orientation lives in the panel's own settings, not in a
 software rotation. Toggle these in `settings.toml` until it looks right, **no code:**
 
+:::tip[Finding the value without a reset each time]
+`PICOGAME_FLIP` is baked into the panel init, so trying another value means a **hard reset** - it is
+where the answer belongs, not a comfortable place to search. While you are still hunting, set
+`PICOGAME_MADCTL` instead: it is applied at game setup, so a normal save-and-reload picks it up.
+The board-setup skill's `display_test.py` goes further and cycles all four orientations for you,
+printing the `PICOGAME_FLIP` value for each. Once you know the answer, write it as `PICOGAME_FLIP`
+and **delete `PICOGAME_MADCTL`** - it is absolute and overrides FLIP (setup() warns if both are set).
+:::
+
 | Symptom | Fix |
 |---|---|
 | Sideways / wrong aspect | swap `PICOGAME_SIZE` (`320x240` ↔ `240x320`) |
