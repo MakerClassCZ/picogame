@@ -22,14 +22,22 @@ import picogame_shapes as shp
 SCK, MOSI = board.GP18, board.GP19
 TFT_CS, TFT_DC, TFT_RST = board.GP17, board.GP16, board.GP20
 WIDTH, HEIGHT = 320, 240
-ROTATION, INVERT, BGR = 0, True, True         # BGR=True = ST7789 driver default (see display_test.py)
+INVERT = True
 ROWSTART, COLSTART = 0, 0
+# Orientation AND colour order, as the panel's own MADCTL byte - the value display_test.py left you
+# with. NOT displayio's `rotation=`: that is a software transform applied when compositing groups,
+# so it turns the REPL and leaves picogame's strips alone (and at 90/270 it swaps width/height and
+# breaks the clipping). ST7789: 0x60 base, 0xA0 = 180 deg, +0x08 for the other colour order.
+# The same byte can live in settings.toml as PICOGAME_MADCTL, which setup() applies - handy while
+# you are still trying values, because settings.toml is re-read on every reload.
+MADCTL = 0x60
 
 displayio.release_displays()
 _spi = busio.SPI(SCK, MOSI)                    # FourWire sets the baudrate per-transaction (below)
 _bus = FourWire(_spi, command=TFT_DC, chip_select=TFT_CS, reset=TFT_RST, baudrate=24_000_000)
-disp = ST7789(_bus, width=WIDTH, height=HEIGHT, rotation=ROTATION, invert=INVERT,
-              rowstart=ROWSTART, colstart=COLSTART, bgr=BGR)
+disp = ST7789(_bus, width=WIDTH, height=HEIGHT, rotation=0, invert=INVERT,
+              rowstart=ROWSTART, colstart=COLSTART)
+_bus.send(0x36, bytes([MADCTL & 0xFF]))        # absolute: overrides whatever the driver's init sent
 
 # Publish it as the board's display, so picogame_game.screen()/display() (and any library that
 # asks for the screen) find it without being passed the handle.

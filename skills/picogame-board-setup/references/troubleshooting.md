@@ -22,10 +22,23 @@ The real ST7789 is 16-bit RGB565, not the sim's truecolour: build colours 565-al
 fills read as blocks on hardware; mute + sparsen them or use a ring. (This is a game-art fix, not settings.)
 
 **Image is upside-down / mirrored / 90° off**
-Orientation. On a busdisplay board: `PICOGAME_MADCTL` — `0xA0` = 180°, `0x68` = mirrored/BGR, `0xA8` =
-both (PicoPad baseline `0x60`). On a code-built display: the driver's `rotation=` (0/90/180/270) and
-`rowstart`/`colstart`. A framebuffer/DVI board (Fruit Jam) has no MADCTL — picogame REQUIRES rotation 0
-there; set `CIRCUITPY_DISPLAY_ROTATION = 0` (it can't run at other rotations, and a rebuild won't add them).
+Orientation, and on an SPI panel it lives in ONE place: the panel's own **MADCTL** (register `0x36`).
+Set it with `PICOGAME_MADCTL` in settings.toml — `picogame_game.setup()` sends it, and settings.toml is
+re-read on every reload, so you can try values with a save instead of a reset. It is an absolute byte:
+`0x20` MV (landscape) | `0x40` MX (mirror H) | `0x80` MY (mirror V) | `0x08` colour order.
+ST7789 baseline `0x60` → `0xA0` = 180°, `0x68` / `0xA8` = the same with the other colour order;
+ILI9341 baseline `0x38` → `0x78` = mirror H, `0xB8` = mirror V, `0xF8` = 180°.
+A code-built display can send the same byte itself: `bus.send(0x36, bytes([MADCTL]))`.
+
+**Do not reach for the driver's `rotation=`.** It is a displayio SOFTWARE transform, applied while
+compositing groups — it turns the REPL and the terminal, and picogame never sees it, because picogame
+writes its strips straight into the panel's address window. So `rotation` gives you a correct-looking
+terminal over a mirrored game (a real bring-up spent half an hour on exactly that), and at 90/270 it
+also swaps `width`/`height` while the panel keeps its own, which breaks picogame's clipping. Panel
+offsets (`rowstart`/`colstart`) are a different thing and stay on the driver.
+
+A framebuffer/DVI board (Fruit Jam) has no MADCTL — picogame REQUIRES rotation 0 there;
+set `CIRCUITPY_DISPLAY_ROTATION = 0` (it can't run at other rotations, and a rebuild won't add them).
 
 **Framebuffer/DVI board: `no display found` or `picogame needs rotation 0` / `needs a 16-bit framebuffer`**
 The DVI mode isn't set up the way picogame needs. In settings.toml: `CIRCUITPY_PICODVI_ENABLE = "always"`

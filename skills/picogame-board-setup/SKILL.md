@@ -55,7 +55,8 @@ and paste the serial output. Read it to produce:
 - the **button map** — press each button, note the GPIO that reads pressed → a `PICOGAME_BUTTONS` line;
 - the **I2C addresses** present (e.g. `0x18` = TLV320 audio DAC, a display/sensor);
 - a **working display** — `display_test.py` draws colour bars + orientation markers so the user dials in
-  driver, SPI pins, rotation, colour order and inversion by eye.
+  driver, SPI pins, orientation (the panel's MADCTL byte, NOT displayio's `rotation`), colour order
+  and inversion by eye. It draws through picogame, so what the test shows is what a game will get.
 
 **Completion:** you hold the concrete pin→button map, the I2C address list, and display parameters that
 render correctly — all read back from the device, not assumed.
