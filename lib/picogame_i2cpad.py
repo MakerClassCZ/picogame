@@ -3,9 +3,14 @@
 # string, not a library per device).
 #
 # Covers the whole family of "dumb" I2C button devices (GPIO expanders: TCA9555, PCF8574,
-# MCP23017, and vendor pads built on them, e.g. the Pimoroni QwSTPad). A device is described by
-# a RECIPE: a few raw init writes, one register read per poll, and a NAME=bit map. Known pads
-# ship as named PRESETS; anything else is one settings.toml line, no code.
+# MCP23017, and vendor pads built on them, e.g. the Pimoroni QwSTPad) and, as it turns out,
+# seesaw pads too - a seesaw "GPIO bulk read" is just a two-byte register and four bytes back.
+# A device is described by a RECIPE: a few raw init writes, one register read per poll, and a
+# NAME=bit map. Known pads ship as named PRESETS; anything else is one settings.toml line, no code.
+#
+#   PICOGAME_I2CPAD = "qwstpad"     Pimoroni QwSTPad (TCA9555), 16 buttons, player LEDs
+#   PICOGAME_I2CPAD = "gamepadqt"   Adafruit Mini I2C Gamepad (PID 5743), seesaw: A/B/X/Y/
+#                                   START/SELECT plus an analogue thumbstick as the directions
 #
 # OPT-IN via settings.toml (expanders have no identity register, so auto-probing I2C addresses
 # could bind an unrelated device — unlike USB HID, which self-describes):
@@ -27,6 +32,12 @@
 #                      device already reports pressed as 1 (qwstpad inverts in its polarity regs)
 #   UP=1 A=14 ...      logical button = bit index into the read bytes (little-endian:
 #                      bit = byte_index*8 + bit_in_byte); names as in PICOGAME_BUTTONS
+#
+# ANALOGUE STICKS are a preset-only feature (a recipe string has no syntax for them): a preset
+# carries "axes" = ((register, low_direction, high_direction), ...) and "adead", the deadzone's
+# half-width in ADC counts. Each axis is one extra I2C round trip per poll, and its CENTRE is
+# measured once at attach rather than assumed, so a stick reaches a game as ordinary
+# UP/DOWN/LEFT/RIGHT and no game code knows the difference.
 #
 # MULTIPLAYER: find_pads("qwstpad") -> one source per pad found on the preset's addresses,
 # ready for Buttons(sources=[pad]) per player; each pad lights its player-number LED (presets
@@ -54,6 +65,40 @@ PRESETS = {
                 (11, _pi.START), (5, _pi.SELECT)),
         # (output register, player-LED bits, inverted logic, register value after init)
         "led": (0x02, (6, 7, 9, 10), True, 0x06C0),
+    },
+    # Adafruit Mini I2C Gamepad (PID 5743), a seesaw part rather than a plain expander - but it
+    # still fits the recipe model, because one seesaw "GPIO bulk read" is just a two-byte register
+    # followed by four bytes.
+    #
+    #   init  = seesaw [GPIO_BASE 0x01, fn] + a big-endian 32-bit pin mask, sent three times to
+    #           make the six button pins INPUT_PULLUP: DIRCLR_BULK 0x03, PULLENSET 0x0B,
+    #           BULK_SET 0x05. Mask 0x00010067 = pins 0,1,2,5,6,16.
+    #   read  = [0x01, GPIO_BULK 0x04] -> 4 bytes, and the device answers BIG-endian while this
+    #           driver assembles little-endian, so a seesaw pin p is bit (3 - p//8)*8 + p%8 here:
+    #           SELECT 0->24, B 1->25, Y 2->26, A 5->29, X 6->30, START 16->8. Verified against
+    #           the idle read on real hardware (raw 00 01 08 67 -> every mapped bit high).
+    #   inv   = pressed reads 0 (pullups).
+    #
+    # Adafruit's own driver sleeps 8 ms between the register write and the read. That is a legacy
+    # default for the older SAMD09 seesaw; measured on this ATtiny817 part (HW_ID 0x87), a plain
+    # repeated-start read is correct 60/60 times with no delay at all, at ~1.1 ms per poll. So the
+    # ordinary rreg/rlen path is used and a game pays about one millisecond a frame.
+    "gamepadqt": {
+        "addr": 0x50,
+        "addrs": (0x50, 0x51, 0x52, 0x53),           # A0/A1 address jumpers
+        "init": (b"\x01\x03\x00\x01\x00\x67",
+                 b"\x01\x0b\x00\x01\x00\x67",
+                 b"\x01\x05\x00\x01\x00\x67"),
+        "rreg": b"\x01\x04",
+        "rlen": 4,
+        "inv": True,
+        "map": ((24, _pi.SELECT), (25, _pi.B), (26, _pi.Y),
+                (29, _pi.A), (30, _pi.X), (8, _pi.START)),
+        # The directions are an analogue thumbstick, not buttons: two ADC reads per poll, each
+        # thresholded into a pair of directions. (seesaw ADC_BASE 0x09, channel 0x07 + pin.)
+        "axes": ((b"\x09\x15", _pi.LEFT, _pi.RIGHT),    # pin 14, horizontal
+                 (b"\x09\x16", _pi.UP, _pi.DOWN)),      # pin 15, vertical
+        "adead": 170,                                 # half-width of the deadzone, in ADC counts
     },
 }
 
@@ -178,13 +223,32 @@ class I2CPad:
         self._rbuf = bytearray(recipe["rlen"])
         self._mask = 0
         self._misses = 0
+        self._axes = recipe.get("axes") or ()
+        self._adead = recipe.get("adead") or 170
+        self._abuf = bytearray(2)
+        self._acentre = None
         self.mapped = 0
         for _b, log in recipe["map"]:
             self.mapped |= log
+        for _reg, neg, pos in self._axes:
+            self.mapped |= neg | pos
         self._led_shadow = None
         for frame in recipe["init"]:                 # OSError here = no device at the address
             self._raw_write(frame)
         self._locked_read()                          # presence check even for init-less recipes
+        # A stick's resting reading is its CENTRE, measured here rather than assumed: a fixed
+        # threshold pair turns any pad whose rest value sits near a rail into a direction held
+        # down forever, which reaches the player as a game that walks into a wall by itself and
+        # gives no clue why. Measuring means a pad with no working stick reports no direction at
+        # all - wrong, but visibly nothing, which is the failure you can diagnose.
+        if self._axes:
+            centre = []
+            for reg, _neg, _pos in self._axes:
+                try:
+                    centre.append(self._axis(reg))
+                except OSError:
+                    centre.append(None)
+            self._acentre = centre
 
     def _raw_write(self, frame):
         while not self._i2c.try_lock():
@@ -206,11 +270,33 @@ class I2CPad:
         finally:
             self._i2c.unlock()
 
+    def _axis(self, reg):
+        """One analogue axis as a big-endian 16-bit reading (seesaw answers MSB first)."""
+        while not self._i2c.try_lock():
+            pass
+        try:
+            self._i2c.writeto_then_readfrom(self._addr, reg, self._abuf)
+        finally:
+            self._i2c.unlock()
+        return (self._abuf[0] << 8) | self._abuf[1]
+
     def read(self):
         """Current logical bitmask. Holds the last state over a failed poll (loose cable);
         reports all-released after 8 consecutive misses so a disconnect can't stick a button."""
         try:
             self._locked_read()
+            axis_state = 0
+            dead = self._adead
+            for i in range(len(self._axes)):       # each axis costs one more I2C round trip
+                reg, neg, pos = self._axes[i]
+                mid = self._acentre[i]
+                if mid is None:
+                    continue
+                v = self._axis(reg)
+                if v < mid - dead:
+                    axis_state |= neg
+                elif v > mid + dead:
+                    axis_state |= pos
         except OSError:
             self._misses += 1
             if self._misses >= 8:
@@ -222,7 +308,7 @@ class I2CPad:
             state |= self._rbuf[i] << (8 * i)
         if self._r["inv"]:
             state = ~state
-        m = 0
+        m = axis_state
         for bit, log in self._r["map"]:
             if state & (1 << bit):
                 m |= log
