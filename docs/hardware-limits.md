@@ -87,9 +87,11 @@ nothing at 62.5. Picking `clk_sys` is how you hit a good in-spec clock (250 → 
 The SPI clock is the *one* transfer knob the divider gives you. A second, orthogonal lever for a
 **transfer-bound** platform is **`Display(rgb444=True)`** (12-bit packed pixels, ~25% less SPI per
 frame, gated by `picogame.RGB444_SUPPORTED`). It trades a per-strip pack cost for fewer bytes on the
-wire, so it only wins where the panel is the bottleneck. On the PicoPad the capability is compiled IN
-(`pg.RGB444_SUPPORTED` is True) - it is simply not enabled at RUNTIME by default, because on this
-CPU-balanced panel the per-strip pack cost eats the SPI saving. See [The firmware build](firmware.md).
+wire, so it wins where the panel is the bottleneck: C-composed scenes (a scrolling tilemap, iso, a
+raycaster) gain 20-35% fps on the PicoPad and on the PyBadge's 24 MHz bus; a scene that spends its
+frame in Python drawing gains nothing. On the PicoPad the capability is compiled IN
+(`pg.RGB444_SUPPORTED` is True); a game opts in with `setup(rgb444="auto")`, or the board owner sets
+`PICOGAME_RGB444 = 1` in `settings.toml`. See [The firmware build](firmware.md).
 
 ---
 

@@ -120,7 +120,8 @@ tested or supported targets; other `displayio` SPI displays may need verificatio
 - **12-bit colour (RGB444):** the firmware can send 12-bit instead of 16-bit to cut SPI traffic on
   transfer-bound scenes. It is an opt-in, compile-time capability: the default everywhere is RGB565,
   and a game enables 12-bit only where the board advertises it (`picogame.RGB444_SUPPORTED`, e.g.
-  `rgb444="auto"` in `picogame_game.setup`). Requesting `rgb444=True` on a build without the support
+  `rgb444="auto"` in `picogame_game.setup`), or the owner turns it on for the whole board with
+  `PICOGAME_RGB444 = 1` in `settings.toml`. Requesting `rgb444=True` on a build without the support
   raises an error rather than mis-driving the panel (ST7789/ST7735 have COLMOD 12-bit, ILI9341 does
   not). Details in [Clocks, SPI & display limits](hardware-limits.md).
 

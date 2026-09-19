@@ -87,8 +87,11 @@ nic na 62,5. Vhodnou hodnotu v rámci specifikace lze trefit volbou `clk_sys` (2
 Takt SPI je jediná přenosová hodnota, kterou určuje dělička. Druhou nezávislou možností pro
 platformu **omezenou přenosem** je **`Display(rgb444=True)`** (12bitové balené pixely, ~25 % méně
 dat SPI na snímek, řízeno `picogame.RGB444_SUPPORTED`). Balení pixelů po pásech stojí část času CPU,
-ale po sběrnici se přenese méně bajtů. Vyplatí se tedy jen tam, kde je úzkým hrdlem panel. Ve firmwaru
-na PicoPadu je schopnost ZAKOMPILOVANÁ (`pg.RGB444_SUPPORTED` je True) — jen se za běhu ve výchozím stavu nezapíná, protože na tomto CPU-vyváženém panelu náklad na per-strip pack sní úsporu SPI. Viz [Build firmwaru](firmware.md).
+ale po sběrnici se přenese méně bajtů. Vyplatí se tedy tam, kde je úzkým hrdlem panel: scény skládané
+v C (rolující tilemapa, iso, raycaster) získají na PicoPadu i na 24MHz sběrnici PyBadge 20-35 % fps;
+scéna, která tráví snímek kreslením v Pythonu, nezíská nic. Ve firmwaru na PicoPadu je schopnost
+ZAKOMPILOVANÁ (`pg.RGB444_SUPPORTED` je True); hra ji zapne přes `setup(rgb444="auto")`, nebo ji
+majitel desky zapne klíčem `PICOGAME_RGB444 = 1` v `settings.toml`. Viz [Build firmwaru](firmware.md).
 
 ---
 

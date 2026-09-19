@@ -119,7 +119,8 @@ podporované cíle; jiné SPI displeje podporované v `displayio` je potřeba ov
 - **12bitová barva (RGB444):** firmware umí posílat 12 bitů místo 16, aby snížil provoz na SPI u scén
   omezených přenosem. Jde o volitelnou schopnost danou při kompilaci: výchozí je všude RGB565 a hra
   12 bitů zapne jen tam, kde to deska inzeruje (`picogame.RGB444_SUPPORTED`, např.
-  `rgb444="auto"` v `picogame_game.setup`). Požadavek `rgb444=True` v buildu bez podpory vyvolá
+  `rgb444="auto"` v `picogame_game.setup`), nebo ji majitel zapne pro celou desku klíčem
+  `PICOGAME_RGB444 = 1` v `settings.toml`. Požadavek `rgb444=True` v buildu bez podpory vyvolá
   chybu, místo aby špatně řídil panel (ST7789/ST7735 mají COLMOD 12-bit, ILI9341 ne). Detaily v
   [Hodiny, SPI a limity displeje](hardware-limits.md).
 

@@ -124,6 +124,7 @@ je `1`/`0` a hlasitost je **celé číslo v dB**.
 | `PICOGAME_USBKBD_TIMEOUT` | ms | `10` | Timeout čtení HID pro poll klávesnice. |
 | `PICOGAME_I2CPAD` | preset / recept | `"qwstpad"` | **Opt-in** I2C gamepad (pady na GPIO expandérech, např. Pimoroni QwSTPad) — funguje na jakékoli desce s I2C, USB host není potřeba. Název presetu, `preset@0xNN`, více oddělených `;`, nebo celý recept (`"addr=0x20 read=:1 inv=1 UP=0 A=4 …"`). Bez nastavení vypnuto. |
 | `PICOGAME_I2C` | piny `"SDA,SCL"`, nebo název sběrnice | `"GP4,GP5"` | I2C sběrnice pro pad výše. Potřeba jen na holé desce nebo při nestandardním zapojení — konektor STEMMA/Qw-ST nepotřebuje nic. Jediný token místo toho pojmenuje sběrnici desky (`"I2C0"`). |
+| `PICOGAME_RGB444` | `1` / `0` | `PICOGAME_RGB444 = 1` | `1` posílá do panelu 12bitové RGB444 (~25 % méně dat po SPI) všude, kde to firmware podporuje (`picogame.RGB444_SUPPORTED`). Vyplatí se na pomalé sběrnici (PyBadge: SPI 24 MHz). Explicitní `setup(rgb444=...)` ve hře má před klíčem přednost. Vypnuto, dokud není nastaveno. |
 | `PICOGAME_DEBUG` | `1` / `0` | `PICOGAME_DEBUG = 1` | **Když něco nefunguje, nastav tohle.** Vypíše důvody selhání `[picogame] ...` (audio DAC/ovladač, USB pad/klávesnice, …) na sériovou konzoli. Po vyřešení odeber. |
 
 **Tlačítka v klávesové matici.** Pokud jsou tvoje tlačítka zapojená jako skenovaná mřížka
