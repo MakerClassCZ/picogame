@@ -6,7 +6,7 @@
 # above it is identical on every board. Selection order:
 #   1. explicit `pin`               -> PWM on that pin (caller override)
 #   2. board.I2S_BCLK + a TLV320 DAC -> I2S (Fruit Jam: audiobusio.I2SOut + adafruit_tlv320)
-#   3. board.AUDIO/SPEAKER/BUZZER    -> PWM (PicoPad/PicoSystem/...)
+#   3. board.AUDIO/SPEAKER/BUZZER    -> PWM (PicoPad/PicoSystem/...) or the true DAC (SAMD51)
 #   4. nothing                       -> raise (caller decides: Audio raises, Synth goes silent)
 #
 # Fruit Jam I2S needs the TLV320DAC3100 configured over I2C first, so the `adafruit_tlv320` +
@@ -47,7 +47,7 @@ def make_output(sample_rate=22050, pin=None):
         out = _try_i2s(sample_rate)
         if out is not None:
             return out
-    return _make_pwm(pin)
+    return _make_analog(pin)
 
 
 def _try_i2s(sample_rate):
@@ -98,13 +98,41 @@ def _try_i2s(sample_rate):
         return None
 
 
-def _make_pwm(pin):
-    import audiopwmio
+def _make_analog(pin):
+    """Analogue output on a speaker pin: PWM where the firmware has it, the chip's true DAC where
+    it does not. A board with a real DAC (SAMD51: PyBadge, PyGamer, Feather/Metro M4) carries
+    audioio and NOT audiopwmio, so picking by what the firmware actually has keeps one code path
+    for every analogue board instead of a per-board table."""
     p = _resolve_pwm_pin(pin)
     if p is None:
-        raise RuntimeError("no audio output: no I2S DAC and no PWM pin "
+        raise RuntimeError("no audio output: no I2S DAC and no speaker pin "
                            "(set PICOGAME_AUDIO in settings.toml, or pass a pin)")
+    _enable_amp()
+    try:
+        import audiopwmio
+    except ImportError:
+        import audioio                 # the firmware carries one or the other, never both
+        _debug("audioout: true DAC (audioio) on", p)
+        return audioio.AudioOut(p)
     return audiopwmio.PWMAudioOut(p)
+
+
+def _enable_amp():
+    """Some boards gate the speaker amplifier behind an enable pin (PyBadge/PyGamer SPEAKER_ENABLE).
+    Without it the output is configured correctly and the board is still silent - which looks like a
+    picogame bug and is not one. The pin is kept alive in _KEEP: released, it drops the amp back off."""
+    p = getattr(board, "SPEAKER_ENABLE", None)
+    if p is None:
+        return
+    try:
+        import digitalio
+        en = digitalio.DigitalInOut(p)
+        en.direction = digitalio.Direction.OUTPUT
+        en.value = True
+        _KEEP.append(en)
+        _debug("audioout: speaker amplifier enabled")
+    except Exception as e:                # already claimed by the game? not fatal, just report
+        _debug("audioout: speaker enable ->", repr(e))
 
 
 def _resolve_pwm_pin(pin=None):
