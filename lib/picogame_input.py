@@ -292,6 +292,18 @@ class Buttons:
                     self._mapped |= pad.mapped
             except Exception as e:
                 _debug("input: I2C pad not attached ->", repr(e))
+        # Buttons on a parallel-in SHIFT REGISTER (74HC165), the way a PyBadge wires its eight.
+        # Opt-in for the same reason as the I2C pads: three GPIOs cannot be probed for safely,
+        # because clocking an unknown device is not a read-only act. See picogame_shiftpad.
+        spec = os.getenv("PICOGAME_SHIFTPAD")
+        if spec and str(spec) != "0":
+            try:
+                import picogame_shiftpad
+                for pad in picogame_shiftpad.attach(spec):
+                    self._sources.append(pad)
+                    self._mapped |= pad.mapped
+            except Exception as e:
+                _debug("input: shift-register pad not attached ->", repr(e))
         if usb is False:
             return
         if usb is None:
