@@ -304,6 +304,19 @@ class Buttons:
                     self._mapped |= pad.mapped
             except Exception as e:
                 _debug("input: shift-register pad not attached ->", repr(e))
+
+        # The board's accelerometer steering the D-pad. Opt-in: a motion sensor answering on the bus
+        # is not a request to play by tilting, and on a board that has one it would otherwise start
+        # fighting the real D-pad the moment someone picks it up. See picogame_tiltpad.
+        spec = os.getenv("PICOGAME_TILTPAD")
+        if spec and str(spec) != "0":
+            try:
+                import picogame_tiltpad
+                for pad in picogame_tiltpad.attach(spec):
+                    self._sources.append(pad)
+                    self._mapped |= pad.mapped
+            except Exception as e:
+                _debug("input: tilt pad not attached ->", repr(e))
         if usb is False:
             return
         if usb is None:
