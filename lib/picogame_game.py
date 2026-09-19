@@ -12,7 +12,7 @@ import picogame as pg
 # The bundle's release, so a board can be asked what it is actually running. A stale .mpy bundle
 # shadowing an edited .py is the classic silent failure here (sys.path order, not a suffix rule),
 # and "which libs are on this board?" had no answer before. Bump this with the git tag.
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 
 try:
     from picogame_debug import note as _debug   # optional diagnostics (settings.toml PICOGAME_DEBUG=1)
