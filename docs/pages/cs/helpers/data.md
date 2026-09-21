@@ -62,7 +62,7 @@ def big_canvas(w, h, transparent=None, first=False):
 ```
 
 :::note[Pozor]
-aréna vyžaduje firmware `Canvas` s argumentem `buffer=`. Simulátor si nyní vytváří vlastní úložiště plátna, takže omezení fragmentace se projeví na [hardwaru](/cs/hardware/). Po `reset()` nebo `release()` nepoužívej objekty nad uvolněnými částmi; nové alokace mohou jejich data přepsat.
+aréna vyžaduje firmware `Canvas` s argumentem `buffer=`. Simulátor `buffer=` respektuje také, takže plátno nad arénou sdílí její bajty i tam — samotné omezení fragmentace se ale projeví až na [hardwaru](/cs/hardware/). Po `reset()` nebo `release()` nepoužívej objekty nad uvolněnými částmi; nové alokace mohou jejich data přepsat.
 :::
 
 ## picogame_stream

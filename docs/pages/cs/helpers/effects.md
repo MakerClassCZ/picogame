@@ -142,7 +142,7 @@ Pruh pro HUD předej jako `top=`/`bottom=`/…, ne přičtením k `h`. `Camera(s
 
 ### `fx.Sky` - vertikální gradientní pozadí
 
-Svislý gradient se kreslí po řádcích přes `StripDraw`. Drží tabulku `h` barev v pořadí pro přenos, tedy `2 * h` bajtů, a při překreslení znovu vykreslí požadované řádky. Přidej ho před herní vrstvy.
+Svislý gradient se kreslí přes `StripDraw`. Při prvním vykreslení postaví pět `uint16` tabulek po `h` položkách (asi `10 * h` bajtů), které popisují gradient jako sloučené běhy řádků stejné barvy, a při překreslení vykreslí požadované řádky. Přidej ho před herní vrstvy.
 
 - `Sky(scene, x, y, w, h, top, bottom)` - vyplní obdélník a interpoluje každý řádek od barvy `top` k `bottom`. Obě jsou RGB565 v pořadí pro přenos. Vrstva je `fixed=True`. Změnou `.top` a `.bottom` můžeš animovat denní dobu.
 
@@ -155,7 +155,7 @@ sky = fx.Sky(scene, 0, 0, W, HORIZON,
 ```
 
 :::note[Pozor]
-při každém překreslení volá `fill_rect` pro každý viditelný řádek. Náklady na CPU proto rostou s výškou překreslované oblasti.
+kreslí jedním dávkovým voláním `Canvas.vspans` na strip, ne `fill_rect` po řádcích — tabulky běhů se ale přestaví pokaždé, když se změní `.top` nebo `.bottom`, takže cyklus dne a noci řiď po krocích, ne každý snímek.
 :::
 
 ### `fx.Scanlines` - překryv s řádky CRT

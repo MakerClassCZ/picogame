@@ -15,12 +15,12 @@ changes that need action from you in one place.
 
 Newest first. Everything else on this page is additive.
 
-- **0.3.1 (2026-09-19)** — `picogame_game.setup(rgb444="auto")` asks `settings.toml`, not the
-  firmware: it turns RGB444 on only where `PICOGAME_RGB444 = 1` is set *and* the controller can
-  do it. It used to enable RGB444 wherever the firmware supported it. Support and benefit are
-  not the same — RGB444 trades CPU for wire time, so it wins on a slow bus (a PyBadge at 24 MHz
-  gains about 26%) and loses on a fast one (a PicoPad at 62.5 MHz). If you were relying on the
-  old automatic behaviour, add the key.
+- **0.3.1 (2026-09-19)** — `picogame_game.setup()` with no `rgb444` argument now asks
+  `settings.toml` instead of the firmware: it turns RGB444 on only where `PICOGAME_RGB444 = 1` is
+  set *and* the controller can do it. The default used to be plain off, and `"auto"` (which still
+  means "on wherever the firmware supports it") was how you opted in. Support and benefit are not
+  the same — RGB444 trades CPU for wire time, so it wins on a slow bus (a PyBadge at 24 MHz gains
+  about 26%). An explicit `rgb444=True`/`False`/`"auto"` in the game still wins over the key.
 - **0.3.0 (2026-09-06)** — the helper libs ship as one set: `picogame_script` needs the
   `picogame_ui` from the same release (no compatibility shim). Update the whole bundle, not
   single files. Older `*.scene.json` / `project.json` files still load; `tools/scene_build.py

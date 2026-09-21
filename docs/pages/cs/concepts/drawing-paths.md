@@ -159,10 +159,12 @@ Bitmapa se zmenšuje **kvadraticky**, plocha na obrazovce zůstává:
 Na RP2040 (≈ 25–40 KB volné haldy) je celoobrazovkové bitmapové pozadí v 1:1 nemožné a při 4×
 pohodlné — právě tahle technika ho umožní.
 
-Za běhu je to levné **jen při měřítkách mocnin dvou**: engine má vyhrazenou rychlou cestu pro
-neprůhledné PAL8 (a RGB565) sprity se `scale` přesně 2, 4 nebo 8, změřeno ~1,5× proti obecnému
-škálovanému blitu (každá zdrojová řádka se rasterizuje jednou a opakování se kopírují). Jakékoli
-jiné měřítko — 3, 1,5, tweenované 0,8→1,5 — jde obecným scalerem, který je v pořádku pro malé
+Za běhu je to levné **jen při měřítkách mocnin dvou** a každý formát jinak: neprůhledné **PAL8**
+sprity mají vyhrazenou rychlou cestu pro libovolnou mocninu dvou (2, 4, 8, 16 …), neprůhledné
+**RGB565** jen přesně pro 2× (a jen když jsou zdrojová data zarovnaná na 2 bajty). Změřeno ~1,5×
+proti obecnému škálovanému blitu — každá zdrojová řádka se rasterizuje jednou a opakování se
+kopírují. Všechno ostatní — RGB565 při 4×, měřítko 3, 1,5, tweenované 0,8→1,5 — jde obecným
+scalerem, který je v pořádku pro malé
 sprity, ale drahý pro vrstvy přes celou šířku. Průhledné sprity jdou také obecnou cestou, takže
 velké škálované vrstvy drž neprůhledné.
 

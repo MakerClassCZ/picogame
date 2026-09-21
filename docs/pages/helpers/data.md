@@ -62,7 +62,7 @@ def big_canvas(w, h, transparent=None, first=False):
 ```
 
 :::note[Gotchas]
-this needs a firmware `Canvas` with the `buffer=` argument. The simulator currently allocates its own canvas storage, so the anti-fragmentation benefit applies on [hardware](/hardware/). After `reset()` or `release()`, do not use objects backed by the reclaimed slices; new allocations may overwrite their data.
+this needs a firmware `Canvas` with the `buffer=` argument. The simulator honours `buffer=` too, so an arena-backed canvas aliases the arena's bytes there as well — the anti-fragmentation benefit itself is a [hardware](/hardware/) matter. After `reset()` or `release()`, do not use objects backed by the reclaimed slices; new allocations may overwrite their data.
 :::
 
 ## picogame_stream

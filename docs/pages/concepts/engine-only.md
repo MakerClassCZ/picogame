@@ -14,8 +14,9 @@ The C module (`import picogame as pg`) exports the engine:
 
 - **Types:** `Scene`, `Sprite`, `Bitmap`, `Tilemap`, `Canvas`, `StripDraw`, `Particles`, `Triangles`,
   `Display`, `Framebuffer`.
-- **Functions:** `render` / `refresh_async`, `collide`, `raycast`, `project`, `road_edges`, `value2d` /
-  `fbm2d` noise, `rgb565`, `vblank`, ROMFS streaming.
+- **Functions:** `render`, `collide`, `raycast`, `project`, `road_edges`, `value2d` / `fbm2d` noise,
+  `rgb565`, ROMFS streaming. Two more exist only in fork builds: `vblank` (RP2350 DVI) and
+  `refresh_async` (behind an opt-in make flag) — guard them with `hasattr` if you use them.
 
 That is every compute-heavy, distinctive capability - sprites with runtime scale/rotation and blit
 effects, dirty-rect compositing, 0-RAM tilemaps and strips, native text, collision, procedural noise,
@@ -36,8 +37,9 @@ something moves by N pixels, and just set `sprite.x` / `sprite.y`. The engine ne
 
 ## A complete game with only the C module
 
-No `picogame_*` import anywhere - only `picogame` plus `board`, `time`, `array`, `terminalio`,
-`digitalio`. It moves a player with the D-pad, collects a coin via native collision, flashes on
+One helper import, `picogame_game`, and only to find the display and its size — everything that
+draws, moves or collides below is the C module, plus stock `board`, `time`, `array`, `terminalio`
+and `digitalio`. It moves a player with the D-pad, collects a coin via native collision, flashes on
 pickup, and draws a native-text HUD.
 
 ![The engine-only game running: a player square, a coin, and a native-text HUD - no helper libraries](/img/engine-only.png)
@@ -47,6 +49,7 @@ pickup, and draws a native-text HUD.
 import board, time, array
 import terminalio, digitalio
 import picogame as pg
+import picogame_game          # only for display() / screen(); nothing below needs it
 
 W, H = picogame_game.screen()
 

@@ -105,7 +105,7 @@ Přítomnost závisí na buildu firmwaru. NEOVĚŘUJ přes `hasattr` na TYPECH �
 
 | Název | Přítomné když | Účel |
 |---|---|---|
-| `Display` | `pg.FAST_DISPLAY_SUPPORTED` (buildy RP2/ESP) | backend s asynchronním DMA; na přenositelných portech chybí (místo ní předej `Scene` běžný busdisplay) |
+| `Display` | `pg.FAST_DISPLAY_SUPPORTED` (buildy RP2 / ESP32 / SAMD51) | backend s asynchronním DMA; na přenositelných portech chybí (místo ní předej `Scene` běžný busdisplay) |
 | `Framebuffer` | `pg.FRAMEBUFFER_SUPPORTED` (platformy s výstupním framebufferem, např. WASM playground) | cíl vykreslování v RAM místo panelu |
 | `RGB444_SUPPORTED` | vždy (bool) | zda panel této desky umí 12bitové RGB444 |
 | `STRIP_H` | vždy (int) | výchozí výška stripu desky (používá ji `picogame_game.setup`) |
@@ -382,7 +382,7 @@ Jak se `refresh()` nebo `render()` dostane na výstup:
 
 ## Build firmwaru
 
-Engine je nativní modul uvnitř forku CircuitPythonu; jeho build popisuje samostatný
+Engine je nativní modul v CircuitPythonu; jeho build popisuje samostatný
 průvodce **[Build firmwaru](../firmware.md)** (nástroje, konfigurace desek a volby). Hotový
 firmware pro podporované desky: [Podporovaný hardware](../supported-hardware.md).
 

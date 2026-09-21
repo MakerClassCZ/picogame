@@ -131,7 +131,7 @@ sprite = pg.Sprite(ball, 100, 60)
 
 ## picogame_pool
 
-`Pool` pre-allocates a fixed number of sprites for short-lived objects such as bullets, enemies, or pickups. `sprite.visible` marks an occupied slot and `sprite.data` can hold entity state. Spawning and freeing slots allocate no new sprites. See [/memory/](/memory/) for why stable allocation matters on the device.
+`Pool` pre-allocates a fixed number of sprites for short-lived objects such as bullets, enemies, or pickups. the pool tracks which slots are taken (a spawned sprite is made visible) and `sprite.data` can hold entity state. Spawning and freeing slots allocate no new sprites. See [/memory/](/memory/) for why stable allocation matters on the device.
 
 `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` pre-allocates `capacity` hidden sprites sharing `bitmap`, sets each `anchor` (if given) and `data = None`, and adds them all to `scene` (`fixed=` passes through to `scene.add`).
 
@@ -140,7 +140,7 @@ sprite = pg.Sprite(ball, 100, 60)
 - `pool.baseline()` - re-snapshot the baseline after reconfiguring the sprites later in the game (bigger rocks on level 3).
 - `pool.free(s)` - hide sprite `s` (return it to the pool).
 - `pool.free_all()` - hide every sprite (use on level reset).
-- `pool.count()` - count of live (visible) sprites; cheap, but iterate `items` for the sprites themselves.
+- `pool.count()` - count of live slots, O(1). A slot stays live even if you hide its sprite yourself, so this is not a count of what's on screen; iterate `items` for the sprites themselves.
 
 ```python
 import picogame as pg

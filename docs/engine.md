@@ -106,7 +106,7 @@ Presence depends on the firmware build. Do NOT feature-test the TYPES with `hasa
 
 | Name | Present when | Purpose |
 |---|---|---|
-| `Display` | `pg.FAST_DISPLAY_SUPPORTED` (RP2/ESP builds) | async-DMA render backend; on other builds the type exists but constructing it raises (pass the plain busdisplay to `Scene` instead) |
+| `Display` | `pg.FAST_DISPLAY_SUPPORTED` (RP2 / ESP32 / SAMD51 builds) | async-DMA render backend; on other builds the type exists but constructing it raises (pass the plain busdisplay to `Scene` instead) |
 | `Framebuffer` | `pg.FRAMEBUFFER_SUPPORTED` (scanout-buffer platforms, e.g. the WASM playground) | RAM render target instead of a panel; the type itself exists everywhere |
 | `RGB444_SUPPORTED` | always (bool) | whether this board's panel can drive 12-bit RGB444 |
 | `STRIP_H` | always (int) | the board's default render-strip height (`picogame_game.setup` uses it) |
@@ -384,7 +384,7 @@ How a `refresh()` or `render()` reaches the output:
 
 ## Building the firmware
 
-The engine is a native module inside a CircuitPython fork; building it is its own guide -
+The engine is a native module in CircuitPython; building it is its own guide -
 see **[The firmware build](firmware.md)** (toolchain, board configs, flags). Prebuilt
 firmware for supported boards: [Supported hardware](supported-hardware.md).
 

@@ -142,7 +142,7 @@ With a HUD band, pass it as `top=`/`bottom=`/… - not by padding `h`. `Camera(s
 
 ### `fx.Sky` - vertical gradient background
 
-A per-scanline gradient drawn through `StripDraw`. It retains a lookup table of `h` wire-order colours, or `2 * h` bytes, and redraws the requested rows when its region is repainted. Add it before the gameplay layers.
+A vertical gradient drawn through `StripDraw`. On its first draw it builds five `h`-entry `uint16` tables (about `10 * h` bytes) describing the gradient as merged equal-colour row runs, and redraws the requested rows when its region is repainted. Add it before the gameplay layers.
 
 - `Sky(scene, x, y, w, h, top, bottom)` - fills the rect, lerping each scanline from the `top` wire-RGB565 colour to `bottom`. Added `fixed=True`. Change `.top`/`.bottom` over time for a day-night cycle.
 
@@ -155,7 +155,7 @@ sky = fx.Sky(scene, 0, 0, W, HORIZON,
 ```
 
 :::note[Gotchas]
-it issues one `fill_rect` per visible scanline. Its CPU cost grows with the height of the repainted region.
+it paints through a single batched `Canvas.vspans` call per strip, not one `fill_rect` per scanline — but the run tables are rebuilt whenever `.top` or `.bottom` changes, so drive a day-night cycle in steps, not every frame.
 :::
 
 ### `fx.Scanlines` - CRT scanline overlay

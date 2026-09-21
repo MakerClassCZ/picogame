@@ -20,22 +20,25 @@ RAM budget.
 
 ## Where picogame lives in the tree
 
-The engine lives in the `picogame` branch of the CircuitPython fork. Two module directories
-contain the implementation, and build flags select the module and optional backends.
+The engine is part of CircuitPython itself — `shared-bindings/picogame/` and
+`shared-module/picogame/` live in adafruit/circuitpython, off by default and turned on per board.
+The MakerClass fork carries only work that is not upstream yet (experimental feature branches and
+boards awaiting a PR). Two module directories contain the implementation, and build flags select
+the module and optional backends.
 
 | Path | What |
 |---|---|
 | `shared-bindings/picogame/` | the Python-facing API + docstrings: `__init__`, `Scene`, `Sprite`, `Bitmap`, `Tilemap`, `Canvas`, `Particles`, `Display`, `Framebuffer` |
 | `shared-module/picogame/` | the **portable** C core — the blit / scene / tilemap / particles / canvas implementation, no port dependencies |
-| `ports/*/common-hal/picogame/Display.c` | the optional per-port fast display backend (raspberrypi + espressif provide one) |
+| `ports/*/common-hal/picogame/Display.c` | the optional per-port fast display backend (raspberrypi, espressif and atmel-samd provide one) |
 
 Build-system hooks:
 
 | File | Change |
 |---|---|
-| `py/circuitpy_mpconfig.mk` | registers the five `CIRCUITPY_PICOGAME*` flags — all default `0` |
+| `py/circuitpy_mpconfig.mk` | registers the `CIRCUITPY_PICOGAME*` flags — the four switches default `0`; `CIRCUITPY_PICOGAME_FPU` is unset and follows the architecture |
 | `py/circuitpy_defns.mk` | compiles `picogame/%` only when `CIRCUITPY_PICOGAME = 1`; adds `common-hal/picogame/Display.c` only when `FAST_DISPLAY = 1` |
-| `ports/raspberrypi/boards/pajenicko_picopad/` | the board that opts in (config below) |
+| `ports/*/boards/<board>/mpconfigboard.mk` | the boards that opt in — PicoPad, PicoSystem, Fruit Jam, Pico, Pico W (raspberrypi) and PyBadge (atmel-samd); config below |
 
 ### The port intervention: the fast display path
 
@@ -73,8 +76,7 @@ A board turns the engine on in its `mpconfigboard.mk`:
 ```make
 CIRCUITPY_PICOGAME = 1                # compile the engine in
 CIRCUITPY_PICOGAME_FAST_DISPLAY = 1   # async-DMA display backend (raspberrypi port)
-CIRCUITPY_PICOGAME_RGB444 = 0         # panel COLMOD capability (see Build flags)
-OPTIMIZATION_FLAGS = -O2 …            # tuned for the Cortex-M0+ (see appendix)
+CIRCUITPY_PICOGAME_RGB444 = 1         # panel COLMOD capability (see Build flags)
 CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'   # + a matching linker-script change
 ```
 
@@ -101,10 +103,13 @@ CircuitPython version and enabled modules.
 | Flag | Default | What it does |
 |---|---|---|
 | `CIRCUITPY_PICOGAME` | `0` | compile the engine in |
-| `CIRCUITPY_PICOGAME_FAST_DISPLAY` | `0` | use the port's async-DMA `Display` (raspberrypi + espressif); other boards fall back to the portable `bus.send` renderer |
-| `CIRCUITPY_PICOGAME_RGB444` | `0` | board declares its panel supports 12-bit RGB444 (COLMOD), exposed as `picogame.RGB444_SUPPORTED` so a game can enable `Display(rgb444=True)` only where it helps. Both PicoPad boards set it to `1` (the capability IS compiled in); it stays off at RUNTIME by default because on this CPU-balanced panel the per-strip pack cost ≥ the SPI saving. |
+| `CIRCUITPY_PICOGAME_FAST_DISPLAY` | `0` | use the port's async-DMA `Display` (raspberrypi, espressif, atmel-samd); other boards fall back to the portable `bus.send` renderer |
+| `CIRCUITPY_PICOGAME_RGB444` | `0` | board declares its panel supports 12-bit RGB444 (COLMOD), exposed as `picogame.RGB444_SUPPORTED` so a game can enable `Display(rgb444=True)` only where it helps. Both PicoPad boards and the PyBadge set it to `1` (the capability IS compiled in); whether a game uses it is a runtime choice — `picogame_game.setup(rgb444=…)`, or `PICOGAME_RGB444` in `settings.toml` as the per-device default. Measured a win on both (PicoPad and the PyBadge's 24 MHz bus). |
 | `CIRCUITPY_PICOGAME_FRAMEBUFFER` | `0` | full-frame RAM-framebuffer backend for scanout platforms (RP2350 DVI/HSTX, the desktop sim, the WASM playground) instead of an SPI strip bus |
-| `CIRCUITPY_PICOGAME_XIP_MAP` | `0` | maps flash files for 0-copy access (`pg.xip_map`, one memoryview per contiguous run); a fork-only feature branch, not in stock builds |
+
+Mapping a flash file for 0-copy access is no longer a picogame flag: the old `pg.xip_map(path)`
+was replaced by `storage.map_file(file)`, which takes an **open file object** and is proposed
+upstream rather than built into the engine.
 
 **Render-strip height.** On an SPI display, the screen is painted in horizontal strips of
 `STRIP_H` rows. `picogame_game.setup()` allocates two `width × STRIP_H × 2`-byte buffers;
@@ -118,27 +123,39 @@ as `picogame.STRIP_H`. More in [Fit it in RAM](memory.md).
 
 ## Appendix: compiler optimization (tuned −O2)
 
-CircuitPython's rp2 port defaults to `-O3`. On the PicoPad's Cortex-M0+ (no SIMD, no FPU,
-16 KB XIP cache) most of what `-O3` adds is dead weight — the auto-vectorizers have no SIMD to
-target, and function cloning / heavy loop unrolling only grow flash. So the board ships
-**`-O2` plus the five cheap loop passes that do help the pixel loops**, matching `-O3` engine
-speed within ~1 % for ~150 KB less flash:
+The rp2 port used to default to `-O3`. On a Cortex-M0+ (no SIMD, no FPU, 16 KB XIP cache) most of
+what `-O3` adds is dead weight — the auto-vectorizers have no SIMD to target, and function cloning
+and heavy loop unrolling only grow flash. Since CircuitPython 10.4 the **port** default is two
+cheap passes on top of `-O2` (`ports/raspberrypi/Makefile`), so no board carries an
+`OPTIMIZATION_FLAGS` line of its own:
 
 ```make
-OPTIMIZATION_FLAGS = -O2 -funswitch-loops -fpredictive-commoning -fgcse-after-reload \
-                     -ftree-partial-pre -fsplit-paths
+OPTIMIZATION_FLAGS ?= -O2 -funswitch-loops -fvect-cost-model=dynamic
 ```
+
+The two do not overlap. `-funswitch-loops` owns the sprite blit and mode7 (blit 113 → 87 µs) and
+costs 16 KB; `-fvect-cost-model=dynamic` — which is the one thing `-O3` changes about
+vectorization, from `very-cheap` to `dynamic` — owns the fills, the memory copies and AES
+(`fill_rect` 1163 → 732 µs, a 4 KB `bytearray` copy 3857 → 2441 µs) and costs 4 KB. Together they
+reach `-O3` speed on every kernel measured, for **+20,664 bytes over `-O2` instead of `-O3`'s
++151,020** — about 130 KB of flash back on every rp2 board, picogame or not.
+
+An earlier revision of this page recommended `-O2` plus five passes. Measuring the five one at a
+time (GCC 15.2, `raspberry_pi_pico`) showed that only `-funswitch-loops` earned its place;
+`-fpredictive-commoning`, `-fgcse-after-reload`, `-ftree-partial-pre` and `-fsplit-paths` produced
+code that timed the same as plain `-O2`. The table below is from that earlier opt-**level** sweep
+and is kept for the level comparison; its `O2+` row is the retired five-pass build.
 
 The MicroPython interpreter core (`gc.o`, `vm.o`) stays at `-O3` via CircuitPython's
 `SUPEROPT_*` settings, so Python execution speed is unaffected. The single hottest loop (the
-plain sprite blit) additionally carries a `#pragma GCC unroll 4` — ~8 % faster on the M0+ for
-+0.3 KB; `-funroll-loops` firmware-wide would overflow the flash region.
+plain sprite blit) additionally carries a `#pragma GCC unroll 4` — ~6 % faster on the M0+ for
++0.6 KB; `-funroll-loops` firmware-wide would overflow the flash region.
 
 Measured on-device, all builds on CircuitPython 10.3.0; **lower is faster**, best in each
 column **bold**. **Engine** = `picogame_bench_hotpath.py` (108 sprites of 32×32 over 120
 frames at 320×240, ms/frame min); **Python** = `bench_optlevel.py` (ms/op); **flash** = full
-image, KB. The `O2+` row is the shipped build (baseline); each `🟢/🟡/🔴` marks how far a
-cell sits from it (better / ≤5 % worse / >5 % worse).
+image, KB. The `O2+` row is the baseline (the five-pass build this page used to recommend); each
+`🟢/🟡/🔴` marks how far a cell sits from it (better / ≤5 % worse / >5 % worse).
 
 | | bg-fill<br><sub>ms</sub> | plain<br><sub>ms</sub> | plain+bg<br><sub>ms</sub> | tint<br><sub>ms</sub> | transpose<br><sub>ms</sub> | bignum<br><sub>ms</sub> | int<br><sub>ms</sub> | float<br><sub>ms</sub> | fib<br><sub>ms</sub> | ulab-py<br><sub>ms</sub> | ulab-np<br><sub>ms</sub> | flash<br><sub>KB</sub> |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -146,7 +163,7 @@ cell sits from it (better / ≤5 % worse / >5 % worse).
 | `-O2` | 25.3 🟡<sub>+0.4%</sub> | 38.2 🔴<sub>+5.9%</sub> | 39.1 🔴<sub>+5.7%</sub> | 81.2 🟡<sub>+0.8%</sub> | 53.9 🔴<sub>+17%</sub> | 92.0 🟡<sub>+1.3%</sub> | **20.29** 🟢<sub>−0.6%</sub> | 40.34 🟡<sub>+0.1%</sub> | 660.2 🟡<sub>+0.3%</sub> | 3.77 🔴<sub>+40%</sub> | 0.66 🟡<sub>+1.5%</sub> | 1326 🟢<sub>−1.4%</sub> |
 | `-Os` | 27.0 🔴<sub>+7.4%</sub> | 43.6 🔴<sub>+21%</sub> | 46.4 🔴<sub>+25%</sub> | 121.9 🔴<sub>+51%</sub> | 103.0 🔴<sub>+124%</sub> | 113.3 🔴<sub>+25%</sub> | 21.18 🟡<sub>+3.7%</sub> | 44.07 🔴<sub>+9.4%</sub> | 667.3 🟡<sub>+1.4%</sub> | 3.00 🔴<sub>+11%</sub> | 0.73 🔴<sub>+12%</sub> | **1167** 🟢<sub>−13%</sub> |
 | `O3−` *(−O3 minus vectorizers + cloning)* | 25.2 🟡<sub>+0.1%</sub> | 36.2 🟡<sub>+0.5%</sub> | 37.2 🟡<sub>+0.6%</sub> | 81.5 🟡<sub>+1.1%</sub> | 46.1 🟡<sub>+0.2%</sub> | 96.1 🔴<sub>+5.8%</sub> | 20.32 🟢<sub>−0.5%</sub> | 40.95 🟡<sub>+1.7%</sub> | 662.8 🟡<sub>+0.7%</sub> | 2.75 🟡<sub>+2.2%</sub> | 0.68 🟡<sub>+4.6%</sub> | 1480 🔴<sub>+10%</sub> |
-| **`O2+`** *(shipped — baseline)* | 25.2 | **36.0** | **37.0** | 80.6 | **46.0** | **90.8** | 20.42 | **40.28** | 658.0 | 2.69 | **0.65** | 1345 |
+| **`O2+`** *(five passes — baseline)* | 25.2 | **36.0** | **37.0** | 80.6 | **46.0** | **90.8** | 20.42 | **40.28** | 658.0 | 2.69 | **0.65** | 1345 |
 
 `-Os` shrinks flash most but wrecks the affine/blend loops (`tint` +51 %, `transpose` +124 %);
 `O3−` matches engine speed yet stays +134 KB because `-O3`'s firmware-wide inlining survives;

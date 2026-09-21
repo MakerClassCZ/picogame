@@ -48,8 +48,9 @@ jediný: displej jednou postavit a zveřejnit. **Vyber si jednu cestu:**
    displej podle `settings.toml` a hra zůstane **beze změny jako `code.py`**. Postup funguje i pro
    existující hry a hry postavené na `stage`. **Po nakopírování `boot.py` jednou stiskni RESET**
    (nebo odpoj a připoj USB): `boot.py` běží jen při zapnutí — uložení souboru spustí `code.py`,
-   ale `boot.py` ne, takže do restartu je `board.DISPLAY` `None` a hra spadne s
-   `AttributeError: 'NoneType' object has no attribute 'width'`.
+   ale `boot.py` ne, takže do restartu žádný displej není a hra spadne s
+   `RuntimeError: no display: if you just added boot.py press RESET once …` — hláška rovnou říká,
+   co udělat.
 3. **Jiný firmware** bez místa pro displej. Spouštěcí `code.py` vytvoří displej, zveřejní ho přes
    `supervisor.runtime.display = disp` a potom spustí hru uloženou jako `game.py`.
 
@@ -99,9 +100,9 @@ takže v ní se změny projeví i po měkkém restartu.
 
 Klíče výše pokrývají běžný případ. Níže je každý **runtime** klíč, který picogame čte. Všechny se
 čtou za běhu, takže desku přizpůsobíš **bez nového flashe** — klíč se projeví po dalším restartu
-(klíče displeje vyžadují plný restart, viz poznámka výše). Hodnoty jsou **jen celá čísla nebo
-řetězce**: `settings.toml` v CircuitPythonu nezná desetinná čísla ani booleany, takže zapnuto/vypnuto
-je `1`/`0` a hlasitost je **celé číslo v dB**.
+(klíče displeje vyžadují plný restart, viz poznámka výše). `os.getenv` vrací každou hodnotu jako
+**řetězec**, takže zapnuto/vypnuto piš jako `1`/`0` a hlasitost drž v celých dB; nic chytřejšího
+picogame neparsuje.
 
 | Klíč | Formát / hodnoty | Příklad | Poznámka |
 |---|---|---|---|
@@ -116,7 +117,7 @@ je `1`/`0` a hlasitost je **celé číslo v dB**.
 | `PICOGAME_SPK_VOLUME` | celé číslo v dB, `<= 0` | `-10` | Analogové doladění reproduktoru (stejná škála jako sluchátka). |
 | `PICOGAME_USB` | `1` / `0` | `PICOGAME_USB = 0` | Na buildu s USB hostem `0` **vypne** automatické připojení USB HID vstupu (gamepad + klávesnice). Výchozí zapnuto. |
 | `PICOGAME_USBPAD` | tokeny `NÁZEV=bajt:maska` | `"A=5:0x40 B=5:0x20"` | Přemapuje tlačítka gamepadu (index bajtu HID reportu : bitová maska). Částečný seznam se sloučí přes výchozí hodnoty DragonRise. |
-| `PICOGAME_USBPAD_ID` | `"VID:PID"` (hex) | `"081f:e401"` | Připne USB gamepad na konkrétní zařízení (přeskočí autovýběr), když je připojeno víc HID zařízení. |
+| `PICOGAME_USBPAD_ID` | `"VID:PID"` (hex) | `"081f:e401"` | VID/PID padu. **Povinné pro každý pad, který není výchozí DragonRise `081f:e401`** — driver hledá podle VID/PID a nikdy nebere „první zařízení", takže bez tohoto klíče se jiný pad prostě nenajde. Úplně cizí pad potřebuje navíc mapu bajtů přes `PICOGAME_USBPAD`. |
 | `PICOGAME_USBPAD_TIMEOUT` | ms | `10` | Timeout čtení HID pro poll gamepadu. Zvyš jen, když pad zahazuje vstupy. |
 | `PICOGAME_KBD` | `1` / `0` | `PICOGAME_KBD = 0` | `0` vypne pouze USB **klávesnici** (gamepad se stále připojí). Výchozí zapnuto. |
 | `PICOGAME_USBKBD` | tokeny `NÁZEV=keycode` | `"A=0x2C START=0x28"` | Přemapuje klávesy USB klávesnice na tlačítka hry (HID keycode, hex nebo dekadicky). Sloučí se přes výchozí rozložení šipky/WASD. |
@@ -124,6 +125,8 @@ je `1`/`0` a hlasitost je **celé číslo v dB**.
 | `PICOGAME_USBKBD_TIMEOUT` | ms | `10` | Timeout čtení HID pro poll klávesnice. |
 | `PICOGAME_I2CPAD` | preset / recept | `"qwstpad"` | **Opt-in** I2C gamepad (pady na GPIO expandérech, např. Pimoroni QwSTPad) — funguje na jakékoli desce s I2C, USB host není potřeba. Název presetu, `preset@0xNN`, více oddělených `;`, nebo celý recept (`"addr=0x20 read=:1 inv=1 UP=0 A=4 …"`). Bez nastavení vypnuto. |
 | `PICOGAME_I2C` | piny `"SDA,SCL"`, nebo název sběrnice | `"GP4,GP5"` | I2C sběrnice pro pad výše. Potřeba jen na holé desce nebo při nestandardním zapojení — konektor STEMMA/Qw-ST nepotřebuje nic. Jediný token místo toho pojmenuje sběrnici desky (`"I2C0"`). |
+| `PICOGAME_SHIFTPAD` | preset / recept | `"pybadge"` | **Opt-in** tlačítka za posuvným registrem 74HC165 (PyBadge a spol.). Název presetu, nebo celý recept (`"latch=… clock=… data=… bits=8 A=1 B=0 …"`). Bez nastavení vypnuto — taktovat tři neznámé GPIO se nikdy nezkouší naslepo. |
+| `PICOGAME_TILTPAD` | preset / recept | `"pybadge"` | **Opt-in** akcelerometr jako D-pad; jeho směry se sčítají se skutečnými tlačítky. Preset, nebo preset s úpravami (`"lis3dh on=4000 off=2500"`). Bez nastavení vypnuto. |
 | `PICOGAME_RGB444` | `1` / `0` | `PICOGAME_RGB444 = 1` | `1` posílá do panelu 12bitové RGB444 (~25 % méně dat po SPI) všude, kde to firmware podporuje (`picogame.RGB444_SUPPORTED`). Vyplatí se na pomalé sběrnici (PyBadge: SPI 24 MHz). Explicitní `setup(rgb444=...)` ve hře má před klíčem přednost. Vypnuto, dokud není nastaveno. |
 | `PICOGAME_DEBUG` | `1` / `0` | `PICOGAME_DEBUG = 1` | **Když něco nefunguje, nastav tohle.** Vypíše důvody selhání `[picogame] ...` (audio DAC/ovladač, USB pad/klávesnice, …) na sériovou konzoli. Po vyřešení odeber. |
 
@@ -138,11 +141,12 @@ automaticky **bez úpravy hry**; výchozí rozložení je generický pad DragonR
 `PICOGAME_USB = 0` to vypneš, nebo tlačítka jiného padu přemapuješ přes `PICOGAME_USBPAD` (jeho bajty
 reportu zjistíš USB sondou).
 
-:::note[Tohle jsou build flagy, ne nastavení]
-Výstup DVI/framebuffer, 12bitové barvy RGB444 a rychlý (DMA) backend displeje jsou **volby firmwaru
-při kompilaci** (`CIRCUITPY_PICOGAME_FRAMEBUFFER`, `CIRCUITPY_PICOGAME_RGB444`,
-`CIRCUITPY_PICOGAME_FAST_DISPLAY`), **ne** klíče `settings.toml` — nehledej runtime klíč. Pro build
-s nimi viz [Firmware](../firmware.md).
+:::note[Něco z tohohle se rozhoduje při buildu]
+Výstup DVI/framebuffer a rychlý (DMA) backend displeje jsou **volby firmwaru při kompilaci**
+(`CIRCUITPY_PICOGAME_FRAMEBUFFER`, `CIRCUITPY_PICOGAME_FAST_DISPLAY`) — runtime klíč k nim není.
+`CIRCUITPY_PICOGAME_RGB444` je flag **schopnosti**: deska jím oznamuje, že její panel umí 12bitové
+barvy, a runtime přepínač, který toho využije, je `PICOGAME_RGB444` výše. Pro build s nimi viz
+[Firmware](../firmware.md).
 :::
 
 ## Když je obraz špatně

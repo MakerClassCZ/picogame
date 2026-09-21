@@ -163,7 +163,7 @@ the `Arena` class is not game-specific):
 
 ```python
 import picogame_arena
-AR = picogame_arena.Arena(4096)        # 4096 bytes, grabbed up front (size = your max)
+AR = picogame_arena.Arena(4096)        # 4096 PIXELS = 8192 bytes, grabbed up front (size = your max)
 
 # --- networking example: reuse ONE response buffer instead of churning ---
 buf = AR.alloc(4096)                   # a memoryview slice, no per-request alloc

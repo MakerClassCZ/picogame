@@ -30,9 +30,9 @@ Some boards gate the speaker amplifier behind an enable pin (`board.SPEAKER_ENAB
 PyBadge and PyGamer). `picogame_audioout` raises it and holds it: without that the output is
 configured correctly and the board is still silent, which looks like a picogame bug and is not one.
 
-You normally never call it directly — construct `Audio()` / `Synth()` and it happens for you. `make_output(sample_rate=22050, pin=None)` is there if you want the raw device; passing an explicit `pin` **forces PWM**.
+You normally never call it directly — construct `Audio()` / `Synth()` and it happens for you. `make_output(sample_rate=22050, pin=None)` is there if you want the raw device; passing an explicit `pin` **skips the I2S DAC** and takes the analogue path — PWM where the firmware has `audiopwmio`, the chip's true DAC (`audioio`) where it does not, as on the SAMD51 boards.
 
-**Volume (I2S DAC boards):** the TLV320 driver's defaults are deliberately very quiet, so on a Fruit Jam sound can seem absent until you raise them in `settings.toml` — `PICOGAME_AUDIO_OUT` (`headphone`/`speaker`/`both`), `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` (integer dB, keep `<= 0`). See the [settings.toml reference](/custom-board/).
+**Volume (I2S DAC boards):** the TLV320 driver's own defaults are deliberately near-inaudible (headphones sit at −30 dB), so `picogame_audioout` raises them for you at init — −3 dB on the DAC and −10 dB on the analogue trims. You only touch `settings.toml` to change that: `PICOGAME_AUDIO_OUT` (`headphone`/`speaker`/`both`), `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` (dB, keep `<= 0`). See the [settings.toml reference](/custom-board/).
 
 :::caution[Fruit Jam: install the DAC driver or it's silent]
 I2S audio needs `adafruit_tlv320` **and** `adafruit_bus_device` in `CIRCUITPY/lib` (from the Adafruit
@@ -48,7 +48,7 @@ A convenience layer over CircuitPython's audio stack (`audiocore` + `audiomixer`
 
 ### `Audio(pin=None, voices=4, sample_rate=22050, channels=1, bits=16, signed=True)`
 
-Constructs the audio output and starts the mixer playing immediately. `pin=None` lets `picogame_audioout` pick the device (I2S DAC or the board's PWM speaker pin); an explicit `pin` forces PWM on that pin. `voices` is the number of simultaneous channels; voice 0 is reserved for music and voices 1..N-1 are used round-robin for sound effects. The other args define the sample format every clip must match.
+Constructs the audio output and starts the mixer playing immediately. `pin=None` lets `picogame_audioout` pick the device (I2S DAC, or the board's analogue speaker pin); an explicit `pin` takes the analogue path on that pin. `voices` is the number of simultaneous channels; voice 0 is reserved for music and voices 1..N-1 are used round-robin for sound effects. The other args define the sample format every clip must match.
 
 - `load(path)` - opens a `.wav` file as a reusable `WaveFile` sample. Build it once and keep the returned object alive (it holds the open file); replaying it is cheap.
 - `play(sample, *, voice=None, loop=False, volume=1.0)` - plays a sample. `voice` is keyword-only; `None` picks the next round-robin sfx voice. `volume` sets that voice's level (0.0-1.0). Returns the voice index it used.
@@ -110,9 +110,9 @@ Returns a `synthio.LFO` for a note's `bend`. With `once=True` and the default si
 
 ### `Synth(pin=None, sample_rate=22050, buffer_size=2048, music_level=0.4, sfx_level=0.7)`
 
-Sets up the output (via `picogame_audioout` — I2S DAC or PWM, same as `Audio`) and a 2-voice mixer: voice 0 for music (a `MidiTrack`), voice 1 for the live synth used by SFX. `pin=None` auto-selects the device; an explicit `pin` forces PWM. `music_level`/`sfx_level` are the starting mix levels for those two voices.
+Sets up the output (via `picogame_audioout` — I2S DAC or the analogue path, same as `Audio`) and a 2-voice mixer: voice 0 for music (a `MidiTrack`), voice 1 for the live synth used by SFX. `pin=None` auto-selects the device; an explicit `pin` takes the analogue path. `music_level`/`sfx_level` are the starting mix levels for those two voices.
 
-- `sfx(n)` - plays note `n` as a one-shot effect. It retriggers the note's LFOs first (so a repeated zap sounds identical every time), then calls `release_all_then_press`, so back-to-back SFX cut cleanly.
+- `sfx(n)` - plays note `n` as a one-shot effect. It retriggers the note's LFOs first (so a repeated zap sounds identical every time), then releases **only the previous SFX** before pressing the new one, so back-to-back SFX cut cleanly while a held `Drone` and the music keep sounding.
 - `press(n)` / `release(n)` - hold and release a note manually, for sounds that last as long as a button is held rather than firing once.
 - `music(midi_track)` - plays a `MidiTrack` (from `load_midi`) on voice 0, looping.
 - `stop_music()` - stops the music voice.

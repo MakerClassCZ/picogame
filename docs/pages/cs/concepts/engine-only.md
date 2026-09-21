@@ -14,8 +14,9 @@ C modul (`import picogame as pg`) exportuje engine:
 
 - **Typy:** `Scene`, `Sprite`, `Bitmap`, `Tilemap`, `Canvas`, `StripDraw`, `Particles`, `Triangles`,
   `Display`, `Framebuffer`.
-- **Funkce:** `render` / `refresh_async`, `collide`, `raycast`, `project`, `road_edges`, `value2d` /
-  `fbm2d` šum, `rgb565`, `vblank`, ROMFS streaming.
+- **Funkce:** `render`, `collide`, `raycast`, `project`, `road_edges`, `value2d` / `fbm2d` šum,
+  `rgb565`, ROMFS streaming. Další dvě existují jen ve forkových buildech: `vblank` (DVI na RP2350)
+  a `refresh_async` (za opt-in make flagem) — pokud je použiješ, ošetři je přes `hasattr`.
 
 To je všechno výpočetně náročné a distinktivní - sprity s runtime scale/rotací a blit efekty,
 dirty-rect kompozice, 0-RAM tilemapy a stripy, nativní text, kolize, procedurální šum, raycaster,
@@ -36,7 +37,8 @@ nastavíš `sprite.x` / `sprite.y`. Engine tlačítko nikdy nevidí.
 
 ## Celá hra jen s C modulem
 
-Nikde žádný `picogame_*` import - jen `picogame` plus `board`, `time`, `array`, `terminalio`,
+Jediný helper import, `picogame_game`, a jen kvůli displeji a jeho rozměru — všechno, co níž kreslí,
+hýbe nebo detekuje kolize, je C modul plus běžné `board`, `time`, `array`, `terminalio` a
 `digitalio`. Hráč se hýbe D-padem, sbírá minci přes nativní kolizi, při sebrání blikne, a kreslí se
 HUD s nativním textem.
 
@@ -47,6 +49,7 @@ HUD s nativním textem.
 import board, time, array
 import terminalio, digitalio
 import picogame as pg
+import picogame_game          # jen kvůli display() / screen(); nic dalšího ho nepotřebuje
 
 W, H = picogame_game.screen()
 

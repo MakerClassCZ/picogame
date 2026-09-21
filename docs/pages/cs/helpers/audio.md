@@ -30,9 +30,9 @@ Některé desky mají zesilovač reproduktoru za povolovacím pinem (`board.SPEA
 a PyGameru). `picogame_audioout` ho zvedne a drží: bez toho je výstup nastavený správně a deska
 přesto mlčí, což vypadá jako chyba picogame a není.
 
-Přímo ho většinou nevoláš — vytvoříš `Audio()` / `Synth()` a stane se to za tebe. `make_output(sample_rate=22050, pin=None)` je k dispozici, když chceš samotné zařízení; předání explicitního `pin` **vynutí PWM**.
+Přímo ho většinou nevoláš — vytvoříš `Audio()` / `Synth()` a stane se to za tebe. `make_output(sample_rate=22050, pin=None)` je k dispozici, když chceš samotné zařízení; předání explicitního `pin` **obejde I2S DAC** a jde analogovou cestou — PWM tam, kde firmware má `audiopwmio`, a pravý DAC čipu (`audioio`) tam, kde ho nemá, jako na deskách se SAMD51.
 
-**Hlasitost (desky s I2S DAC):** výchozí hodnoty driveru TLV320 jsou schválně velmi tiché, takže na Fruit Jamu může zvuk působit jako vypnutý, dokud je nezvedneš v `settings.toml` — `PICOGAME_AUDIO_OUT` (`headphone`/`speaker`/`both`), `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` (celé dB, drž `<= 0`). Viz [reference settings.toml](/cs/custom-board/).
+**Hlasitost (desky s I2S DAC):** vlastní výchozí hodnoty driveru TLV320 jsou schválně skoro neslyšitelné (sluchátka na −30 dB), takže je `picogame_audioout` při inicializaci zvedne za tebe — −3 dB na DAC a −10 dB na analogových trimech. Do `settings.toml` saháš, jen když to chceš změnit: `PICOGAME_AUDIO_OUT` (`headphone`/`speaker`/`both`), `PICOGAME_DAC_VOLUME`, `PICOGAME_HP_VOLUME`, `PICOGAME_SPK_VOLUME` (dB, drž `<= 0`). Viz [reference settings.toml](/cs/custom-board/).
 
 :::caution[Fruit Jam: nainstaluj DAC driver, jinak je ticho]
 I2S audio potřebuje `adafruit_tlv320` **a** `adafruit_bus_device` v `CIRCUITPY/lib` (z Adafruit bundlu /
@@ -51,7 +51,7 @@ nastavení je 22 050 Hz, mono, 16 bitů se znaménkem.
 ### `Audio(pin=None, voices=4, sample_rate=22050, channels=1, bits=16, signed=True)`
 
 Vytvoří zvukový výstup a okamžitě spustí mixér. `pin=None` nechá `picogame_audioout` vybrat zařízení
-(I2S DAC nebo PWM pin reproduktoru desky); explicitní `pin` vynutí PWM na tom pinu. `voices` určuje počet
+(I2S DAC, nebo analogový pin reproduktoru desky); explicitní `pin` použije analogovou cestu na tom pinu. `voices` určuje počet
 souběžných kanálů. Hlas 0 je vyhrazený pro hudbu a hlasy 1 až N−1 se pro efekty střídají dokola. Ostatní
 argumenty určují formát všech přehrávaných vzorků.
 
@@ -128,9 +128,9 @@ Vrátí `synthio.LFO` pro `bend` noty. S `once=True` je to **jednorázové sine 
 
 ### `Synth(pin=None, sample_rate=22050, buffer_size=2048, music_level=0.4, sfx_level=0.7)`
 
-Nastaví výstup (přes `picogame_audioout` — I2S DAC nebo PWM, stejně jako `Audio`) a 2hlasý mixer: hlas 0 pro hudbu (`MidiTrack`), hlas 1 pro živý synth používaný pro SFX. `pin=None` vybere zařízení automaticky; explicitní `pin` vynutí PWM. `music_level`/`sfx_level` jsou počáteční úrovně mixu pro tyto dva hlasy.
+Nastaví výstup (přes `picogame_audioout` — I2S DAC nebo analogovou cestu, stejně jako `Audio`) a 2hlasý mixer: hlas 0 pro hudbu (`MidiTrack`), hlas 1 pro živý synth používaný pro SFX. `pin=None` vybere zařízení automaticky; explicitní `pin` použije analogovou cestu. `music_level`/`sfx_level` jsou počáteční úrovně mixu pro tyto dva hlasy.
 
-- `sfx(n)` - přehraje notu `n` jako jednorázový efekt. Nejdřív znovu spustí LFO té noty (aby opakovaný zvuk zněl pokaždé stejně), pak zavolá `release_all_then_press`, takže SFX jdoucí těsně za sebou se uříznou čistě.
+- `sfx(n)` - přehraje notu `n` jako jednorázový efekt. Nejdřív znovu spustí LFO té noty (aby opakovaný zvuk zněl pokaždé stejně), pak pustí **jen předchozí SFX** a stiskne novou notu, takže SFX jdoucí těsně za sebou se uříznou čistě, ale držený `Drone` ani hudba se nepřeruší.
 - `press(n)` / `release(n)` - podrž a uvolni notu ručně, pro zvuky, které trvají tak dlouho, dokud držíš tlačítko, místo aby cvakly jednou.
 - `music(midi_track)` - přehraje `MidiTrack` (z `load_midi`) na hlasu 0, ve smyčce.
 - `stop_music()` - zastaví hudební hlas.

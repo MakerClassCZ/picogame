@@ -1,8 +1,10 @@
 # Supported hardware
 
-picogame is a native module inside a CircuitPython fork, so it runs on boards with **a picogame
-firmware build** - which needs an SPI display, a few buttons, and (optionally) a PWM speaker. Boards
-below have builds; other CircuitPython boards with an SPI display can be ported (see
+picogame is a native module in CircuitPython itself, compiled into a board's firmware when that
+board opts in — it needs an SPI display (or a framebuffer), a few buttons, and (optionally) a
+speaker. **CircuitPython 10.3.1 ships it on the PicoPad and the Fruit Jam**; current main adds the
+PicoSystem, Pico, Pico W and the PyBadge. For everything else, and for the fork-only extras, the
+builds below are ours; other CircuitPython boards with an SPI display can be ported (see
 [Build your own board](custom-board.md)). The reference device everything is tuned and measured
 against is the PicoPad.
 
@@ -11,12 +13,16 @@ against is the PicoPad.
 | Device | MCU | Notes |
 |---|---|---|
 | **Pajenicko PicoPad** | RP2040 | **Primary / reference device.** 320×240 ST7789, D-pad + A/B/X/Y, speaker, SD, NVM. A prebuilt firmware and button profile are provided. |
-| PicoPad 2 / RP2350 boards | RP2350 | Build-only (not yet verified on this hardware). Same layout and a larger heap than the RP2040 builds. |
+| **Adafruit Fruit Jam** | RP2350 | DVI/HDMI output through a RAM framebuffer instead of an SPI panel, TLV320 I2S audio, USB-host gamepad/keyboard. Tested on hardware. |
+| Raspberry Pi Pico / Pico W, Pimoroni PicoSystem | RP2040 | Picked up picogame in stock CircuitPython on current main. The PicoSystem has its own screen and buttons; a bare Pico needs both wired (see below). |
+| Adafruit PyBadge | SAMD51 | 160×128 ST7789 on a 24 MHz bus, shift-register buttons, accelerometer, true-DAC audio. Has the fast DMA display backend and RGB444. |
+| PicoPad 2 / other RP2350 boards | RP2350 | Build-only (not yet verified on this hardware). Same layout and a larger heap than the RP2040 builds. |
 | ESP32-S3 boards (e.g. Feather TFT) | ESP32-S3 | Build-only (not yet verified on this hardware). Wire the buttons for your board (see below). |
 | Desktop simulator | your PC | A development tool rather than a hardware target. It runs the same game-facing API but does not reproduce device RAM limits or timing. |
 
-The engine is a native C module in a CircuitPython fork. PicoPad has a **prebuilt firmware**; for other
-boards you build the fork for that board, see [The firmware build](firmware.md).
+The engine is a native C module in CircuitPython, off unless a board turns it on. PicoPad has a
+**prebuilt firmware**; for a board without one you build CircuitPython for it yourself, see
+[The firmware build](firmware.md).
 
 ## Download firmware
 
@@ -26,7 +32,7 @@ required `lib/` modules from [picogame-libs](https://github.com/MakerClassCZ/pic
 :::caution[Check the status of your board]
 The **PicoPad** firmware is the reference build and is tested on the device. Builds without a
 specific tested status in the table are experimental and may need board-specific work. For a
-reproducible release, build the CircuitPython fork for the exact board and commit you use (see
+reproducible release, build CircuitPython for the exact board and commit you use (see
 [The firmware build](firmware.md)).
 :::
 
@@ -59,8 +65,9 @@ launcher all run on hardware. Configure it in
 (e.g. 320×240), or `=8` for RGB332, the only depth picodvi offers at **640×480** (full resolution).
 See [Run on hardware](hardware.md) for the framebuffer/colour-depth details.
 **Audio** on the Fruit Jam is the I2S TLV320 DAC — install `adafruit_tlv320` + `adafruit_bus_device`
-in `CIRCUITPY/lib` (they aren't bundled) and raise the volume keys, or it's silent; `PICOGAME_DEBUG=1`
-prints why. **Input** is a USB gamepad or keyboard (the board has no game buttons) — see
+in `CIRCUITPY/lib` (they aren't bundled), or it's silent; `PICOGAME_DEBUG=1` prints why. The driver's
+own defaults are near-inaudible, but `picogame_audioout` raises them for you — the
+`PICOGAME_HP_VOLUME` / `PICOGAME_SPK_VOLUME` keys only trim that level. **Input** is a USB gamepad or keyboard (the board has no game buttons) — see
 [Input & controls](/helpers/input/).*
 
 **Flashing:** put the board in bootloader mode. Pico/PicoPad: hold **BOOTSEL** while connecting USB
@@ -79,7 +86,7 @@ The **classic ESP32** (VIDI X) ships a `.bin` flashed with `esptool` (no UF2 boo
 boards still use drag-and-drop UF2.
 
 :::note[Display, sound, and button setup]
-**Screen and sound auto-map** wherever the board firmware exposes them; picogame takes the screen the board provides (`picogame_game.screen()`) and the output picked by `picogame_audioout` (a PWM speaker pin, or an I2S DAC where the board has one), which the onboard-screen handhelds here (PicoSystem, µGame22, µGame S3, Thumby Color, VIDI X) define. So on those the screen lights up with no setup; sound works if the board names a speaker pin (otherwise pass one: `picogame_audio.Audio(pin)`). On an **I2S DAC board (Fruit Jam)** install `adafruit_tlv320` + `adafruit_bus_device` and set the volume keys, or it stays silent — see [Audio & music](/helpers/audio/).
+**Screen and sound auto-map** wherever the board firmware exposes them; picogame takes the screen the board provides (`picogame_game.screen()`) and the output picked by `picogame_audioout` (a PWM speaker pin, or an I2S DAC where the board has one), which the onboard-screen handhelds here (PicoSystem, µGame22, µGame S3, Thumby Color, VIDI X) define. So on those the screen lights up with no setup; sound works if the board names a speaker pin (otherwise pass one: `picogame_audio.Audio(pin)`). On an **I2S DAC board (Fruit Jam)** install `adafruit_tlv320` + `adafruit_bus_device`, or it stays silent (picogame sets an audible volume itself; the volume keys only trim it) — see [Audio & music](/helpers/audio/).
 
 **Buttons** map automatically on boards with a picogame profile: **PicoPad, PicoSystem, µGame22,
 µGame S3, and Thumby Color**. **VIDI X** needs separate handling because its D-pad uses an analog
@@ -97,7 +104,7 @@ On a board with **no onboard display** (a bare Pico), you also build the display
 
 ## What a board needs
 
-- **A CircuitPython-supported MCU** — RP2040, RP2350 or ESP32-S3 are the tested families.
+- **A CircuitPython-supported MCU** — RP2040, RP2350, SAMD51 and ESP32-S3 are the tested families.
 - **RAM** usually sets the asset budget. The current measured builds provide about **190 KB** of
   heap on RP2040 and **520 KB** on RP2350; the largest contiguous block is smaller and varies with
   firmware configuration. Measure your build (see [Fit it in RAM](memory.md)).

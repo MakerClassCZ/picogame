@@ -158,10 +158,11 @@ The bitmap shrinks **quadratically** while the screen area stays the same:
 On an RP2040 (≈ 25–40 KB of free heap) a full-screen bitmap background is impossible at 1:1 and
 comfortable at 4× — this technique is what makes it fit.
 
-It is cheap at runtime **only at power-of-two scales**: the engine has a dedicated fast path for
-opaque PAL8 (and RGB565) sprites at `scale` exactly 2, 4 or 8, measured at ~1.5× a generic scaled
-blit (each source row is rasterized once and its repeats are copied). Any other scale — 3, 1.5, a
-tweened 0.8→1.5 — takes the generic scaler, which is fine for small sprites but expensive for
+It is cheap at runtime **only at power-of-two scales**, and the two formats differ: opaque **PAL8**
+sprites take a dedicated fast path at any power of two (2, 4, 8, 16 …), opaque **RGB565** only at
+exactly 2× (and only when the source data is 2-byte aligned). Measured at ~1.5× a generic scaled
+blit — each source row is rasterized once and its repeats are copied. Everything else — RGB565 at
+4×, scale 3, 1.5, a tweened 0.8→1.5 — takes the generic scaler, which is fine for small sprites but expensive for
 full-width layers. Transparent sprites also take the generic path, so keep the big scaled layers
 opaque.
 

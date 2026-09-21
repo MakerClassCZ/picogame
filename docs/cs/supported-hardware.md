@@ -1,22 +1,26 @@
 # Podporovaný hardware
 
-picogame je nativní modul uvnitř forku CircuitPythonu, takže běží na deskách, pro které existuje
-**picogame firmware** — ten potřebuje SPI displej, pár tlačítek a (volitelně) PWM reproduktor.
-Pro desky níže existují hotové buildy; jiné desky CircuitPythonu s SPI displejem lze přidat (viz
-[Postav si vlastní desku](../custom-board.md)). Referenční zařízení, na kterém se všechno ladí a
-měří, je PicoPad.
+picogame je nativní modul přímo v CircuitPythonu; do firmwaru se přeloží tam, kde si ho deska
+zapne — potřebuje SPI displej (nebo framebuffer), pár tlačítek a (volitelně) reproduktor.
+**CircuitPython 10.3.1 ho dodává na PicoPadu a Fruit Jamu**, aktuální main přidává PicoSystem, Pico,
+Pico W a PyBadge. Pro ostatní desky a pro fork-only rozšíření jsou buildy níž naše; jiné desky
+CircuitPythonu s SPI displejem lze přidat (viz [Postav si vlastní desku](../custom-board.md)).
+Referenční zařízení, na kterém se všechno ladí a měří, je PicoPad.
 
 ## Zařízení
 
 | Zařízení | MCU | Poznámky |
 |---|---|---|
 | **Pajenicko PicoPad** | RP2040 | **Primární / referenční zařízení.** 320×240 ST7789, D-pad + A/B/X/Y, reproduktor, SD, NVM. K dispozici je hotový firmware a profil tlačítek. |
-| PicoPad 2 / desky s RP2350 | RP2350 | Pouze build, na tomto hardwaru zatím neověřené. Stejné rozložení a větší halda než u buildu pro RP2040. |
+| **Adafruit Fruit Jam** | RP2350 | DVI/HDMI výstup přes framebuffer v RAM místo SPI panelu, I2S audio TLV320, USB host pro gamepad i klávesnici. Ověřeno na hardwaru. |
+| Raspberry Pi Pico / Pico W, Pimoroni PicoSystem | RP2040 | picogame mají v běžném CircuitPythonu z aktuálního mainu. PicoSystem má vlastní displej i tlačítka, holý Pico potřebuje obojí zapojit (viz níž). |
+| Adafruit PyBadge | SAMD51 | 160×128 ST7789 na 24MHz sběrnici, tlačítka přes posuvný registr, akcelerometr, zvuk přes pravý DAC. Má rychlý DMA backend displeje i RGB444. |
+| PicoPad 2 / další desky s RP2350 | RP2350 | Pouze build, na tomto hardwaru zatím neověřené. Stejné rozložení a větší halda než u buildu pro RP2040. |
 | Desky s ESP32-S3 (např. Feather TFT) | ESP32-S3 | Pouze build, na tomto hardwaru zatím neověřené. Tlačítka zapoj podle konkrétní desky. |
 | Desktopový simulátor | tvůj počítač | Vývojový nástroj, ne cílové zařízení. Nabízí stejné API hry, ale nereprodukuje omezení RAM ani časování desky. |
 
-Engine je nativní C modul ve forku CircuitPythonu. PicoPad má **hotový firmware**; pro ostatní desky
-si fork pro danou desku sestavíš, viz [Build firmwaru](firmware.md).
+Engine je nativní C modul v CircuitPythonu, vypnutý dokud si ho deska nezapne. PicoPad má **hotový
+firmware**; pro desku bez něj si CircuitPython sestavíš sám, viz [Build firmwaru](firmware.md).
 
 ## Firmware ke stažení
 
@@ -26,7 +30,7 @@ Každý odkaz níže vede na build firmwaru pro jednu desku. Nahraj jej a potom 
 :::caution[Zkontroluj stav své desky]
 Firmware pro **PicoPad** je referenční build testovaný na zařízení. Buildy bez výslovného
 označení „testováno“ v tabulce jsou experimentální a mohou vyžadovat úpravy pro konkrétní desku.
-Pro opakovatelné vydání sestav fork CircuitPythonu pro přesnou desku a commit, který používáš
+Pro opakovatelné vydání sestav CircuitPython pro přesnou desku a commit, který používáš
 (viz [Build firmwaru](firmware.md)).
 :::
 
@@ -59,7 +63,9 @@ obě automaticky: `CIRCUITPY_DISPLAY_COLOR_DEPTH=16` pro plnobarevné RGB565 (na
 RGB332, jedinou hloubku, kterou picodvi nabízí při **640×480** (plné rozlišení). Detaily o
 framebufferu a barevné hloubce viz [Spuštění na hardwaru](hardware.md).
 **Zvuk** na Fruit Jamu je I2S DAC TLV320 — nainstaluj `adafruit_tlv320` + `adafruit_bus_device` do
-`CIRCUITPY/lib` (nedodávají se) a zvedni volume klíče, jinak je ticho; `PICOGAME_DEBUG=1` vypíše proč.
+`CIRCUITPY/lib` (nedodávají se), jinak je ticho; `PICOGAME_DEBUG=1` vypíše proč. Výchozí hodnoty
+samotného driveru jsou skoro neslyšitelné, ale `picogame_audioout` je zvedne za tebe — klíče
+`PICOGAME_HP_VOLUME` / `PICOGAME_SPK_VOLUME` už jen dolaďují.
 **Vstup** je USB gamepad nebo klávesnice (deska nemá herní tlačítka) — viz
 [Vstup a ovládání](/cs/helpers/input/).*
 
@@ -78,7 +84,7 @@ volné `.py` jsou zdroj, který přímo spouští **simulátor**. Stejný princi
 desky ESP32-**S3** používají běžné kopírování souboru UF2 na připojený disk.
 
 :::note[Nastavení displeje, zvuku a tlačítek]
-**Displej a zvuk se mapují samy** všude, kde je firmware desky vystavuje; picogame vezme obrazovku, kterou deska poskytuje (`picogame_game.screen()`), a výstup vybraný přes `picogame_audioout` (PWM pin reproduktoru, nebo I2S DAC tam, kde ho deska má), což handheldy s vestavěným displejem zde (PicoSystem, µGame22, µGame S3, Thumby Color, VIDI X) definují. Na nich tedy displej naběhne bez nastavování; zvuk funguje, když deska pojmenuje pin reproduktoru (jinak ho předej: `picogame_audio.Audio(pin)`). Na **desce s I2S DAC (Fruit Jam)** nainstaluj `adafruit_tlv320` + `adafruit_bus_device` a nastav volume klíče, jinak zůstane ticho — viz [Audio a hudba](/cs/helpers/audio/).
+**Displej a zvuk se mapují samy** všude, kde je firmware desky vystavuje; picogame vezme obrazovku, kterou deska poskytuje (`picogame_game.screen()`), a výstup vybraný přes `picogame_audioout` (PWM pin reproduktoru, nebo I2S DAC tam, kde ho deska má), což handheldy s vestavěným displejem zde (PicoSystem, µGame22, µGame S3, Thumby Color, VIDI X) definují. Na nich tedy displej naběhne bez nastavování; zvuk funguje, když deska pojmenuje pin reproduktoru (jinak ho předej: `picogame_audio.Audio(pin)`). Na **desce s I2S DAC (Fruit Jam)** nainstaluj `adafruit_tlv320` + `adafruit_bus_device`, jinak zůstane ticho (hlasitost si picogame nastaví samo, volume klíče ji jen dolaďují) — viz [Audio a hudba](/cs/helpers/audio/).
 
 **Tlačítka** se mapují automaticky na deskách s profilem picogame: **PicoPad, PicoSystem,
 µGame22, µGame S3 a Thumby Color**. **VIDI X** potřebuje zvláštní obsluhu, protože jeho D-pad
@@ -96,7 +102,7 @@ Na desce **bez vestavěného displeje** (holý Pico) navíc sestavíš displej v
 
 ## Co deska potřebuje
 
-- **MCU podporované CircuitPythonem** — testované rodiny jsou RP2040, RP2350 a ESP32-S3.
+- **MCU podporované CircuitPythonem** — testované rodiny jsou RP2040, RP2350, SAMD51 a ESP32-S3.
 - **RAM** obvykle určuje rozpočet na grafiku. Aktuálně měřené buildy poskytují přibližně
   **190 KB** haldy na RP2040 a **520 KB** na RP2350. Největší souvislý blok je menší a mění se
   podle konfigurace firmwaru, proto svůj build změř (viz [Vejít se do paměti](memory.md)).

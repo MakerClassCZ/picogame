@@ -47,8 +47,9 @@ their own), so the job here is to *build the display once and publish it*. **Pic
    display from `settings.toml`, and your game remains **unchanged as `code.py`**. This also works
    for existing games and `stage`-based games. **After copying `boot.py`, press RESET once** (or
    unplug/replug USB): `boot.py` runs only at power-on — a save/soft-reload runs `code.py` but not
-   `boot.py`, so until that reset `board.DISPLAY` is `None` and a game dies with
-   `AttributeError: 'NoneType' object has no attribute 'width'`.
+   `boot.py`, so until that reset there is no display and a game dies with
+   `RuntimeError: no display: if you just added boot.py press RESET once …` — the message names the
+   fix.
 3. **A stock / other firmware** (no slot). A **launcher `code.py`** builds the display, publishes it
    with `supervisor.runtime.display = disp`, then runs your game (as `game.py`). A little more setup.
 
@@ -96,8 +97,8 @@ display each run.)
 
 The keys above cover the common case. Below is every **runtime** key picogame reads. All are read at
 runtime, so a board is adapted with **no reflash** — a key takes effect on the next reload (display keys
-need a full restart, see the note above). Values are **integers or strings only**: CircuitPython's
-`settings.toml` has no floats or booleans, so on/off is `1`/`0` and volumes are **integer dB**.
+need a full restart, see the note above). `os.getenv` hands every value back as a **string**, so write
+on/off as `1`/`0` and keep volumes to whole dB; picogame parses nothing fancier.
 
 | Key | Format / values | Example | Note |
 |---|---|---|---|
@@ -113,13 +114,15 @@ need a full restart, see the note above). Values are **integers or strings only*
 | `PICOGAME_USB` | `1` / `0` | `PICOGAME_USB = 0` | On a USB-host build, `0` **disables** auto-attach of USB HID input (gamepad + keyboard). Default on. |
 | `PICOGAME_KBD` | `1` / `0` | `PICOGAME_KBD = 0` | `0` disables the USB **keyboard** only (the gamepad still auto-attaches). Default on. |
 | `PICOGAME_USBPAD` | `NAME=byte:bitmask` tokens | `"A=5:0x40 B=5:0x20"` | Remap gamepad buttons (HID report byte index : bitmask). A partial list merges over the DragonRise defaults. |
-| `PICOGAME_USBPAD_ID` | `"VID:PID"` (hex) | `"081f:e401"` | Pin the USB gamepad to a specific device (skip auto-pick) when several HID devices are attached. |
+| `PICOGAME_USBPAD_ID` | `"VID:PID"` (hex) | `"081f:e401"` | The pad's USB VID/PID. **Required for any pad that is not the DragonRise `081f:e401` default** — the driver matches by VID/PID and never grabs "the first device", so without this key another pad simply isn't found. A truly custom pad also needs its byte map via `PICOGAME_USBPAD`. |
 | `PICOGAME_USBPAD_TIMEOUT` | ms | `10` | HID read timeout for the gamepad poll. Raise only if a pad drops inputs. |
 | `PICOGAME_USBKBD` | `NAME=keycode` tokens | `"A=0x2C START=0x28"` | Remap USB-keyboard keys to game buttons (HID keycode, hex or decimal). Merges over the default arrows/WASD layout. |
 | `PICOGAME_USBKBD_EP` | `"iface:endpoint"` | `"2:0x83"` | Point the keyboard driver at the live interface/IN-endpoint of a combo dongle whose boot interface is silent (find it with `tools/usbkbd_probe.py`). |
 | `PICOGAME_USBKBD_TIMEOUT` | ms | `10` | HID read timeout for the keyboard poll. |
 | `PICOGAME_I2CPAD` | preset / recipe | `"qwstpad"` | **Opt-in** I2C gamepad (GPIO-expander pads, e.g. Pimoroni QwSTPad) — works on any board with I2C, no USB host needed. A preset name, `preset@0xNN`, several separated by `;`, or a full recipe (`"addr=0x20 read=:1 inv=1 UP=0 A=4 …"`). Off unless set. |
 | `PICOGAME_I2C` | `"SDA,SCL"` pins, or a bus name | `"GP4,GP5"` | I2C bus for the pad above. Only needed on a bare board or non-standard wiring — a STEMMA/Qw-ST connector needs nothing. A single token names a board bus instead (`"I2C0"`). |
+| `PICOGAME_SHIFTPAD` | preset / recipe | `"pybadge"` | **Opt-in** buttons behind a 74HC165 shift register (PyBadge and friends). A preset name, or a full recipe (`"latch=… clock=… data=… bits=8 A=1 B=0 …"`). Off unless set — clocking three unknown GPIOs is never probed. |
+| `PICOGAME_TILTPAD` | preset / recipe | `"pybadge"` | **Opt-in** accelerometer as a D-pad; its directions are OR'ed with the real buttons. A preset, or a preset plus overrides (`"lis3dh on=4000 off=2500"`). Off unless set. |
 | `PICOGAME_RGB444` | `1` / `0` | `PICOGAME_RGB444 = 1` | `1` sends 12-bit RGB444 to the panel (~25% less SPI traffic) wherever the firmware supports it (`picogame.RGB444_SUPPORTED`). Worth it on a slow bus (PyBadge: 24 MHz SPI). A game's explicit `setup(rgb444=...)` wins over the key. Off unless set. |
 | `PICOGAME_DEBUG` | `1` / `0` | `PICOGAME_DEBUG = 1` | **When something doesn't work, set this.** Prints `[picogame] ...` failure reasons (audio DAC/driver, USB pad/keyboard, …) to the serial console. Remove once working. |
 
@@ -133,10 +136,11 @@ with **no game change**; the default layout is the DragonRise `081f:e401` generi
 to turn that off, or remap another pad's buttons with `PICOGAME_USBPAD` (discover its report bytes with
 the USB probe tool).
 
-:::note[These are build flags, not settings]
-DVI/framebuffer output, 12-bit RGB444 colour, and the fast (DMA) display backend are **compile-time
-firmware options** (`CIRCUITPY_PICOGAME_FRAMEBUFFER`, `CIRCUITPY_PICOGAME_RGB444`,
-`CIRCUITPY_PICOGAME_FAST_DISPLAY`), **not** `settings.toml` keys — don't look for a runtime key. See
+:::note[Some of this is decided at build time]
+DVI/framebuffer output and the fast (DMA) display backend are **compile-time firmware options**
+(`CIRCUITPY_PICOGAME_FRAMEBUFFER`, `CIRCUITPY_PICOGAME_FAST_DISPLAY`) — there is no runtime key for
+them. `CIRCUITPY_PICOGAME_RGB444` is a **capability** flag: the board declares that its panel can do
+12-bit colour, and `PICOGAME_RGB444` above is the runtime switch that uses it. See
 [Firmware](firmware.md) to rebuild with them.
 :::
 

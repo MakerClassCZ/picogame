@@ -131,7 +131,7 @@ frame 0 v `color_frames` je viditelná barva, ale v `tileset_colors` je frame 0 
 
 ## picogame_pool
 
-`Pool` předem vytvoří pevný počet spritů pro krátce žijící objekty, například střely, nepřátele nebo bonusy. Viditelný sprite označuje obsazenou pozici a `sprite.data` může nést stav entity. Přidání a uvolnění objektu nevytváří nový sprite. Proč na zařízení záleží na stabilních alokacích, popisuje [/cs/memory/](/cs/memory/).
+`Pool` předem vytvoří pevný počet spritů pro krátce žijící objekty, například střely, nepřátele nebo bonusy. Pool si sám drží, které pozice jsou obsazené (spuštěný sprite se zviditelní), a `sprite.data` může nést stav entity. Přidání a uvolnění objektu nevytváří nový sprite. Proč na zařízení záleží na stabilních alokacích, popisuje [/cs/memory/](/cs/memory/).
 
 `Pool(scene, bitmap, capacity, anchor=None, fixed=False)` předalokuje `capacity` skrytých spritů sdílejících `bitmap`, nastaví každému `anchor` (pokud je zadán) a `data = None` a přidá je všechny do `scene` (`fixed=` se předává přímo do `scene.add`).
 
@@ -140,7 +140,7 @@ frame 0 v `color_frames` je viditelná barva, ale v `tileset_colors` je frame 0 
 - `pool.baseline()` - znovu sejme výchozí vzhled, když sprity přenastavíš později ve hře (větší balvany ve třetím levelu).
 - `pool.free(s)` - skryje sprite `s` (vrátí ho do poolu).
 - `pool.free_all()` - skryje všechny sprity (použij při resetu levelu).
-- `pool.count()` - počet živých (viditelných) spritů; levné, ale pro samotné sprity iteruj `items`.
+- `pool.count()` - počet živých pozic, O(1). Pozice zůstane živá, i když si sprite sám schováš, takže tohle není počet spritů na obrazovce; pro samotné sprity iteruj `items`.
 
 ```python
 import picogame as pg
