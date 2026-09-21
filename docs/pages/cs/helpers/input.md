@@ -130,6 +130,8 @@ každý jiný zdroj, bez zásahu do hry:
 
 ```toml
 PICOGAME_I2CPAD = "qwstpad"                  # preset na výchozí adrese
+# PICOGAME_I2CPAD = "gamepadqt"              # Adafruit Mini I2C Gamepad: šest tlačítek
+#                                            #  a analogová páčka čtená jako směry
 # PICOGAME_I2CPAD = "qwstpad@0x23"           # preset na konkrétní adrese
 # PICOGAME_I2CPAD = "qwstpad;qwstpad@0x23"   # více padů = lokální multiplayer
 # PICOGAME_I2C = "GP4,GP5"                   # SDA,SCL — jen holé desky; konektor
@@ -164,6 +166,44 @@ postavit ručně (`I2CPad`) nebo vyjmenovat pady pro multiplayer (`find_pads`, n
 Vypíše na sériovou konzoli důvody `[picogame] ...` (chybí driver, zařízení nenalezeno, špatný
 endpoint) místo tichého selhání. Po vyřešení odeber.
 :::
+
+## Tlačítka na posuvném registru (handheld, který šetří piny)
+
+Čtvrtá rodina a na některých deskách jediná: osm spínačů jde do posuvného registru se sériovým
+výstupem (74HC165 a spol.) a tři GPIO z něj vyhodinují bajt. Adafruit PyBadge má tlačítka zapojená
+takhle, takže bez tohoto zdroje nemá použitelný vstup vůbec.
+
+Opt-in jako u I2C padu a ze stejného důvodu: hodinovat tři neznámé GPIO není čtení bez následků,
+takže se nic neoťukává. Pojmenuj desku a `Buttons()` ji přiORuje:
+
+```toml
+PICOGAME_SHIFTPAD = "pybadge"
+# deska bez presetu je jeden řádek, žádný kód:
+# PICOGAME_SHIFTPAD = "latch=BUTTON_LATCH clock=BUTTON_CLOCK data=BUTTON_OUT bits=8 \\
+#                      LEFT=7 UP=6 DOWN=5 RIGHT=4 SELECT=3 START=2 A=1 B=0"
+```
+
+Každé jméno je bit, na kterém tlačítko sedí. `inv=1` přidej, když registr hlásí 1 pro *puštěné*
+tlačítko, a `msb=0`, když se první vyhodinuje spodní bit. Ovladač je `picogame_shiftpad`.
+
+## Náklon (akcelerometr jako D-pad)
+
+Handheld s pohybovým čidlem se dá řídit nakláněním. Je to zdroj jako každý jiný, takže se jeho směry
+ORují se skutečným D-padem — hra rozdíl nepozná a hráč může použít obojí.
+
+```toml
+PICOGAME_TILTPAD = "pybadge"
+# PICOGAME_TILTPAD = "lis3dh on=4000 off=2500"   # preset s úpravami
+```
+
+Dva prahy, ne jeden: `on` je náklon, při kterém směr sepne, a `off` náklon, při kterém pustí. S
+jedním prahem směr kmitá, když ruka odpočívá blízko něj. Jednotky jsou surové (zhruba 16384 = 1 g
+při ±2 g). `swap=1` sedí desce na výšku, `invx=1` / `invy=1` obrátí osu a `calib=0` použije nulu
+čidla místo změření tvé klidové polohy při připojení — což se děje ve výchozím stavu, takže „rovně"
+je tak, jak jsi desku zrovna držel.
+
+Akcelerometr, který se ozve na sběrnici, ještě není žádost řídit nakláněním, takže i tenhle je
+opt-in. Ovladač je `picogame_tiltpad`.
 
 ## Lokální multiplayer
 

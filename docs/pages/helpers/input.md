@@ -131,6 +131,8 @@ source, with no game changes:
 
 ```toml
 PICOGAME_I2CPAD = "qwstpad"                  # a preset at its default address
+# PICOGAME_I2CPAD = "gamepadqt"              # Adafruit Mini I2C Gamepad: six buttons plus an
+#                                            #  analogue thumbstick read as the directions
 # PICOGAME_I2CPAD = "qwstpad@0x23"           # a preset at a specific address
 # PICOGAME_I2CPAD = "qwstpad;qwstpad@0x23"   # several pads = local multiplayer
 # PICOGAME_I2C = "GP4,GP5"                   # SDA,SCL — bare boards only; a STEMMA/Qw-ST
@@ -165,6 +167,45 @@ pad by hand (`I2CPad`) or to enumerate pads for multiplayer (`find_pads`, below)
 It prints `[picogame] ...` reasons to the serial console (driver missing, device not found, wrong
 endpoint) instead of failing silently. Remove it once things work.
 :::
+
+## Shift-register buttons (a handheld that saves pins)
+
+A fourth family, and on some boards the only one: eight switches feed a parallel-in shift register
+(74HC165 and friends) and three GPIOs clock the byte out. The Adafruit PyBadge wires its buttons
+this way, so without this source it has no usable input at all.
+
+Opt-in like the I2C pad, and for the same kind of reason: clocking three unknown GPIOs is not a
+read-only act, so nothing is probed. Name the board and `Buttons()` ORs it in:
+
+```toml
+PICOGAME_SHIFTPAD = "pybadge"
+# a board with no preset is one line, no code:
+# PICOGAME_SHIFTPAD = "latch=BUTTON_LATCH clock=BUTTON_CLOCK data=BUTTON_OUT bits=8 \\
+#                      LEFT=7 UP=6 DOWN=5 RIGHT=4 SELECT=3 START=2 A=1 B=0"
+```
+
+Each name is the bit the button sits on. Add `inv=1` when the register reads 1 for a *released*
+button, and `msb=0` if the low bit clocks out first. The driver is `picogame_shiftpad`.
+
+## Tilt (the accelerometer as a D-pad)
+
+A handheld with a motion sensor can steer by tilting. This is a source like any other, so its
+directions are OR\x27d with the real D-pad — a game does not know the difference, and a player can use
+either.
+
+```toml
+PICOGAME_TILTPAD = "pybadge"
+# PICOGAME_TILTPAD = "lis3dh on=4000 off=2500"   # a preset plus overrides
+```
+
+Two thresholds, not one: `on` is the tilt at which a direction engages and `off` the tilt at which it
+lets go. With a single threshold the direction chatters while the hand rests near it. The counts are
+raw (about 16384 = 1 g at ±2 g). `swap=1` suits a portrait board, `invx=1` / `invy=1` flip an axis,
+and `calib=0` uses the sensor\x27s own zero instead of measuring your resting position at attach — which
+is what happens by default, so "level" is however you were holding it.
+
+An accelerometer that answers on the bus is not a request to steer with it, so this one is opt-in
+too. The driver is `picogame_tiltpad`.
 
 ## Local multiplayer
 

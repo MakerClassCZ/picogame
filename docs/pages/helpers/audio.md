@@ -22,7 +22,13 @@ sounds over the synthesizer. See [/hardware/](/hardware/) for board audio setup 
 so a game needs **no board-specific audio code**. It auto-selects:
 
 - an **I2S DAC** (e.g. the Fruit Jam's TLV320) when the board exposes `board.I2S_BCLK`,
-- otherwise a **PWM** output on the board's speaker pin (or a pin you pass).
+- otherwise the board's speaker pin, as **PWM** where the firmware has `audiopwmio` and as the
+  chip's **true DAC** where it has `audioio` instead (SAMD51: PyBadge, PyGamer, Feather/Metro M4).
+  Picking by what the firmware carries keeps one code path instead of a per-board table.
+
+Some boards gate the speaker amplifier behind an enable pin (`board.SPEAKER_ENABLE` on the
+PyBadge and PyGamer). `picogame_audioout` raises it and holds it: without that the output is
+configured correctly and the board is still silent, which looks like a picogame bug and is not one.
 
 You normally never call it directly — construct `Audio()` / `Synth()` and it happens for you. `make_output(sample_rate=22050, pin=None)` is there if you want the raw device; passing an explicit `pin` **forces PWM**.
 

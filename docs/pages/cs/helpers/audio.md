@@ -22,7 +22,13 @@ sadu pojmenovaných herních zvuků. Nastavení audia na desce popisuje stránka
 nepotřebuje **žádný kód specifický pro desku**. Vybírá automaticky:
 
 - **I2S DAC** (např. TLV320 na Fruit Jamu), když deska vystavuje `board.I2S_BCLK`,
-- jinak **PWM** výstup na pinu reproduktoru desky (nebo na pinu, který předáš).
+- jinak pin reproduktoru desky, a to jako **PWM** tam, kde má firmware `audiopwmio`, a jako
+  **pravý DAC** čipu tam, kde má místo toho `audioio` (SAMD51: PyBadge, PyGamer, Feather/Metro M4).
+  Volba podle toho, co firmware nese, drží jednu cestu kódu místo tabulky desek.
+
+Některé desky mají zesilovač reproduktoru za povolovacím pinem (`board.SPEAKER_ENABLE` na PyBadge
+a PyGameru). `picogame_audioout` ho zvedne a drží: bez toho je výstup nastavený správně a deska
+přesto mlčí, což vypadá jako chyba picogame a není.
 
 Přímo ho většinou nevoláš — vytvoříš `Audio()` / `Synth()` a stane se to za tebe. `make_output(sample_rate=22050, pin=None)` je k dispozici, když chceš samotné zařízení; předání explicitního `pin` **vynutí PWM**.
 
