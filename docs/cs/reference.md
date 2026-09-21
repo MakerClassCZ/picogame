@@ -145,6 +145,16 @@ Většina her je nikdy nevolá (interně je používá `picogame_game.setup` + `
 - `attach(spec, i2c=None)` — pady pro hodnotu ze settings (to, co volá `Buttons`). `find_pads(preset="qwstpad", i2c=None)` — všechny pady daného presetu na sběrnici v pořadí adres, jeden zdroj na hráče (preset QwSTPad pokrývá čtyři adresy). `parse_recipe(text)` / `PRESETS` — formát receptu a dodávané presety.
 - Poll je jedna krátká transakce (~0,5 ms při 100 kHz); neúspěšný poll podrží poslední stav a po 8 minutích ohlásí vše puštěné, po soft reloadu se sběrnice protaktuje.
 
+### `picogame_shiftpad` — tlačítka na posuvném registru (74HC165 a spol.)
+- `ShiftPad(recipe)` — zdroj tlačítek pro `Buttons(sources=[…])`, čte osm (nebo víc) spínačů vyhodinovaných z 74HC165 po třech GPIO. Pár handheldů zapojuje tlačítka takhle, aby ušetřilo piny; bez toho nemá deska jako Adafruit PyBadge použitelný vstup vůbec. `.read()` → logická maska, `.mapped` → tlačítka, která umí hlásit.
+- **Opt-in** přes `settings.toml` — hodinovat tři neznámé GPIO není čtení bez následků, takže se nikdy neoťukává: `PICOGAME_SHIFTPAD = "pybadge"` (preset), nebo celý recept `"latch=BUTTON_LATCH clock=BUTTON_CLOCK data=BUTTON_OUT bits=8 LEFT=7 UP=6 DOWN=5 RIGHT=4 SELECT=3 START=2 A=1 B=0"`. `inv=1`, když registr hlásí 1 pro PUŠTĚNÉ tlačítko; `msb=0` vyhodinuje nejdřív spodní bit. `Buttons()` připojí, co je v nastavení — viz [Vstup](pages/helpers/input.md).
+- `attach(spec)` — pad pro hodnotu z nastavení (tohle volá `Buttons`). `parse_recipe(text)` / `PRESETS` — formát receptu a dodávané presety.
+
+### `picogame_tiltpad` — akcelerometr desky jako D-pad
+- `TiltPad(recipe, i2c=None)` — zdroj tlačítek, jehož směry se sčítají se skutečným D-padem, takže handheld s pohybovým čidlem řídíš nakláněním a hry se nemusí měnit. `.read()` → logická maska. Čte registry čidla přímo, žádný ovladač se neinstaluje.
+- **Opt-in** přes `settings.toml` — akcelerometr, který se ozve na sběrnici, ještě není žádost řídit nakláněním: `PICOGAME_TILTPAD = "pybadge"`, nebo preset s úpravami, `"lis3dh on=4000 off=2500"`. Dva prahy, protože s jedním směr kmitá, když ruka odpočívá blízko něj (`on` sepne, `off` pustí, `off < on`; surové jednotky, ~16384 = 1 g při ±2 g). `swap=1` pro desku na výšku, `invx=1` / `invy=1` obrátí osu, `calib=0` použije nulu čidla místo změření klidové polohy při připojení.
+- `attach(spec, i2c=None)` — pad pro hodnotu z nastavení. `parse_recipe(text)` / `PRESETS`.
+
 ### `picogame_font` — textové bitmapy (externí modul fontu)
 Kterou textovou cestu použít (`Canvas.text` vs vyrenderovaná Bitmap vs StripDraw view — a co která stojí): viz rozhodovací matice v [Drawing paths](/cs/concepts/drawing-paths/).
 - `render_text(pg, font, text, fg, bg=None) -> (bitmap, w, h)` — vykreslí řetězec do PAL8 Bitmap (`bg=None` → průhledné).

@@ -145,6 +145,16 @@ Most games never call these (`picogame_game.setup` + `Scene` use them internally
 - `attach(spec, i2c=None)` — the pads for a settings value (what `Buttons` calls). `find_pads(preset="qwstpad", i2c=None)` — every pad of a preset on the bus, in address order, one source per player (the QwSTPad preset covers four addresses). `parse_recipe(text)` / `PRESETS` — the recipe format and the shipped presets.
 - A poll is one short transaction (~0.5 ms at 100 kHz); a failed poll holds the last state and reports all-released after 8 misses, and the bus is clocked free after a soft reload.
 
+### `picogame_shiftpad` — buttons on a parallel-in shift register (74HC165 and friends)
+- `ShiftPad(recipe)` — a button **source** for `Buttons(sources=[…])` reading eight (or more) switches clocked out of a 74HC165 over three GPIOs. A handful of handhelds wire their buttons this way to save pins; without it a board like the Adafruit PyBadge has no usable input at all. `.read()` → logical mask, `.mapped` → the buttons it can report.
+- **Opt-in** via `settings.toml` — clocking three unknown GPIOs is not a read-only act, so it is never probed: `PICOGAME_SHIFTPAD = "pybadge"` (preset), or a full recipe `"latch=BUTTON_LATCH clock=BUTTON_CLOCK data=BUTTON_OUT bits=8 LEFT=7 UP=6 DOWN=5 RIGHT=4 SELECT=3 START=2 A=1 B=0"`. `inv=1` when the register reads 1 for a RELEASED button; `msb=0` clocks the low bit out first. `Buttons()` attaches whatever is listed — see [Input](pages/helpers/input.md).
+- `attach(spec)` — the pad for a settings value (what `Buttons` calls). `parse_recipe(text)` / `PRESETS` — the recipe format and the shipped presets.
+
+### `picogame_tiltpad` — the board's accelerometer as a D-pad
+- `TiltPad(recipe, i2c=None)` — a button **source** whose directions are OR'ed with the real D-pad, so a handheld with a motion sensor steers by tilting and games need no changes. `.read()` → logical mask. It reads the sensor's registers directly: there is no driver to install.
+- **Opt-in** via `settings.toml` — an accelerometer answering on the bus is not a request to steer with it: `PICOGAME_TILTPAD = "pybadge"`, or a preset plus overrides, `"lis3dh on=4000 off=2500"`. Two thresholds, because with one the direction chatters while the hand rests near it (`on` engages, `off` releases, `off < on`; raw counts, ~16384 = 1 g at ±2 g). `swap=1` for a portrait board, `invx=1` / `invy=1` flip an axis, `calib=0` uses the sensor's own zero instead of measuring level at attach.
+- `attach(spec, i2c=None)` — the pad for a settings value. `parse_recipe(text)` / `PRESETS`.
+
 ### `picogame_font` — text bitmaps (external font module)
 Which text path to use (`Canvas.text` vs a rendered Bitmap vs a StripDraw view — and what each costs): see the decision matrix in [Drawing paths](/concepts/drawing-paths/).
 - `render_text(pg, font, text, fg, bg=None) -> (bitmap, w, h)` — render a string to a PAL8 Bitmap (`bg=None` → transparent).
