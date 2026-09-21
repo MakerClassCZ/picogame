@@ -15,6 +15,12 @@ changes that need action from you in one place.
 
 Newest first. Everything else on this page is additive.
 
+- **0.3.1 (2026-09-19)** — `picogame_game.setup(rgb444="auto")` asks `settings.toml`, not the
+  firmware: it turns RGB444 on only where `PICOGAME_RGB444 = 1` is set *and* the controller can
+  do it. It used to enable RGB444 wherever the firmware supported it. Support and benefit are
+  not the same — RGB444 trades CPU for wire time, so it wins on a slow bus (a PyBadge at 24 MHz
+  gains about 26%) and loses on a fast one (a PicoPad at 62.5 MHz). If you were relying on the
+  old automatic behaviour, add the key.
 - **0.3.0 (2026-09-06)** — the helper libs ship as one set: `picogame_script` needs the
   `picogame_ui` from the same release (no compatibility shim). Update the whole bundle, not
   single files. Older `*.scene.json` / `project.json` files still load; `tools/scene_build.py
@@ -31,6 +37,42 @@ Newest first. Everything else on this page is additive.
   list as `layers` (`Display.render()` keeps `sprites`); `StripDraw.invalidate()` with a
   partial rectangle raises `ValueError`; `Scene`'s strip buffers default to `None`
   (framebuffer boards no longer pass two explicit `None`s).
+
+## 2026-09-07 → 09-21 · libs 0.3.1 → 0.3.2
+
+**picogame reaches SAMD51 handhelds.** The PyBadge builds it upstream now, over a SERCOM SPI
+DMA display backend — the third port to implement the fast-display contract, after RP2 and
+ESP32-S3. The helper libs those boards need arrived with it: buttons behind a shift register,
+an I2C gamepad, the chip's true DAC for sound, and the accelerometer as a D-pad. Every preset
+was measured on the hardware, not read off a datasheet.
+
+- **Libs** — four new input and audio modules, each a `Buttons()` source or an output backend,
+  so games need no changes to use them. `picogame_shiftpad` reads buttons on a 74HC165 (with a
+  measured PyBadge preset); `picogame_i2cpad` gained the Adafruit Mini I2C Gamepad and analogue
+  sticks that find their own centre at attach; `picogame_audioout` drives the chip's true DAC
+  and raises the `SPEAKER_ENABLE` pin some boards gate, which is why those handhelds were
+  silent; `picogame_tiltpad` turns the accelerometer into a D-pad. `picogame_game.VERSION` now
+  says which bundle is on the board, and `picogame_iso` draws blocks as Sprites by default,
+  keeping triangles for procedural geometry. 0.3.2 fixes the Mini I2C Gamepad's horizontal
+  axis, which read mirrored on the real pad.
+- **Firmware** — picogame is built in on the PyBadge (upstream #11430) and the Pimoroni
+  PicoSystem (#11359). `Canvas.text` failed to link on images built without `terminalio` (the
+  ja/ko/ru builds of some boards) and raises `NotImplementedError` there instead. A program
+  that switched the panel to RGB444 used to leave it that way, so the REPL afterwards was drawn
+  in the wrong format (#11428). Six ST7735 boards sent `0x2a` where INVOFF belongs (#11429):
+  no visible effect, but wrong for anyone reading the sequence. Three size passes (#11365,
+  #11371, #11379) gave tight boards room back.
+- **Editor** — a UX audit in three batches: first the ways a level quietly came out broken,
+  then the daily friction, then the words. Save goes straight to the board, art is painted
+  without leaving the page, and `scene_build.py`'s checks run while you build instead of after.
+  An eyedropper, a way to remove a level and a tile-region tool arrived; `Save` keeps the name
+  of the file you opened, with `Save as…` behind a split button. One tab owns the autosave
+  slot, so two open tabs can no longer overwrite each other.
+- **Simulator** — the flash mapper is `storage.map_file` now, not `pg.xip_map`, matching the
+  binding proposed upstream; the simulator ships a `storage` stand-in with the device's shape.
+- **Docs & skill** — the board-setup skill dials display orientation with MADCTL and tests it
+  through picogame, and names the two orientation keys as two phases of one job rather than two
+  options to choose between.
 
 ## 2026-09-01 → 09-06 · libs 0.2.2 → 0.3.0
 
