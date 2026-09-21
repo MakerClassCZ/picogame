@@ -12,7 +12,7 @@ import picogame as pg
 # The bundle's release, so a board can be asked what it is actually running. A stale .mpy bundle
 # shadowing an edited .py is the classic silent failure here (sys.path order, not a suffix rule),
 # and "which libs are on this board?" had no answer before. Bump this with the git tag.
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 try:
     from picogame_debug import note as _debug   # optional diagnostics (settings.toml PICOGAME_DEBUG=1)
@@ -22,7 +22,7 @@ except ImportError:                             # not deployed -> silent no-op, 
 
 
 def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, left=0, right=0,
-          rgb444=False):
+          rgb444=None):
     """Take over the display and return (scene, buffer_a, buffer_b).
 
     Disables displayio auto-refresh, clears the root group and builds a Scene. On a
@@ -48,8 +48,13 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
     SPI traffic -> more FPS on transfer-bound (full-screen/scrolling) scenes, 4096 colours
     (plenty for PAL8 art). Needs a controller with COLMOD 12-bit (ST7789/ST7735; not ILI9341).
     rgb444="auto" enables it only where the board reports support (picogame.RGB444_SUPPORTED),
-    so one codebase runs optimally on ST7789 and safely (RGB565) on ILI9341 - no per-board code."""
+    so one codebase runs optimally on ST7789 and safely (RGB565) on ILI9341 - no per-board code.
+    rgb444=None (the default) reads PICOGAME_RGB444 from settings.toml: 1 = "auto", unset/0 =
+    RGB565. That is the per-board switch for a transfer-bound panel (PyBadge); a game's explicit
+    True/False/"auto" wins over it."""
     _debug("picogame libs", VERSION)
+    if rgb444 is None:
+        rgb444 = "auto" if _toml_flag("PICOGAME_RGB444") else False
     if rgb444 == "auto":
         rgb444 = getattr(pg, "RGB444_SUPPORTED", False)
     if strip_h is None:
@@ -86,9 +91,7 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
         if _inv is not None or _mad is not None or _bri is not None:
             _d = _current_display()          # supervisor.runtime.display (the primary display)
             if _inv is not None:
-                _on = (_inv != 0) if isinstance(_inv, int) else \
-                    str(_inv).strip().lower() not in ("", "0", "false", "no")
-                pg.invert(_d, _on)
+                pg.invert(_d, _toml_flag("PICOGAME_INVERT"))
             if _mad is not None:
                 if os.getenv("PICOGAME_FLIP"):
                     print("picogame: settings.toml has both PICOGAME_MADCTL and PICOGAME_FLIP - "
@@ -127,6 +130,20 @@ def setup(display=None, strip_h=None, background=0, fast=True, top=0, bottom=0, 
     scene = pg.Scene(backend, buf_a, buf_b, background=background,
                      top=top, bottom=bottom, left=left, right=right)
     return scene, buf_a, buf_b
+
+
+def _toml_flag(name):
+    """settings.toml boolean: an int (`KEY = 1`) or a string (`KEY = "yes"`); unset = False."""
+    try:
+        import os
+        v = os.getenv(name)
+    except Exception:
+        return False
+    if v is None:
+        return False
+    if isinstance(v, int):
+        return v != 0
+    return str(v).strip().lower() not in ("", "0", "false", "no")
 
 
 _RESOLVED = {}   # id(display) -> (display, backend, is_fb): setup() and every HUD that normalizes

@@ -96,7 +96,8 @@ PRESETS = {
                 (29, _pi.A), (30, _pi.X), (8, _pi.START)),
         # The directions are an analogue thumbstick, not buttons: two ADC reads per poll, each
         # thresholded into a pair of directions. (seesaw ADC_BASE 0x09, channel 0x07 + pin.)
-        "axes": ((b"\x09\x15", _pi.LEFT, _pi.RIGHT),    # pin 14, horizontal
+        # Pin 14 reads LOW toward RIGHT on the real pad (Adafruit's example uses 1023 - x).
+        "axes": ((b"\x09\x15", _pi.RIGHT, _pi.LEFT),    # pin 14, horizontal
                  (b"\x09\x16", _pi.UP, _pi.DOWN)),      # pin 15, vertical
         "adead": 170,                                 # half-width of the deadzone, in ADC counts
     },
