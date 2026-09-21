@@ -38,7 +38,7 @@ C_MODULE = {
     "STRIP_H", "Scene", "Sprite", "StripDraw", "Tilemap", "Triangles", "collide", "core1",
     "fat_layout", "fat_max_free_run", "fbm1d", "fbm2d", "invert", "picogame", "project",
     "raycast", "refresh_async", "render", "repack", "rgb565", "road_edges", "value1d",
-    "value2d", "vblank", "xip_map",
+    "value2d", "vblank",
 }
 C_CLASS = {
     "Sprite": {"anchor", "angle", "bitmap", "data", "dither", "flash", "flip_x", "flip_y",
@@ -77,7 +77,6 @@ C_SIG = {
         'value1d': ['x', '*', 'seed'],
         'value2d': ['x', 'y', '*', 'seed'],
         'vblank': ['framebuffer'],
-        'xip_map': ['path'],
     },
     'Canvas': {
         'blit': ['bitmap', 'x', 'y', 'frame', 'flip_x', 'flip_y'],
