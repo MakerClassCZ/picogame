@@ -34,7 +34,8 @@
 # reclaims arena BUFFERS; Python object graphs (Sprites/Scenes) are still GC'd by dropping refs
 # + gc.collect() (see the Wyrmfall world_free/world_build pattern - the object-graph half).
 #
-# Needs the firmware Canvas `buffer=` argument (the sim ignores it and allocates its own).
+# Needs the firmware Canvas `buffer=` argument (the sim honours it too, so a canvas aliases the
+# arena's bytes there as well).
 # See HARDWARE.md for why this matters on the RP2040 (~138 KB heap).
 
 import picogame as pg

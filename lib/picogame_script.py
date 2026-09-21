@@ -75,7 +75,7 @@ class Director:
         self._fade = None
         self.answer = False      # set by ask()
         self.events = set()      # story flags; persist via your save schema
-        self.pending = None      # (level, point) a script asked to travel to; the game loop loads
+        self.pending = None      # (level, at) a script asked to travel to; the game loop loads
         self.zone_runner = None  # dict -> generator (picogame_story.Story installs itself here)
         self.on_flag = None      # callable(flag) run after set(): replays level effects
         self.view = None         # the current picogame_scene.View (picogame_story keeps it fresh)
