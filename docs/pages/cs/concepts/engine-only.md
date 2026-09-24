@@ -114,8 +114,7 @@ while True:
 ## Kreslení přímo na DVI obrazovku
 
 Na DVI desce (Fruit Jam) může `Canvas` kreslit přímo do `picodvi.Framebuffer`, který obrazovka
-zobrazuje — bez `Scene`, bez kopírování a bez volání refresh. Ověřeno na Fruit Jamu se stažitelným
-CircuitPythonem:
+zobrazuje — bez `Scene`, bez kopírování a bez volání refresh:
 
 ```python
 import board, displayio, picodvi, terminalio

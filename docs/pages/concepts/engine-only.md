@@ -114,8 +114,7 @@ while True:
 ## Drawing straight onto a DVI screen
 
 On a DVI board (Fruit Jam) a `Canvas` can draw directly into the `picodvi.Framebuffer` the screen
-is scanning — no `Scene`, no copy, no refresh call. Tested on a Fruit Jam with the stock
-CircuitPython download:
+is showing — no `Scene`, no copy, no refresh call:
 
 ```python
 import board, displayio, picodvi, terminalio
