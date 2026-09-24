@@ -111,6 +111,52 @@ while True:
 `Scene` + `Sprite` + `overlaps` + `flash` + `Canvas.text` + `refresh` je celé C engine; `board`,
 `digitalio`, `terminalio`, `time` je stock CircuitPython. Nic víc.
 
+## Kreslení přímo na DVI obrazovku
+
+Na DVI desce (Fruit Jam) může `Canvas` kreslit přímo do `picodvi.Framebuffer`, který obrazovka
+zobrazuje — bez `Scene`, bez kopírování a bez volání refresh. Ověřeno na Fruit Jamu se stažitelným
+CircuitPythonem:
+
+```python
+import board, displayio, picodvi, terminalio
+import picogame as pg
+
+displayio.release_displays()
+fb = picodvi.Framebuffer(320, 240, color_depth=16,
+    clk_dp=board.CKP, clk_dn=board.CKN,
+    red_dp=board.D0P, red_dn=board.D0N,
+    green_dp=board.D1P, green_dn=board.D1N,
+    blue_dp=board.D2P, blue_dn=board.D2N)
+
+# Plátno kreslí přímo do paměti, kterou DVI výstup zobrazuje.
+screen = pg.Canvas(320, 240, buffer=fb)
+
+def native(r, g, b):
+    # picodvi čte RGB565 v nativním pořadí bajtů; pg.rgb565() dává pořadí pro SPI
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+
+screen.clear(native(0, 0, 60))
+screen.fill_rect(10, 10, 100, 60, native(255, 0, 0))
+screen.fill_circle(200, 60, 40, native(0, 255, 0))
+screen.fill_triangle(40, 220, 140, 120, 240, 220, native(255, 255, 0))
+screen.text(20, 90, "Hello, DVI", native(255, 255, 255), terminalio.FONT)
+
+pixels = memoryview(fb)          # tytéž pixely, jedna položka na pixel
+pixels[120 * 320 + 160] = native(255, 255, 255)
+```
+
+![Primitiva a text z Canvasu nakreslené přímo do picodvi framebufferu na Fruit Jamu](/img/dvi-direct.png)
+
+Dvě věci, které je dobré vědět:
+
+- **Barvy.** Každá barva v picogame včetně `pg.rgb565()` je v pořadí bajtů, které chce SPI panel.
+  picodvi čte běžné RGB565, takže `pg.rgb565(255, 0, 0)` tady vyjde modře — použij malý helper
+  `native()` jako výše.
+- **Jen tvary a text.** Palety `Bitmap` jsou také v pořadí pro SPI, takže `blit` do tohoto plátna
+  vyjde s prohozenými barvami. Pro sprity použij `Scene` s
+  `pg.Framebuffer(fb, 320, 240, native_rgb565=True)` (to dělá `picogame_game.setup()` na Fruit
+  Jamu), který převádí jednou za snímek. Plátno je RGB565, takže je potřeba `color_depth=16`.
+
 ## Co helpery pohlcují
 
 Ty fiddly části kódu výše jsou přesně to, co helper knihovny odeberou: umístění HUD textu přes

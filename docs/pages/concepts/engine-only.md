@@ -111,6 +111,52 @@ while True:
 `Scene` + `Sprite` + `overlaps` + `flash` + `Canvas.text` + `refresh` are all the C engine; `board`,
 `digitalio`, `terminalio`, `time` are stock CircuitPython. Nothing else.
 
+## Drawing straight onto a DVI screen
+
+On a DVI board (Fruit Jam) a `Canvas` can draw directly into the `picodvi.Framebuffer` the screen
+is scanning — no `Scene`, no copy, no refresh call. Tested on a Fruit Jam with the stock
+CircuitPython download:
+
+```python
+import board, displayio, picodvi, terminalio
+import picogame as pg
+
+displayio.release_displays()
+fb = picodvi.Framebuffer(320, 240, color_depth=16,
+    clk_dp=board.CKP, clk_dn=board.CKN,
+    red_dp=board.D0P, red_dn=board.D0N,
+    green_dp=board.D1P, green_dn=board.D1N,
+    blue_dp=board.D2P, blue_dn=board.D2N)
+
+# The canvas draws straight into the memory the DVI output is scanning.
+screen = pg.Canvas(320, 240, buffer=fb)
+
+def native(r, g, b):
+    # picodvi reads RGB565 in native byte order; pg.rgb565() is SPI byte order
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+
+screen.clear(native(0, 0, 60))
+screen.fill_rect(10, 10, 100, 60, native(255, 0, 0))
+screen.fill_circle(200, 60, 40, native(0, 255, 0))
+screen.fill_triangle(40, 220, 140, 120, 240, 220, native(255, 255, 0))
+screen.text(20, 90, "Hello, DVI", native(255, 255, 255), terminalio.FONT)
+
+pixels = memoryview(fb)          # the same pixels, one item per pixel
+pixels[120 * 320 + 160] = native(255, 255, 255)
+```
+
+![Canvas primitives and text drawn straight into a picodvi framebuffer on a Fruit Jam](/img/dvi-direct.png)
+
+Two things to know:
+
+- **Colours.** Every colour in picogame, `pg.rgb565()` included, is in the byte order an SPI panel
+  wants. picodvi reads plain RGB565, so `pg.rgb565(255, 0, 0)` shows blue here — use a small
+  `native()` helper like the one above.
+- **Shapes and text only.** `Bitmap` palettes are in SPI byte order too, so a `blit` into this canvas
+  comes out with swapped colours. For sprites, use a `Scene` with
+  `pg.Framebuffer(fb, 320, 240, native_rgb565=True)` (what `picogame_game.setup()` does on a
+  Fruit Jam), which converts once per frame. The canvas is RGB565, so this needs `color_depth=16`.
+
 ## What the helpers absorb
 
 The fiddly parts of the code above are exactly what the helper libraries remove: placing HUD text
