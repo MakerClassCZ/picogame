@@ -1,11 +1,11 @@
 ---
 title: Build with an AI agent
-description: A ready-made Claude skill and LLM-readable docs so coding agents design and build picogame games correctly.
+description: Ready-made Claude skills and LLM-readable docs so coding agents build picogame games and set up boards correctly.
 ---
 
-picogame ships two things that make AI coding agents (like Claude Code) genuinely good at building
-games for it: a **ready-made skill** that teaches the agent how to design and implement a picogame
-game, and **LLM-readable documentation** it can pull in wholesale.
+picogame ships two ready-made **skills** for AI coding agents (like Claude Code) — one that designs
+and builds games, one that gets picogame running on your board — and **LLM-readable documentation**
+the agent can pull in wholesale.
 
 ## The picogame game-design skill
 
@@ -39,6 +39,30 @@ unzip ~/Downloads/picogame-game-design-skill.zip
 Then just ask — *"make a tiny shooter for picogame"* — and the skill loads automatically.
 
 The skill's source lives in the [public repo](https://github.com/MakerClassCZ/picogame) under `skills/`.
+
+## The board-setup skill
+
+`picogame-board-setup` is for the hardware side: a bare or custom Raspberry Pi Pico, your own buttons,
+display or speaker, or a supported board that doesn't look or sound right. It carries:
+
+- **`settings.toml` configuration** — buttons (one pin each or a scanned matrix), display colours and
+  orientation, audio output and volume, USB gamepads. No reflash.
+- **Wiring detection** — a `code.py` that shows which GPIO a button is on as you press it and scans
+  I2C, plus a display test, so the wiring is read off the board instead of guessed.
+- **Troubleshooting** — symptom → cause → fix for wrong colours, a rotated picture, dead buttons, no
+  or too-quiet sound, and the common tracebacks.
+- **Firmware rebuild** — the `CIRCUITPY_PICOGAME_*` build flags, for the changes settings can't make.
+
+Install it the same way:
+
+- **[Download the skill (.zip)](/download/picogame-board-setup-skill.zip)**
+
+```sh
+cd ~/.claude/skills
+unzip ~/Downloads/picogame-board-setup-skill.zip
+```
+
+Then ask — *"my buttons don't work on a bare Pico"* or *"the colours on my display are wrong"*.
 
 ## LLM-readable docs (llms.txt)
 

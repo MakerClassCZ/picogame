@@ -1,11 +1,11 @@
 ---
 title: Stavěj s AI agentem
-description: Hotový skill pro Claude a dokumentace čitelná pro LLM, aby kódovací agenti navrhovali a stavěli picogame hry správně.
+description: Hotové skilly pro Claude a dokumentace čitelná pro LLM, aby kódovací agenti správně stavěli picogame hry a rozcházeli desky.
 ---
 
-picogame nabízí dvě věci, díky kterým jsou AI kódovací agenti (třeba Claude Code) v tvorbě her pro něj
-opravdu dobří: **hotový skill**, který agenta naučí picogame hru navrhnout a naimplementovat, a
-**dokumentaci čitelnou pro LLM**, kterou si může natáhnout celou.
+picogame nabízí dva hotové **skilly** pro AI kódovací agenty (třeba Claude Code) — jeden hry navrhuje
+a staví, druhý rozchodí picogame na tvé desce — a **dokumentaci čitelnou pro LLM**, kterou si agent
+může natáhnout celou.
 
 ## Skill pro herní design v picogame
 
@@ -39,6 +39,30 @@ unzip ~/Downloads/picogame-game-design-skill.zip
 Pak stačí říct — *„udělej malou střílečku pro picogame"* — a skill se načte automaticky.
 
 Zdroj skillu žije ve [veřejném repu](https://github.com/MakerClassCZ/picogame) ve složce `skills/`.
+
+## Skill pro rozchození desky
+
+`picogame-board-setup` řeší hardwarovou stranu: holý nebo vlastní Raspberry Pi Pico, vlastní tlačítka,
+displej nebo reproduktor, nebo podporovanou desku, na které něco nevypadá či nezní správně. Nese:
+
+- **Nastavení v `settings.toml`** — tlačítka (každé na svém pinu, nebo skenovaná matice), barvy a
+  orientace displeje, audio výstup a hlasitost, USB gamepady. Bez nového flashe.
+- **Zjištění zapojení** — `code.py`, který při stisku ukáže, na kterém GPIO tlačítko je, a projede I2C,
+  plus test displeje, takže se zapojení přečte z desky místo hádání.
+- **Řešení problémů** — příznak → příčina → oprava pro špatné barvy, otočený obraz, mrtvá tlačítka,
+  žádný nebo tichý zvuk a běžné tracebacky.
+- **Přestavění firmwaru** — build flagy `CIRCUITPY_PICOGAME_*` pro změny, které nastavení neudělá.
+
+Instaluje se stejně:
+
+- **[Stáhnout skill (.zip)](/download/picogame-board-setup-skill.zip)**
+
+```sh
+cd ~/.claude/skills
+unzip ~/Downloads/picogame-board-setup-skill.zip
+```
+
+Pak se zeptej — *„na holém Picu mi nefungují tlačítka"* nebo *„displej má špatné barvy"*.
 
 ## Dokumentace čitelná pro LLM (llms.txt)
 
