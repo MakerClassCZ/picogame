@@ -1,8 +1,7 @@
 # picogame `settings.toml` reference
 
-Every knob picogame reads at runtime, so a board is adapted with NO reflash. Values are **integers or
-strings only** (CircuitPython's settings.toml has no floats or booleans — use `1`/`0` for on/off, and
-integer dB). A key is read the first time the relevant helper is constructed, so edits take effect on
+Every knob picogame reads at runtime, so a board is adapted with NO reflash. `os.getenv` returns every
+value as a string, so write on/off as `1`/`0`; volumes are dB (whole numbers are the norm). A key is read the first time the relevant helper is constructed, so edits take effect on
 the next reload. Pin names are resolved against `board` first (e.g. `board.GP2` → write `GP2`), then
 `microcontroller.pin` (a bare `GPn`).
 
@@ -37,6 +36,29 @@ PICOGAME_MATRIX_ANODES = "cols"                 # optional: "cols" (default) or 
 Discover `(row,col)` / key numbers with `templates/matrix_probe.py` first (it prints them per press;
 layouts vary).
 
+## Buttons — a shift register (PyBadge, PyGamer)
+
+Buttons behind a 74HC165 parallel-in shift register. **Opt-in**: clocking three unknown GPIOs is not a
+read-only act, so it is never probed. A PyBadge has no other buttons — without this key none fire.
+```
+PICOGAME_SHIFTPAD = "pybadge"      # preset (also "pygamer")
+PICOGAME_SHIFTPAD = "latch=BUTTON_LATCH clock=BUTTON_CLOCK data=BUTTON_OUT bits=8 LEFT=7 UP=6 DOWN=5 RIGHT=4 SELECT=3 START=2 A=1 B=0"
+                                   # full recipe; inv=1 when the register reads 1 for a RELEASED button,
+                                   #  msb=0 clocks the low bit out first
+```
+
+## Tilt — an accelerometer as a D-pad
+
+The board's accelerometer OR'd with the real D-pad, so games steer by tilting with no change. Reads the
+sensor registers directly (no driver to install). **Opt-in** — a sensor on the bus is not a request to
+steer with it.
+```
+PICOGAME_TILTPAD = "pybadge"                # preset (also "pygamer", "lis3dh")
+PICOGAME_TILTPAD = "lis3dh on=4000 off=2500" # preset + overrides: on engages, off releases (off < on;
+                                            #  raw counts, ~16384 = 1 g at +-2 g). swap=1 portrait board,
+                                            #  invx=1 / invy=1 flip an axis, calib=0 keep the sensor's zero
+```
+
 ## USB HID gamepad
 
 Auto-attaches on a USB-host build (Fruit Jam) when a pad is plugged into the USB-HOST port — games need
@@ -50,7 +72,8 @@ PICOGAME_USBPAD = "A=5:0x40 B=5:0x20"           # remap buttons: NAME=reportByte
 - Discover another pad's bytes with `tools/usbpad_probe.py` (shipped in this repo): it prints
   which HID report byte/bit changes per press. (The wiring probe here is GPIO/I2C only — not USB HID.)
 ```
-PICOGAME_USBPAD_ID = "081f:e401"    # hex vid:pid of a NON-DragonRise pad. Matching is by VID/PID on
+PICOGAME_USBPAD_ID = "081f:e401"    # hex vid:pid. REQUIRED for any pad that is not the DragonRise
+                                    #  default - without it that pad is simply not found. Matching is by VID/PID on
                                     #  purpose: usb.core exposes no device class, so a "first device"
                                     #  grab would bind a keyboard or hub (a boot keyboard's zeroed
                                     #  axis bytes decode as LEFT|UP). A custom pad needs PICOGAME_USBPAD too.
@@ -110,18 +133,21 @@ PICOGAME_MADCTL = 0x60     # absolute MADCTL byte (0x36 reg: mirror + BGR order)
                            #  it's absolute, not a bit-flip. PicoPad values: 0x60 stock | 0x68 BGR panel
                            #  | 0xA0 mounted 180° | 0xA8 both. Use for mirrored / rotated / wrong-hue panels.
 PICOGAME_BRIGHTNESS = 80   # backlight, integer PERCENT 0-100
+PICOGAME_RGB444 = 1        # send 12-bit colour (~25% less SPI traffic) where the firmware reports support
+                           #  (picogame.RGB444_SUPPORTED). A win on a slow bus (PyBadge 24 MHz) and on the
+                           #  PicoPad. A game's explicit setup(rgb444=...) wins over the key. Off unless set.
 ```
 (`PICOGAME_INVERT` also keeps the `picogame_fx` InvertFlash effect calibrated — one key fixes both.)
 
 ## Display (a framebuffer / DVI board, e.g. Fruit Jam)
 
 These are NOT `PICOGAME_*` keys — they're CircuitPython's own display keys that the auto-constructed DVI
-output reads. picogame requires this exact mode (it composites into the scanout buffer); the libs'
-errors point here:
+output reads. picogame composites into the scanout buffer, so it needs rotation 0; the libs' errors
+point here:
 ```
 CIRCUITPY_PICODVI_ENABLE = "always"     # construct the DVI display at boot ("no display found" without it)
 CIRCUITPY_DISPLAY_ROTATION = 0          # picogame requires 0 (raises "picogame needs rotation 0" otherwise)
-CIRCUITPY_DISPLAY_COLOR_DEPTH = 16      # 16-bit framebuffer (raises "needs a 16-bit framebuffer" otherwise)
+CIRCUITPY_DISPLAY_COLOR_DEPTH = 16      # 16 = RGB565 (e.g. 320x240); 8 = RGB332, the only depth at 640x480
 ```
 `PICOGAME_INVERT`/`MADCTL`/`BRIGHTNESS` do NOT apply here (orientation/colour are fixed by this mode).
 
@@ -148,8 +174,10 @@ the old PSRAM-first behaviour, and it needs no settings.toml at all.
 
 ## Audio
 
-picogame picks the output automatically: an explicit PWM pin → PWM; else an I2S DAC (Fruit Jam) → I2S;
-else common board audio pins → PWM. `picogame_audio` and `picogame_synth` share this path.
+picogame picks the output automatically: an I2S DAC (Fruit Jam) → I2S, unless you pass an explicit pin;
+otherwise the analogue path on that pin or the board's audio pin — PWM where the firmware has
+`audiopwmio`, the chip's true DAC where it does not (SAMD51: PyBadge, PyGamer). A speaker amp behind
+`board.SPEAKER_ENABLE` is switched on for you. `picogame_audio` and `picogame_synth` share this path.
 ```
 # --- PWM (PicoPad, bare Pico + a buzzer/amp on a PWM pin) ---
 PICOGAME_AUDIO = "GP15"        # the PWM audio pin (board attr name or bare GPn). Unset -> board.AUDIO/SPEAKER/BUZZER
@@ -157,7 +185,8 @@ PICOGAME_AUDIO = "GP15"        # the PWM audio pin (board attr name or bare GPn)
 # --- I2S DAC (Fruit Jam TLV320; needs adafruit_tlv320 + adafruit_bus_device in /lib, NOT bundled) ---
 PICOGAME_AUDIO_OUT = "headphone"   # "headphone" (default) | "speaker" | "both"
 PICOGAME_HP_VOLUME  = -10          # headphone analog trim, dB. 0 = loud/line-level (too loud for phones)
-                                   #  ... -78 = silent. Driver default is a very quiet -30; raise toward 0.
+                                   #  ... -78 = silent. picogame already applies -10 (the driver's own
+                                   #  default is a near-silent -30), so set this only to change it.
 PICOGAME_DAC_VOLUME = -3           # main digital fader, dB. Keep <= 0 to avoid DSP clipping.
 PICOGAME_SPK_VOLUME = -10          # speaker analog trim, dB (same scale as HP)
 
@@ -174,7 +203,7 @@ Safety: `0 dB` headphone = line level, too loud for earbuds — don't exceed ~`-
 
 ## What is NOT settings (needs a rebuild — see `firmware.md`)
 
-Render path and asset storage are compile-time: `CIRCUITPY_PICOGAME_FRAMEBUFFER` (DVI/framebuffer vs
-SPI), `CIRCUITPY_PICOGAME_FAST_DISPLAY` (DMA display backend), `CIRCUITPY_PICOGAME_RGB444` (12-bit
-colour to halve SPI bytes), `CIRCUITPY_PICOGAME_ROMFS` (XIP file-asset region in the firmware's tail slack), and which modules
-the firmware even contains.
+The render path is compile-time: `CIRCUITPY_PICOGAME_FRAMEBUFFER` (DVI/framebuffer vs SPI),
+`CIRCUITPY_PICOGAME_FAST_DISPLAY` (DMA display backend), `CIRCUITPY_PICOGAME_RGB444` (the board
+declares its panel CAN do 12-bit colour — `PICOGAME_RGB444` above is the runtime switch that uses it),
+and which modules the firmware even contains.

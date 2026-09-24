@@ -40,9 +40,10 @@ offsets (`rowstart`/`colstart`) are a different thing and stay on the driver.
 A framebuffer/DVI board (Fruit Jam) has no MADCTL — picogame REQUIRES rotation 0 there;
 set `CIRCUITPY_DISPLAY_ROTATION = 0` (it can't run at other rotations, and a rebuild won't add them).
 
-**Framebuffer/DVI board: `no display found` or `picogame needs rotation 0` / `needs a 16-bit framebuffer`**
+**Framebuffer/DVI board: `no display found` or `picogame needs rotation 0`**
 The DVI mode isn't set up the way picogame needs. In settings.toml: `CIRCUITPY_PICODVI_ENABLE = "always"`
-(construct the display at boot), `CIRCUITPY_DISPLAY_ROTATION = 0`, `CIRCUITPY_DISPLAY_COLOR_DEPTH = 16`.
+(construct the display at boot), `CIRCUITPY_DISPLAY_ROTATION = 0`, and `CIRCUITPY_DISPLAY_COLOR_DEPTH`
+`16` (RGB565) or `8` (RGB332, the only depth at 640×480).
 
 **`TypeError: expected a BusDisplay`** (usually in a HUD/label/cutscene draw)
 The game handed a framebuffer board's display object (a `FramebufferDisplay`, reached through
@@ -68,6 +69,8 @@ Wrong pull or the buttons aren't in the active profile. → Run `templates/wirin
 pin actually toggles, and whether pressed reads LOW (`PICOGAME_PULL = "up"`, default) or HIGH
 (`"down"`). Then write the exact pins into `PICOGAME_BUTTONS`. A bare Pico has no `board_id` profile —
 it falls back to the PicoPad `SW_*` names, none of which resolve on a Pico → you MUST set `PICOGAME_BUTTONS`.
+A **PyBadge / PyGamer** reads its buttons through a shift register, which is opt-in → set
+`PICOGAME_SHIFTPAD = "pybadge"` (or `"pygamer"`).
 
 **Some buttons work, others are dead or swapped**
 The `PICOGAME_BUTTONS` map has the wrong pin for those names. → Re-run the probe, press the mislabeled
@@ -80,7 +83,8 @@ sticks, the device has a stale `picogame_input.mpy` (see the footgun at top).
 
 **USB gamepad ignored (Fruit Jam)**
 Pad must be in the USB-HOST port (not the CIRCUITPY data port). Check it's a supported layout with the
-USB probe; a non-DragonRise pad needs `PICOGAME_USBPAD` remap. `PICOGAME_USB = 0` disables the pad.
+USB probe. A pad that isn't the DragonRise default needs `PICOGAME_USBPAD_ID = "vid:pid"` — without it
+the pad is not found at all — and usually a `PICOGAME_USBPAD` remap. `PICOGAME_USB = 0` disables the pad.
 Auto-attach only happens on a CircuitPython USB-host build (the sim won't grab it).
 
 ## Audio
@@ -99,9 +103,11 @@ with the wrap temporarily removed. Common causes:
 - **PWM board:** no audio pin found → set `PICOGAME_AUDIO = "GPnn"`.
 
 **Sound plays but is very quiet**
-The TLV320 DAC's `*_output = True` defaults are deliberately near-silent (`headphone_volume` ≈ -30 dB).
-→ raise `PICOGAME_HP_VOLUME` toward 0 (default now `-10`; try `-6`), and/or `PICOGAME_DAC_VOLUME`
-(keep ≤ 0). Speaker: `PICOGAME_SPK_VOLUME`. (`0 dB` headphone = line level — don't exceed ~`-3`.)
+picogame already lifts the TLV320's near-silent driver defaults (≈ -30 dB) to -10 dB headphone / speaker
+and -3 dB DAC. If that is still too quiet → raise `PICOGAME_HP_VOLUME` toward 0 (try `-6`), and/or
+`PICOGAME_DAC_VOLUME` (keep ≤ 0). Speaker: `PICOGAME_SPK_VOLUME`. (`0 dB` headphone = line level —
+don't exceed ~`-3`.) On a PyBadge/PyGamer the speaker amp sits behind `board.SPEAKER_ENABLE`; picogame
+switches it on for you.
 
 **Sim is silent**
 Expected — synthio is device-only, the desktop sim has no audio. Preview `picogame_synth` SFX by

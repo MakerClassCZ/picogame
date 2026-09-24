@@ -1,5 +1,5 @@
 # picogame settings.toml - board config with NO reflash. Uncomment + edit only what your board needs.
-# Values are INTEGERS or STRINGS only (no floats, no true/false -> use 1/0). Full reference:
+# Every value reaches picogame as a string: write on/off as 1/0. Full reference:
 # references/settings.md. Discover pins with wiring_probe.py, display params with display_test.py.
 
 # ---------------- buttons: one pin per button ----------------
@@ -13,21 +13,27 @@
 # PICOGAME_MATRIX_MAP  = "UP=1,2 DOWN=2,2 LEFT=2,1 RIGHT=2,3 A=3,5 B=3,4 START=0,0"   # NAME=row,col
 # PICOGAME_MATRIX_ANODES = "cols"   # "cols" (default) or "rows" - flip if diode direction is reversed
 
+# ---------------- buttons: shift register / tilt (PyBadge, PyGamer - both opt-in) ----------------
+# PICOGAME_SHIFTPAD = "pybadge"   # the board's buttons; without it none fire on a PyBadge
+# PICOGAME_TILTPAD = "pybadge"    # accelerometer steers the D-pad too
+
 # ---------------- USB HID gamepad (USB-host builds, e.g. Fruit Jam) ----------------
 # PICOGAME_USB = 0              # disable auto-attach (default on)
+# PICOGAME_USBPAD_ID = "081f:e401"   # vid:pid - REQUIRED for any pad that isn't the DragonRise default
 # PICOGAME_USBPAD = "A=5:0x40 B=5:0x20"   # remap buttons (NAME=byteIndex:bitmask); partial = merge
 
 # ---------------- display (SPI/busdisplay boards; a DVI/framebuffer board ignores these) ----------------
 # PICOGAME_INVERT = 1          # 1/0 - flip if colours are photo-negative
 # PICOGAME_MADCTL = 0x60       # orientation + colour order: 0x60 stock | 0x68 BGR | 0xA0 180 | 0xA8 both
 # PICOGAME_BRIGHTNESS = 80     # backlight percent 0-100
+# PICOGAME_RGB444 = 1          # 12-bit colour, ~25% less SPI traffic, where the firmware supports it
 
 # ---------------- audio: PWM (PicoPad / a buzzer on a PWM pin) ----------------
-# PICOGAME_AUDIO = "GP15"      # the PWM audio pin; unset -> board.AUDIO/SPEAKER/BUZZER
+# PICOGAME_AUDIO = "GP15"      # the audio pin; unset -> board.AUDIO/SPEAKER/BUZZER
 
 # ---------------- audio: I2S DAC (Fruit Jam; needs adafruit_tlv320 + adafruit_bus_device in /lib) ----------------
 # PICOGAME_AUDIO_OUT = "headphone"   # "headphone" (default) | "speaker" | "both"
-# PICOGAME_HP_VOLUME  = -10    # headphone dB: toward 0 = louder (0 = line level, too loud); default -10
+# PICOGAME_HP_VOLUME  = -10    # headphone dB: toward 0 = louder (0 = line level, too loud); picogame applies -10
 # PICOGAME_DAC_VOLUME = -3     # main fader dB; keep <= 0
 # PICOGAME_SPK_VOLUME = -10    # speaker dB
 # PICOGAME_DEBUG = 1           # general: print '[picogame] ...' for a real subsystem failure (audio,
